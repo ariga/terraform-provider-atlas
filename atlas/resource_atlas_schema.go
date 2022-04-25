@@ -4,18 +4,18 @@ import (
 	"context"
 
 	"ariga.io/atlas/sql"
-	atlasSchema "ariga.io/atlas/sql/schema"
+	atlaschema "ariga.io/atlas/sql/schema"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-func newDatabaseSchema() *schema.Resource {
+func newSchemaResource() *schema.Resource {
 	return &schema.Resource{
 		Description: "Atlas database resource manages the data schema of the database, using an HCL file describing the wanted state of the database. see https://atlasgo.io/",
 		// Create&Update both apply migrations
-		CreateContext: createSchema,
-		UpdateContext: createSchema,
+		CreateContext: applySchema,
+		UpdateContext: applySchema,
 		ReadContext:   readSchema,
 		DeleteContext: readSchema,
 		Schema: map[string]*schema.Schema{
@@ -48,7 +48,7 @@ func readSchema(ctx context.Context, d *schema.ResourceData, m interface{}) diag
 	return diags
 }
 
-func createSchema(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+func applySchema(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	var diags diag.Diagnostics
 	url := d.Get("url").(string)
 	hcl := d.Get("hcl").(string)
@@ -63,24 +63,21 @@ func createSchema(ctx context.Context, d *schema.ResourceData, m interface{}) di
 		return diag.FromErr(err)
 	}
 
-	desired := &atlasSchema.Realm{}
+	desired := &atlaschema.Realm{}
 	err = drv.UnmarshalSpec([]byte(hcl), desired)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
-	desired, err = drv.Driver.(atlasSchema.Normalizer).NormalizeRealm(ctx, desired)
+	desired, err = drv.Driver.(atlaschema.Normalizer).NormalizeRealm(ctx, desired)
 	if err != nil {
 		return diag.FromErr(err)
 	}
-
 	changes, err := drv.RealmDiff(realm, desired)
 	if err != nil {
 		return diag.FromErr(err)
 	}
-
-	err = drv.ApplyChanges(ctx, changes)
-	if err != nil {
+	if err = drv.ApplyChanges(ctx, changes); err != nil {
 		return diag.FromErr(err)
 	}
 	d.SetId(url)

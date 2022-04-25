@@ -1,4 +1,4 @@
-module github.com/ariga/terraform-provider-atlas
+module ariga.io/ariga/terraform-provider-atlas
 
 go 1.17
 

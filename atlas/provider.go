@@ -8,10 +8,10 @@ func Provider() *schema.Provider {
 	return &schema.Provider{
 		Schema: map[string]*schema.Schema{},
 		ResourcesMap: map[string]*schema.Resource{
-			"atlas_schema": newDatabaseSchema(),
+			"atlas_schema": newSchemaDatasource(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{
-			"atlas_schema": newNormalizeDatasource(),
+			"atlas_schema": newSchemaDatasource(),
 		},
 	}
 }
