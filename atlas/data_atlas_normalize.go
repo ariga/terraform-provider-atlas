@@ -13,20 +13,25 @@ import (
 
 func newNormalizeDatasource() *schema.Resource {
 	return &schema.Resource{
+		Description: "atlas_schema data source uses dev-db to normalize the HCL schema in order to create better terraform diffs",
 		ReadContext: readDataClient,
 		Schema: map[string]*schema.Schema{
 			"dev_db_url": {
-				Type:     schema.TypeString,
-				Required: true,
+				Description: "The url of the dev-db see https://atlasgo.io/cli/url",
+				Type:        schema.TypeString,
+				Required:    true,
+				Sensitive:   true,
 			},
 			"hcl": {
-				Type:     schema.TypeString,
-				Required: true,
+				Description: "The schema definition of the database",
+				Type:        schema.TypeString,
+				Required:    true,
 			},
 			// the HCL in a predicted, and ordered format see https://atlasgo.io/cli/dev-database
-			"content": {
-				Type:     schema.TypeString,
-				Computed: true,
+			"normal_hcl": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "The normalized form of the HCL",
 			},
 		},
 	}
@@ -54,7 +59,7 @@ func readDataClient(ctx context.Context, d *schema.ResourceData, m interface{}) 
 		return diag.FromErr(err)
 	}
 
-	d.Set("content", string(normalHCL))
+	d.Set("normal_hcl", string(normalHCL))
 	d.SetId(hclID(string(normalHCL)))
 	return diag.Diagnostics{}
 }

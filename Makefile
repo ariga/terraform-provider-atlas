@@ -25,11 +25,14 @@ release:
 	GOOS=windows GOARCH=amd64 go build -o ./bin/${BINARY}_${VERSION}_windows_amd64
 
 clean:
-	rm -rf examples/.terraform examples/.terraform.lock.hcl examples/terraform*
+	rm -rf examples/provider/.terraform examples/provider/.terraform.lock.hcl examples/provider/terraform*
 
 run-example:
-	cd examples && terraform init && terraform apply
+	cd examples/provider && terraform init && terraform apply
 
 install: build
 	mkdir -p ~/.terraform.d/plugins/${HOSTNAME}/${NAMESPACE}/${NAME}/${VERSION}/${OS_ARCH}
 	mv ${BINARY} ~/.terraform.d/plugins/${HOSTNAME}/${NAMESPACE}/${NAME}/${VERSION}/${OS_ARCH}
+
+gen-docs:
+	tfplugindocs

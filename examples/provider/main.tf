@@ -53,6 +53,6 @@ data "atlas_schema" "at_schema" {
 
 resource "atlas_schema" "mydb" {
   depends_on = [ docker_container.prod ]
-  hcl = data.atlas_schema.at_schema.content
+  hcl = data.atlas_schema.at_schema.normal_hcl
   url = "mysql://root:pass@tcp(localhost:3306)/test"  
 }

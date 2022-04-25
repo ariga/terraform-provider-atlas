@@ -34,7 +34,7 @@ data "atlas_schema" "at_schema" {
 	EOT
 }
 resource "atlas_schema" "testdb" {
-  hcl = data.atlas_schema.at_schema.content
+  hcl = data.atlas_schema.at_schema.normal_hcl
   url = "mysql://root:pass@tcp(localhost:3306)/test"
 }
 `
@@ -65,7 +65,7 @@ data "atlas_schema" "at_schema" {
 	EOT
 }
 resource "atlas_schema" "testdb" {
-  hcl = data.atlas_schema.at_schema.content
+  hcl = data.atlas_schema.at_schema.normal_hcl
   url = "mysql://root:pass@tcp(localhost:3306)/test"
 }
 `

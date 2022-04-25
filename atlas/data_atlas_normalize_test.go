@@ -57,7 +57,7 @@ func TestAccDataNormalHCL(t *testing.T) {
 			{
 				Config: testAccData,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("data.atlas_schema.at_schema", "content", normalHCL),
+					resource.TestCheckResourceAttr("data.atlas_schema.at_schema", "normal_hcl", normalHCL),
 				),
 			},
 		},
