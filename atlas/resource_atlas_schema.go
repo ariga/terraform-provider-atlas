@@ -72,14 +72,11 @@ func applySchema(ctx context.Context, d *schema.ResourceData, m interface{}) dia
 	if err != nil {
 		return diag.FromErr(err)
 	}
-
 	changes, err := drv.RealmDiff(realm, desired)
 	if err != nil {
 		return diag.FromErr(err)
 	}
-
-	err = drv.ApplyChanges(ctx, changes)
-	if err != nil {
+	if err = drv.ApplyChanges(ctx, changes); err != nil {
 		return diag.FromErr(err)
 	}
 	d.SetId(url)
