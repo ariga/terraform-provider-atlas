@@ -3,7 +3,9 @@ NAMESPACE=ariga
 NAME=atlas
 BINARY=terraform-provider-${NAME}
 VERSION=0.0.1
-OS_ARCH=linux_amd64
+OS=$(shell go env GOOS)
+ARCH=$(shell go env GOARCH)
+OS_ARCH=${OS}_${ARCH}
 
 default: install
 
