@@ -6,7 +6,7 @@ import (
 	"hash/fnv"
 
 	"ariga.io/atlas/sql"
-	atlasSchema "ariga.io/atlas/sql/schema"
+	atlaschema "ariga.io/atlas/sql/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
@@ -40,15 +40,15 @@ func readDataClient(ctx context.Context, d *schema.ResourceData, m interface{}) 
 	if err != nil {
 		return diag.FromErr(err)
 	}
-
-	realm := &atlasSchema.Realm{}
-	drv.UnmarshalSpec([]byte(hcl), realm)
-
-	realm, err = drv.Driver.(atlasSchema.Normalizer).NormalizeRealm(ctx, realm)
+	realm := &atlaschema.Realm{}
+	err = drv.UnmarshalSpec([]byte(hcl), realm)
 	if err != nil {
 		return diag.FromErr(err)
 	}
-
+	realm, err = drv.Driver.(atlaschema.Normalizer).NormalizeRealm(ctx, realm)
+	if err != nil {
+		return diag.FromErr(err)
+	}
 	normalHCL, err := drv.MarshalSpec(realm)
 	if err != nil {
 		return diag.FromErr(err)
