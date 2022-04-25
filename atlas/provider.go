@@ -11,7 +11,7 @@ func Provider() *schema.Provider {
 			"atlas_schema": newSchemaResource(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{
-			"atlas_schema": newNormalizeDatasource(),
+			"atlas_schema": newSchemaDatasource(),
 		},
 	}
 }

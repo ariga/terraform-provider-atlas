@@ -11,9 +11,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-func newNormalizeDatasource() *schema.Resource {
+func newSchemaDatasource() *schema.Resource {
 	return &schema.Resource{
-		ReadContext: readDataClient,
+		ReadContext: normalize,
 		Schema: map[string]*schema.Schema{
 			"dev_db_url": {
 				Type:     schema.TypeString,
@@ -32,7 +32,7 @@ func newNormalizeDatasource() *schema.Resource {
 	}
 }
 
-func readDataClient(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+func normalize(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	hcl := d.Get("hcl").(string)
 	url := d.Get("dev_db_url").(string)
 
