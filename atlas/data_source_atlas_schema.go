@@ -46,8 +46,7 @@ func normalize(ctx context.Context, d *schema.ResourceData, m interface{}) diag.
 		return diag.FromErr(err)
 	}
 	realm := &atlaschema.Realm{}
-	err = drv.UnmarshalSpec([]byte(hcl), realm)
-	if err != nil {
+	if err = drv.UnmarshalSpec([]byte(hcl), realm); err != nil {
 		return diag.FromErr(err)
 	}
 	realm, err = drv.Driver.(atlaschema.Normalizer).NormalizeRealm(ctx, realm)
