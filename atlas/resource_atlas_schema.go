@@ -29,6 +29,12 @@ func newSchemaResource() *schema.Resource {
 				Required:    true,
 				Sensitive:   true,
 			},
+			"dev_db_url": {
+				Description: "The url of the dev-db see https://atlasgo.io/cli/url",
+				Type:        schema.TypeString,
+				Optional:    true,
+				Sensitive:   true,
+			},
 		},
 	}
 }
@@ -67,10 +73,18 @@ func applySchema(ctx context.Context, d *schema.ResourceData, m interface{}) dia
 		return diag.FromErr(err)
 	}
 
-	desired, err = drv.Driver.(atlaschema.Normalizer).NormalizeRealm(ctx, desired)
-	if err != nil {
-		return diag.FromErr(err)
+	if dev_url, ok := d.GetOk("dev_db_url"); ok {
+		dev, err := sql.DefaultMux.OpenAtlas(ctx, dev_url.(string))
+		if err != nil {
+			return diag.FromErr(err)
+		}
+		defer dev.Close()
+		desired, err = dev.Driver.(atlaschema.Normalizer).NormalizeRealm(ctx, desired)
+		if err != nil {
+			return diag.FromErr(err)
+		}
 	}
+
 	changes, err := drv.RealmDiff(realm, desired)
 	if err != nil {
 		return diag.FromErr(err)
