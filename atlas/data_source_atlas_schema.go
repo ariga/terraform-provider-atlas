@@ -23,7 +23,7 @@ func newSchemaDatasource() *schema.Resource {
 				Type:     schema.TypeString,
 				Required: true,
 			},
-			// the HCL in a predicted, and ordered format see https://atlasgo.io/cli/dev-database
+			// The HCL in a predicted, and ordered format see https://atlasgo.io/cli/dev-database.
 			"content": {
 				Type:     schema.TypeString,
 				Computed: true,
