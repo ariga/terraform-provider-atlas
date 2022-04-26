@@ -1,13 +1,13 @@
 page_title: "atlas_schema Resource - terraform-provider-atlas"
 subcategory: ""
 description: |-
-  atlas_schema data source uses dev-db to normalize the HCL schema in order to create better terraform diffs
+  Atlas database resource manages the data schema of the database, using an HCL file describing the wanted state of the database. see https://atlasgo.io/
 ---
 <!-- source: https://github.dev/hashicorp/terraform-plugin-docs/blob/main/internal/provider/template.go -->
 <!-- Bug: Type and Name are switched -->
 # Resource (atlas_schema)
 
-atlas_schema data source uses dev-db to normalize the HCL schema in order to create better terraform diffs
+Atlas database resource manages the data schema of the database, using an HCL file describing the wanted state of the database. see https://atlasgo.io/
 
 ## Example Usage
 
@@ -30,14 +30,10 @@ resource "atlas_schema" "mydb" {
 
 ### Required
 
-- `dev_db_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
-- `hcl` (String) The schema definition of the database
+- `hcl` (String) The schema definition for the database (preferably normalized - see `atlas_schema` data source)
+- `url` (String, Sensitive) The url of the database see https://atlasgo.io/cli/url
 
 ### Optional
 
 - `id` (String) The ID of this resource.
-
-### Read-Only
-
-- `normal_hcl` (String) The normalized form of the HCL
 
