@@ -63,8 +63,7 @@ func applySchema(ctx context.Context, d *schema.ResourceData, m interface{}) dia
 	}
 
 	desired := &atlaschema.Realm{}
-	err = drv.UnmarshalSpec([]byte(hcl), desired)
-	if err != nil {
+	if err = drv.UnmarshalSpec([]byte(hcl), desired); err != nil {
 		return diag.FromErr(err)
 	}
 
