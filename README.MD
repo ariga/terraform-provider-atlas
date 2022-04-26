@@ -1,4 +1,10 @@
+<a href="https://atlasgo.io">
+  <img title="Atlas" alt="Atlas logo" height="180" align="right" src="https://atlasgo.io/uploads/images/gopher.png"/>
+</a>
+
 # Atlas Terraform Provider
+
+[![License](https://img.shields.io/github/license/ariga/terraform-provider-atlas.svg?style=flat-square)](https://github.com/ariga/terraform-provider-atlas/blob/main/LICENSE)
 
 * Website: [atlasgo.io](https://atlasgo.io)
 * Chat: [discord](https://discord.gg/zZ6sWVg6NT)
@@ -45,8 +51,10 @@ provider "atlas" {}
  ```terraform
  resource "atlas_schema" "mydb" {
    hcl = file("${path.module}/schema.hcl")
-   url = "mysql://root:pass@tcp(localhost:3306)/test"  
+   url = "mysql://root:pass@tcp(localhost:3306)/example"
+   // dev db is a great way to find errors before applying migrations. read more about it here: https://atlasgo.io/cli/dev-database.
+   dev_db_url = "mysql://root:pass@localhost:3307/example"
  }
  ```
-<!-- TODO: recoomend to use dev db -->
+
 For more advanced examples, check out the examples folder.
