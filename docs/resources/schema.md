@@ -16,11 +16,11 @@ Atlas database resource manages the data schema of the database, using an HCL fi
 ```terraform
 data "atlas_schema" "at_schema" {
   dev_db_url = "mysql://root:pass@tcp(localhost:3307)/test"
-  hcl = file("${path.module}/schema.hcl")
+  src = file("${path.module}/schema.hcl")
 }
 
 resource "atlas_schema" "mydb" {
-  hcl = data.atlas_schema.at_schema.normal_hcl
+  hcl = data.atlas_schema.at_schema.hcl
   url = "mysql://root:pass@tcp(localhost:3306)/test"  
 }
 ```
@@ -35,5 +35,6 @@ resource "atlas_schema" "mydb" {
 
 ### Optional
 
+- `dev_db_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `id` (String) The ID of this resource.
 

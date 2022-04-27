@@ -15,7 +15,7 @@ import (
 const testAccActionConfigCreate = `
 data "atlas_schema" "at_schema" {
   dev_db_url = "mysql://root:pass@tcp(localhost:3307)/test"
-  hcl = <<-EOT
+  src = <<-EOT
 	schema "test" {
 		charset = "latin1"
 		collate = "latin1_swedish_ci"
@@ -34,7 +34,7 @@ data "atlas_schema" "at_schema" {
 	EOT
 }
 resource "atlas_schema" "testdb" {
-  hcl = data.atlas_schema.at_schema.normal_hcl
+  hcl = data.atlas_schema.at_schema.hcl
   url = "mysql://root:pass@tcp(localhost:3306)/test"
 }
 `
@@ -42,7 +42,7 @@ resource "atlas_schema" "testdb" {
 const testAccActionConfigUpdate = `
 data "atlas_schema" "at_schema" {
   dev_db_url = "mysql://root:pass@tcp(localhost:3307)/test"
-  hcl = <<-EOT
+  src = <<-EOT
 	schema "test" {
 		charset = "latin1"
 		collate = "latin1_swedish_ci"
@@ -65,7 +65,7 @@ data "atlas_schema" "at_schema" {
 	EOT
 }
 resource "atlas_schema" "testdb" {
-  hcl = data.atlas_schema.at_schema.normal_hcl
+  hcl = data.atlas_schema.at_schema.hcl
   url = "mysql://root:pass@tcp(localhost:3306)/test"
 }
 `

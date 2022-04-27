@@ -10,7 +10,7 @@ import (
 const testAccData = `
 data "atlas_schema" "at_schema" {
   dev_db_url = "mysql://root:pass@tcp(localhost:3307)/test"
-  hcl = <<-EOT
+  src = <<-EOT
 	schema "test" {
 		charset = "latin1"
 		collate = "latin1_swedish_ci"
@@ -57,7 +57,7 @@ func TestAccDataNormalHCL(t *testing.T) {
 			{
 				Config: testAccData,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("data.atlas_schema.at_schema", "normal_hcl", normalHCL),
+					resource.TestCheckResourceAttr("data.atlas_schema.at_schema", "hcl", normalHCL),
 				),
 			},
 		},
