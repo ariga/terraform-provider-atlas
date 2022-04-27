@@ -36,5 +36,11 @@ install: build
 	mkdir -p ~/.terraform.d/plugins/${HOSTNAME}/${NAMESPACE}/${NAME}/${VERSION}/${OS_ARCH}
 	mv ${BINARY} ~/.terraform.d/plugins/${HOSTNAME}/${NAMESPACE}/${NAME}/${VERSION}/${OS_ARCH}
 
+setup:
+	cd tools && go install github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs
+
+acctest:
+	TF_ACC=1 go test ./...
+
 gen-docs:
 	tfplugindocs
