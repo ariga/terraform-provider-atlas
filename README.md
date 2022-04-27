@@ -24,7 +24,7 @@ provider "atlas" {}
 
 ## Quick Start
 
-1. To create a schema for your database, first install `atlas`:  
+1\. To create a schema for your database, first install `atlas`:  
  ### MacOS:
  ```shell
  brew install ariga/tap/atlas
@@ -40,11 +40,13 @@ provider "atlas" {}
  ```
  ### Windows
  Download the [latest release](https://release.ariga.io/atlas/atlas-windows-amd64-latest.exe) and move the atlas binary to a file location on your system PATH.
-2. Then, inspect the schema of the database:
+
+2\. Then, inspect the schema of the database:
  ```shell
  atlas schema inspect -d "mysql://root:pass@localhost:3306/example" > schema.hcl
  ```
-3. Finally, configure the terraform resource to apply the state to your database:
+ 
+3\. Finally, configure the terraform resource to apply the state to your database:
  ```terraform
  resource "atlas_schema" "mydb" {
    hcl = file("${path.module}/schema.hcl")
