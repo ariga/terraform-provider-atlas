@@ -12,6 +12,7 @@ import (
 
 func newSchemaResource() *schema.Resource {
 	return &schema.Resource{
+		Description: "Atlas database resource manages the data schema of the database, using an HCL file describing the wanted state of the database. see https://atlasgo.io/",
 		// Create&Update both apply migrations
 		CreateContext: applySchema,
 		UpdateContext: applySchema,
@@ -20,12 +21,12 @@ func newSchemaResource() *schema.Resource {
 		Schema: map[string]*schema.Schema{
 			"hcl": {
 				Type:        schema.TypeString,
-				Description: "The schema definition for the database",
+				Description: "The schema definition for the database (preferably normalized - see `atlas_schema` data source)",
 				Required:    true,
 			},
 			"url": {
 				Type:        schema.TypeString,
-				Description: "A connection url for the database",
+				Description: "The url of the database see https://atlasgo.io/cli/url",
 				Required:    true,
 				Sensitive:   true,
 			},
