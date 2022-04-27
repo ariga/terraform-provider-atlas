@@ -4,11 +4,8 @@
 
 # Atlas Terraform Provider
 
-[![License](https://img.shields.io/github/license/ariga/terraform-provider-atlas.svg?style=flat-square)](https://github.com/ariga/terraform-provider-atlas/blob/main/LICENSE)
-
-* Website: [atlasgo.io](https://atlasgo.io)
-* Chat: [discord](https://discord.gg/zZ6sWVg6NT)
-* Supported DBs: SQLite, MySQL, TiDB, MariaDB, Postgres.
+* Chat and Support: [discord](https://discord.gg/zZ6sWVg6NT)
+* Supported Databases: SQLite, MySQL, TiDB, MariaDB, PostgreSQL.
 <!-- * Documentation: link to terraform website -->
 
 ## Installation
