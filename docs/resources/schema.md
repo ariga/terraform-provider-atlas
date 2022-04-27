@@ -35,5 +35,6 @@ resource "atlas_schema" "mydb" {
 
 ### Optional
 
+- `dev_db_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `id` (String) The ID of this resource.
 

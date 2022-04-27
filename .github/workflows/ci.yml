@@ -34,32 +34,40 @@ jobs:
         run: |
           status=$(git status --porcelain)
           if [ -n "$status" ]; then
-            echo "you need to run 'go generate ./...' and commit the changes"
+            echo "you need to run 'make gen-docs' and commit the changes"
             echo "$status"
             exit 1
           fi
   
   acctest:
     runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        go: ['1.17', '1.18']
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
-        with:
-          go-version: ${{ matrix.go }}
-      - uses: actions/cache@v3
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-      - name: Run dialect tests
-        run: make acctest
-
-  generate-docs:
-    runs-on: ubuntu-20.04
+    services:
+      mysql8prod:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: test
+          MYSQL_ROOT_PASSWORD: pass
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -ppass"
+          --health-interval 10s
+          --health-start-period 10s
+          --health-timeout 5s
+          --health-retries 10
+      mysql8dev:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: test
+          MYSQL_ROOT_PASSWORD: pass
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd "mysqladmin ping -ppass"
+          --health-interval 10s
+          --health-start-period 10s
+          --health-timeout 5s
+          --health-retries 10
     strategy:
       matrix:
         go: ['1.17', '1.18']
