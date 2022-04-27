@@ -48,11 +48,14 @@ provider "atlas" {}
  
 3\. Finally, configure the terraform resource to apply the state to your database:
  ```terraform
- resource "atlas_schema" "mydb" {
-   hcl = file("${path.module}/schema.hcl")
-   url = "mysql://root:pass@tcp(localhost:3306)/example"
-   // dev db is a great way to find errors before applying migrations. read more about it here: https://atlasgo.io/cli/dev-database.
-   dev_db_url = "mysql://root:pass@localhost:3307/example"
+ data "atlas_schema" "my_schema" {
+  src = file("${path.module}/schema.hcl")
+  dev_db_url = "mysql://root:pass@tcp(localhost:3307)/test"
+ }
+
+ resource "atlas_schema" "example_db" {
+  hcl = data.atlas_schema.my_schema.hcl
+  url = "mysql://root:pass@tcp(localhost:3306)/test"  
  }
  ```
 
