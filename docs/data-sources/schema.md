@@ -18,8 +18,8 @@ atlas_schema data source uses dev-db to normalize the HCL schema in order to cre
 data "atlas_schema" "norm" {
   // dev_db_url is used for normalization, see: https://atlasgo.io/cli/dev-database.
   dev_db_url = "mysql://root:pass@tcp(localhost:3307)/test"
-  hcl = file("${path.module}/human_schema.hcl")
-  // will compute `normal_hcl`
+  src = file("${path.module}/human_schema.hcl")
+  // will compute `hcl`
 }
 ```
 
@@ -29,7 +29,7 @@ data "atlas_schema" "norm" {
 ### Required
 
 - `dev_db_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
-- `hcl` (String) The schema definition of the database
+- `src` (String) The schema definition of the database
 
 ### Optional
 
@@ -37,4 +37,4 @@ data "atlas_schema" "norm" {
 
 ### Read-Only
 
-- `normal_hcl` (String) The normalized form of the HCL
+- `hcl` (String) The normalized form of the HCL

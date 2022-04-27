@@ -22,13 +22,13 @@ func newSchemaDatasource() *schema.Resource {
 				Required:    true,
 				Sensitive:   true,
 			},
-			"hcl": {
+			"src": {
 				Description: "The schema definition of the database",
 				Type:        schema.TypeString,
 				Required:    true,
 			},
 			// the HCL in a predicted, and ordered format see https://atlasgo.io/cli/dev-database
-			"normal_hcl": {
+			"hcl": {
 				Type:        schema.TypeString,
 				Computed:    true,
 				Description: "The normalized form of the HCL",
@@ -38,7 +38,7 @@ func newSchemaDatasource() *schema.Resource {
 }
 
 func normalize(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	hcl := d.Get("hcl").(string)
+	hcl := d.Get("src").(string)
 	url := d.Get("dev_db_url").(string)
 
 	drv, err := sql.DefaultMux.OpenAtlas(ctx, url)
@@ -58,7 +58,7 @@ func normalize(ctx context.Context, d *schema.ResourceData, m interface{}) diag.
 		return diag.FromErr(err)
 	}
 
-	d.Set("normal_hcl", string(normalHCL))
+	d.Set("hcl", string(normalHCL))
 	d.SetId(hclID(string(normalHCL)))
 	return diag.Diagnostics{}
 }
