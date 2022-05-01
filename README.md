@@ -3,10 +3,24 @@
 [![Discord](https://img.shields.io/discord/930720389120794674?label=discord&logo=discord&style=flat-square&logoColor=white)](https://discord.gg/zZ6sWVg6NT)
 
 <a href="https://atlasgo.io">
-  <img title="Atlas" alt="Atlas logo" height="180" align="right" src="https://atlasgo.io/uploads/images/gopher.png"/>
+  <img width="50%" align="right" style="display: block; margin:40px auto;" src="https://atlasgo.io/uploads/images/gopher.png"/>
 </a>
 
-Supported Databases: SQLite, MySQL, TiDB, MariaDB, PostgreSQL.
+Atlas tools help developers manage their database schemas by applying modern DevOps principles.
+Contrary to existing tools, Atlas intelligently plans schema migrations for you, based on your desired state.
+
+### Supported databases: 
+* MySQL
+* MariaDB
+* PostgresSQL
+* SQLite
+* TiDB
+
+### Runs on all platforms:
+* Mac
+* Linux
+* Windows
+
 <!-- * Documentation: link to terraform website -->
 
 ## Installation
