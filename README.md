@@ -16,12 +16,7 @@ Contrary to existing tools, Atlas intelligently plans schema migrations for you,
 * SQLite
 * TiDB
 
-### Runs on all platforms:
-* Mac
-* Linux
-* Windows
-
-<!-- * Documentation: link to terraform website -->
+Link to Terraform documentation. 
 
 ## Installation
 
