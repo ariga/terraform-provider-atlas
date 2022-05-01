@@ -1,0 +1,13 @@
+name: Continuous Deployment
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: GoReleaser Action
+        uses: goreleaser/goreleaser-action@v2.9.1
