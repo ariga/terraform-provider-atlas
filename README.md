@@ -15,7 +15,7 @@ terraform {
   required_providers {
     atlas = {
       source  = "ariga/atlas"
-      version = "0.0.2"
+      version = "0.0.3"
     }
   }
 }
