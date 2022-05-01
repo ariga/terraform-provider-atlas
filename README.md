@@ -1,11 +1,12 @@
+# Atlas Terraform Provider
+
+[![Discord](https://img.shields.io/discord/930720389120794674?label=discord&logo=discord&style=flat-square&logoColor=white)](https://discord.gg/zZ6sWVg6NT)
+
 <a href="https://atlasgo.io">
   <img title="Atlas" alt="Atlas logo" height="180" align="right" src="https://atlasgo.io/uploads/images/gopher.png"/>
 </a>
 
-# Atlas Terraform Provider
-
-* Chat and Support: [discord](https://discord.gg/zZ6sWVg6NT)
-* Supported Databases: SQLite, MySQL, TiDB, MariaDB, PostgreSQL.
+Supported Databases: SQLite, MySQL, TiDB, MariaDB, PostgreSQL.
 <!-- * Documentation: link to terraform website -->
 
 ## Installation
