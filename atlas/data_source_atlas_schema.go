@@ -5,9 +5,8 @@ import (
 	"encoding/base64"
 	"hash/fnv"
 
-	"ariga.io/atlas/sql/sqlclient"
-
 	atlaschema "ariga.io/atlas/sql/schema"
+	"ariga.io/atlas/sql/sqlclient"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
