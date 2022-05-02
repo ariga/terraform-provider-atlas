@@ -60,12 +60,13 @@ provider "atlas" {}
  ```terraform
  data "atlas_schema" "my_schema" {
   src = file("${path.module}/schema.hcl")
-  dev_db_url = "mysql://root:pass@tcp(localhost:3307)/test"
+  dev_db_url = "mysql://root:pass@localhost:3307/test"
  }
 
  resource "atlas_schema" "example_db" {
   hcl = data.atlas_schema.my_schema.hcl
-  url = "mysql://root:pass@tcp(localhost:3306)/test"  
+  url = "mysql://root:pass@localhost:3306/test"
+  dev_db_url = "mysql://root:pass@localhost:3307/test"
  }
  ```
 

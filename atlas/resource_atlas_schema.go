@@ -3,9 +3,10 @@ package atlas
 import (
 	"context"
 
-	"ariga.io/atlas/sql"
 	atlaschema "ariga.io/atlas/sql/schema"
+	"ariga.io/atlas/sql/sqlclient"
 
+	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
@@ -44,12 +45,20 @@ func readSchema(ctx context.Context, d *schema.ResourceData, m interface{}) diag
 	var diags diag.Diagnostics
 	url := d.Get("url").(string)
 
-	remoteHCL, err := sql.Inspect(ctx, url)
+	cli, err := sqlclient.Open(ctx, url)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+	realm, err := cli.InspectRealm(ctx, nil)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+	hcl, err := cli.MarshalSpec(realm)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
-	d.Set("hcl", string(remoteHCL))
+	d.Set("hcl", string(hcl))
 	d.Set("url", url)
 	return diags
 }
@@ -59,23 +68,23 @@ func applySchema(ctx context.Context, d *schema.ResourceData, m interface{}) dia
 	url := d.Get("url").(string)
 	hcl := d.Get("hcl").(string)
 
-	drv, err := sql.DefaultMux.OpenAtlas(ctx, url)
+	cli, err := sqlclient.Open(ctx, url)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
-	realm, err := drv.InspectRealm(ctx, nil)
+	realm, err := cli.InspectRealm(ctx, nil)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
 	desired := &atlaschema.Realm{}
-	if err = drv.UnmarshalSpec([]byte(hcl), desired); err != nil {
+	if err = cli.Evaluator.Eval([]byte(hcl), desired, nil); err != nil {
 		return diag.FromErr(err)
 	}
 
-	if dev_url, ok := d.GetOk("dev_db_url"); ok {
-		dev, err := sql.DefaultMux.OpenAtlas(ctx, dev_url.(string))
+	if devUrl, ok := d.GetOk("dev_db_url"); ok {
+		dev, err := sqlclient.Open(ctx, devUrl.(string))
 		if err != nil {
 			return diag.FromErr(err)
 		}
@@ -84,18 +93,24 @@ func applySchema(ctx context.Context, d *schema.ResourceData, m interface{}) dia
 		if err != nil {
 			return diag.FromErr(err)
 		}
+	} else {
+		diags = append(diags, diag.Diagnostic{
+			Severity:      diag.Warning,
+			AttributePath: cty.GetAttrPath("dev_db_url"),
+			Summary:       "it is highly recommended that you use 'dev_db_url' to specify a dev database.\nto learn more about it, visit: https://atlasgo.io/dev-database",
+		})
 	}
 
-	changes, err := drv.RealmDiff(realm, desired)
+	changes, err := cli.RealmDiff(realm, desired)
 	if err != nil {
 		return diag.FromErr(err)
 	}
-	if err = drv.ApplyChanges(ctx, changes); err != nil {
+	if err = cli.ApplyChanges(ctx, changes); err != nil {
 		return diag.FromErr(err)
 	}
 	d.SetId(url)
 
-	desiredHCL, err := drv.MarshalSpec(desired)
+	desiredHCL, err := cli.MarshalSpec(desired)
 	if err != nil {
 		return diag.FromErr(err)
 	}

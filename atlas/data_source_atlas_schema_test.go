@@ -9,7 +9,7 @@ import (
 
 const testAccData = `
 data "atlas_schema" "at_schema" {
-  dev_db_url = "mysql://root:pass@tcp(localhost:3307)/test"
+  dev_db_url = "mysql://root:pass@localhost:3307/test"
   src = <<-EOT
 	schema "test" {
 		charset = "latin1"
