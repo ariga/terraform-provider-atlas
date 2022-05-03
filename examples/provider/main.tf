@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     atlas = {
-      version = "0.0.5"
+      version = "0.0.6"
       source  = "github.com/ariga/atlas"
     }
     docker = {
