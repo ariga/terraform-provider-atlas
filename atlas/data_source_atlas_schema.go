@@ -46,7 +46,7 @@ func normalize(ctx context.Context, d *schema.ResourceData, m interface{}) diag.
 		return diag.FromErr(err)
 	}
 	realm := &atlaschema.Realm{}
-	if err = cli.Evaluator.Eval([]byte(hcl), realm, nil); err != nil {
+	if err = cli.Eval([]byte(hcl), realm, nil); err != nil {
 		return diag.FromErr(err)
 	}
 	realm, err = cli.Driver.(atlaschema.Normalizer).NormalizeRealm(ctx, realm)

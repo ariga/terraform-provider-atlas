@@ -83,8 +83,8 @@ func applySchema(ctx context.Context, d *schema.ResourceData, m interface{}) dia
 		return diag.FromErr(err)
 	}
 
-	if devUrl, ok := d.GetOk("dev_db_url"); ok {
-		dev, err := sqlclient.Open(ctx, devUrl.(string))
+	if devURL, ok := d.GetOk("dev_db_url"); ok {
+		dev, err := sqlclient.Open(ctx, devURL.(string))
 		if err != nil {
 			return diag.FromErr(err)
 		}
