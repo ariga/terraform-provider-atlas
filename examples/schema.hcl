@@ -1,4 +1,4 @@
-table "some_table" {
+table "orders" {
   schema = schema.test
   column "id" {
     null           = false

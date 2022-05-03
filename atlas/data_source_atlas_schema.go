@@ -5,8 +5,8 @@ import (
 	"encoding/base64"
 	"hash/fnv"
 
-	"ariga.io/atlas/sql"
 	atlaschema "ariga.io/atlas/sql/schema"
+	"ariga.io/atlas/sql/sqlclient"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
@@ -41,19 +41,19 @@ func normalize(ctx context.Context, d *schema.ResourceData, m interface{}) diag.
 	hcl := d.Get("src").(string)
 	url := d.Get("dev_db_url").(string)
 
-	drv, err := sql.DefaultMux.OpenAtlas(ctx, url)
+	cli, err := sqlclient.Open(ctx, url)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 	realm := &atlaschema.Realm{}
-	if err = drv.UnmarshalSpec([]byte(hcl), realm); err != nil {
+	if err = cli.Eval([]byte(hcl), realm, nil); err != nil {
 		return diag.FromErr(err)
 	}
-	realm, err = drv.Driver.(atlaschema.Normalizer).NormalizeRealm(ctx, realm)
+	realm, err = cli.Driver.(atlaschema.Normalizer).NormalizeRealm(ctx, realm)
 	if err != nil {
 		return diag.FromErr(err)
 	}
-	normalHCL, err := drv.MarshalSpec(realm)
+	normalHCL, err := cli.MarshalSpec(realm)
 	if err != nil {
 		return diag.FromErr(err)
 	}
