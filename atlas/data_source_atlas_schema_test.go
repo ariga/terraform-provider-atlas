@@ -8,12 +8,12 @@ import (
 )
 
 const testAccData = `
-data "atlas_schema" "at_schema" {
+data "atlas_schema" "market" {
   dev_db_url = "mysql://root:pass@localhost:3307/test"
   src = <<-EOT
 	schema "test" {
-		charset = "latin1"
-		collate = "latin1_swedish_ci"
+		charset = "utf8mb4"
+		collate = "utf8mb4_0900_ai_ci"
 	}
 	table "foo" {
 		schema = schema.test
@@ -42,8 +42,8 @@ const normalHCL = `table "foo" {
   }
 }
 schema "test" {
-  charset = "latin1"
-  collate = "latin1_swedish_ci"
+  charset = "utf8mb4"
+  collate = "utf8mb4_0900_ai_ci"
 }
 `
 
@@ -57,7 +57,7 @@ func TestAccDataNormalHCL(t *testing.T) {
 			{
 				Config: testAccData,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("data.atlas_schema.at_schema", "hcl", normalHCL),
+					resource.TestCheckResourceAttr("data.atlas_schema.market", "hcl", normalHCL),
 				),
 			},
 		},

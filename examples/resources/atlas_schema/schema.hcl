@@ -1,5 +1,5 @@
 table "orders" {
-  schema = schema.test
+  schema = schema.market
   column "id" {
     null           = false
     type           = int
@@ -14,7 +14,7 @@ table "orders" {
   }
 }
 
-schema "test" {
-  charset = "latin1"
-  collate = "latin1_swedish_ci"
+schema "market" {
+  charset = "utf8mb4"
+  collate = "utf8mb4_0900_ai_ci"
 }
