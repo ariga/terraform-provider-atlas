@@ -1,6 +1,6 @@
 // This example show how an `atlas_schema` data source normalizes a human hcl file into machine normalized one.
-table "table" {
-  schema = schema.test
+table "orders" {
+  schema = schema.market
   column "id" {
     null           = false
     type           = int
@@ -15,7 +15,7 @@ table "table" {
     columns = [column.id]
   }
 }
-schema "test" {
-  charset = "latin1"
-  collate = "latin1_swedish_ci"
+schema "market" {
+  charset = "utf8mb4"
+  collate = "utf8mb4_0900_ai_ci"
 }

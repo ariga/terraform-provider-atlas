@@ -12,12 +12,12 @@ import (
 )
 
 const testAccActionConfigCreate = `
-data "atlas_schema" "at_schema" {
+data "atlas_schema" "market" {
   dev_db_url = "mysql://root:pass@localhost:3307/test"
   src = <<-EOT
 	schema "test" {
-		charset = "latin1"
-		collate = "latin1_swedish_ci"
+		charset = "utf8mb4"
+		collate = "utf8mb4_0900_ai_ci"
 	}
 	table "foo" {
 		schema = schema.test
@@ -33,18 +33,18 @@ data "atlas_schema" "at_schema" {
 	EOT
 }
 resource "atlas_schema" "testdb" {
-  hcl = data.atlas_schema.at_schema.hcl
+  hcl = data.atlas_schema.market.hcl
   url = "mysql://root:pass@localhost:3306/test"
 }
 `
 
 const testAccActionConfigUpdate = `
-data "atlas_schema" "at_schema" {
+data "atlas_schema" "market" {
   dev_db_url = "mysql://root:pass@localhost:3307/test"
   src = <<-EOT
 	schema "test" {
-		charset = "latin1"
-		collate = "latin1_swedish_ci"
+		charset = "utf8mb4"
+		collate = "utf8mb4_0900_ai_ci"
 	}
 	table "foo" {
 		schema = schema.test
@@ -64,7 +64,7 @@ data "atlas_schema" "at_schema" {
 	EOT
 }
 resource "atlas_schema" "testdb" {
-  hcl = data.atlas_schema.at_schema.hcl
+  hcl = data.atlas_schema.market.hcl
   url = "mysql://root:pass@localhost:3306/test"
 }
 `
