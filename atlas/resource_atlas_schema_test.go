@@ -245,6 +245,13 @@ func TestAccRemoveColumns(t *testing.T) {
 		},
 		Steps: []resource.TestStep{
 			{
+				PreConfig: func() {
+					cli, err := sqlclient.Open(context.Background(), MYSQL_URL)
+					if err != nil {
+						t.Error(err)
+					}
+					cli.DB.Exec(createTableStmt)
+				},
 				Config: testAccSanity,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", MYSQL_URL),
