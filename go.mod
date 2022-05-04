@@ -3,7 +3,7 @@ module ariga.io/ariga/terraform-provider-atlas
 go 1.17
 
 require (
-	ariga.io/atlas v0.3.8-0.20220501150530-25b6dbb99ff8
+	ariga.io/atlas v0.3.8-0.20220504100457-95b8a765a96f
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/hashicorp/go-cty v1.4.1-0.20200414143053-d3edf31b6320
 	github.com/hashicorp/terraform-plugin-docs v0.7.0
@@ -13,7 +13,7 @@ require (
 )
 
 require (
-	entgo.io/ent v0.10.2-0.20220428114225-0c8f9a977c99 // indirect
+	entgo.io/ent v0.10.2-0.20220502113020-4ac82f5bb3f0 // indirect
 	github.com/Masterminds/goutils v1.1.0 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect

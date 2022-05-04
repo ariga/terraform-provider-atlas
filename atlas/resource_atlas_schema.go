@@ -18,7 +18,7 @@ func newSchemaResource() *schema.Resource {
 		CreateContext: applySchema,
 		UpdateContext: applySchema,
 		ReadContext:   readSchema,
-		DeleteContext: readSchema,
+		DeleteContext: deleteSchema,
 		Schema: map[string]*schema.Schema{
 			"hcl": {
 				Type:        schema.TypeString,
@@ -39,6 +39,10 @@ func newSchemaResource() *schema.Resource {
 			},
 		},
 	}
+}
+
+func deleteSchema(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+	return nil
 }
 
 func readSchema(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
