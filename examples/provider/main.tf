@@ -2,7 +2,7 @@ terraform {
   required_providers {
     atlas = {
       version = "~> 0.1.0"
-      source  = "github.com/ariga/atlas"
+      source  = "ariga/atlas"
     }
     docker = {
       source  = "kreuzwerker/docker"

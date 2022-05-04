@@ -1,4 +1,3 @@
-
 provider "atlas" {}
 
 data "atlas_schema" "market" {
