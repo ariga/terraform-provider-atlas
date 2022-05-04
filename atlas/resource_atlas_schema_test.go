@@ -250,7 +250,10 @@ func TestAccRemoveColumns(t *testing.T) {
 					if err != nil {
 						t.Error(err)
 					}
-					cli.DB.Exec(createTableStmt)
+					_, err = cli.DB.Exec(createTableStmt)
+					if err != nil {
+						t.Error(err)
+					}
 				},
 				Config: testAccSanity,
 				Check: resource.ComposeTestCheckFunc(
