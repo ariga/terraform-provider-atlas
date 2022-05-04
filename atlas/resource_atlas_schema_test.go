@@ -149,9 +149,9 @@ resource "atlas_schema" "testdb" {
 `
 
 func TestAccInvalidSchemaReturnsError(t *testing.T) {
-	defer func() {
+	t.Cleanup(func() {
 		os.Remove("database.sqlite3")
-	}()
+	})
 	resource.Test(t, resource.TestCase{
 		Providers: map[string]*schema.Provider{
 			"atlas": Provider(),
