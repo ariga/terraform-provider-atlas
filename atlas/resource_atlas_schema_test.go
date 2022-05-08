@@ -108,7 +108,7 @@ func TestAccAtlasDatabase(t *testing.T) {
 }
 
 func TestAccDestroySchemas(t *testing.T) {
-	// create schemas "main" and "do-not-delete"
+	// Create schemas "main" and "do-not-delete".
 	preExistingSchema := `resource "atlas_schema" "testdb" {
 		hcl = <<-EOT
 		schema "do-not-delete" {}
