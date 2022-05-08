@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	mysql_url     = "mysql://root:pass@localhost:3306/test"
-	mysql_dev_url = "mysql://root:pass@localhost:3307/test"
+	mysql_url     = "mysql://root:pass@localhost:3306"
+	mysql_dev_url = "mysql://root:pass@localhost:3307"
 )
 
 func TestAccAtlasDatabase(t *testing.T) {
@@ -258,6 +258,67 @@ schema "test" {
 					resource.TestCheckResourceAttr("atlas_schema.testdb", "hcl", sanityState),
 				),
 			},
+		},
+	})
+}
+
+func TestAccDestroySchemas(t *testing.T) {
+	// Create schemas "main" and "do-not-delete".
+	preExistingSchema := fmt.Sprintf(`resource "atlas_schema" "testdb" {
+		hcl = <<-EOT
+		schema "do-not-delete" {}
+		schema "main" {}
+		EOT
+		url = "%s"
+	}`, mysql_url)
+	// When the following destroys, it only deletes schema "main".
+	tfSchema := fmt.Sprintf(`resource "atlas_schema" "testdb" {
+		hcl = <<-EOT
+		table "orders" {
+			schema = schema.main
+			column "id" {
+				null = true
+				type = int
+			}
+		}
+		schema "main" {
+		}
+		EOT
+		url = "%s/main"
+	}`, mysql_url)
+	resource.Test(t, resource.TestCase{
+		Providers: map[string]*schema.Provider{
+			"atlas": Provider(),
+		},
+		Steps: []resource.TestStep{
+			{
+				Config:  preExistingSchema,
+				Destroy: false,
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				Config: tfSchema,
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+			},
+		},
+		CheckDestroy: func(s *terraform.State) error {
+			cli, err := sqlclient.Open(context.Background(), mysql_url)
+			if err != nil {
+				return err
+			}
+			realm, err := cli.InspectRealm(context.Background(), nil)
+			if err != nil {
+				return err
+			}
+			if _, ok := realm.Schema("do-not-delete"); !ok {
+				return fmt.Errorf("schema 'do-not-delete' does not exist, but expected to not be destroyed.")
+			}
+			if _, ok := realm.Schema("main"); ok {
+				return fmt.Errorf("schema 'main' wasn't deleted.")
+			}
+			return nil
 		},
 	})
 }
