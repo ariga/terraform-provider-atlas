@@ -16,7 +16,9 @@ Contrary to existing tools, Atlas intelligently plans schema migrations for you,
 * SQLite
 * TiDB
 
-Link to Terraform documentation. 
+### Docs
+* [Provider Docs](https://registry.terraform.io/providers/ariga/atlas/latest/docs)
+* [Atlas Docs](https://atlasgo.io)
 
 ## Installation
 
