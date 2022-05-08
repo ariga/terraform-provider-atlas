@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	MYSQL_URL     = "mysql://root:pass@localhost:3306/test"
-	MYSQL_DEV_URL = "mysql://root:pass@localhost:3307/test"
+	mysql_url     = "mysql://root:pass@localhost:3306/test"
+	mysql_dev_url = "mysql://root:pass@localhost:3307/test"
 )
 
-var testAccActionConfigCreate = fmt.Sprintf(`
+func TestAccAtlasDatabase(t *testing.T) {
+	var testAccActionConfigCreate = fmt.Sprintf(`
 data "atlas_schema" "market" {
   dev_db_url = "%s"
   src = <<-EOT
@@ -43,9 +44,9 @@ resource "atlas_schema" "testdb" {
   hcl = data.atlas_schema.market.hcl
   url = "%s"
 }
-`, MYSQL_DEV_URL, MYSQL_URL)
+`, mysql_dev_url, mysql_url)
 
-var testAccActionConfigUpdate = fmt.Sprintf(`
+	var testAccActionConfigUpdate = fmt.Sprintf(`
 data "atlas_schema" "market" {
   dev_db_url = "%s"
   src = <<-EOT
@@ -74,9 +75,7 @@ resource "atlas_schema" "testdb" {
   hcl = data.atlas_schema.market.hcl
   url = "%s"
 }
-`, MYSQL_DEV_URL, MYSQL_URL)
-
-func TestAccAtlasDatabase(t *testing.T) {
+`, mysql_dev_url, mysql_url)
 	resource.Test(t, resource.TestCase{
 		Providers: map[string]*schema.Provider{
 			"atlas": Provider(),
@@ -85,13 +84,13 @@ func TestAccAtlasDatabase(t *testing.T) {
 			{
 				Config: testAccActionConfigCreate,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", MYSQL_URL),
+					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysql_url),
 				),
 			},
 			{
 				Config: testAccActionConfigUpdate,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", MYSQL_URL),
+					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysql_url),
 					func(s *terraform.State) error {
 						res := s.RootModule().Resources["atlas_schema.testdb"]
 						cli, err := sqlclient.Open(context.Background(), res.Primary.ID)
@@ -114,7 +113,8 @@ func TestAccAtlasDatabase(t *testing.T) {
 	})
 }
 
-const testAccValidSqliteSchema = `
+func TestAccInvalidSchemaReturnsError(t *testing.T) {
+	const testAccValidSQLiteSchema = `
 resource "atlas_schema" "testdb" {
   hcl = <<-EOT
 	table "orders" {
@@ -130,11 +130,11 @@ resource "atlas_schema" "testdb" {
   url = "sqlite://database.sqlite3?cache=shared"
 }
 `
-
-const testAccInvalidSqliteSchema = `
+	// invalid hcl file (missing `"` in 'table "orders...')
+	const testAccInvalidSQLiteSchema = `
 resource "atlas_schema" "testdb" {
   hcl = <<-EOT
-	table "orders {
+	table "orders { # missing closing " here
 		schema = schema.main
 		column "id" {
 			null = true
@@ -147,8 +147,6 @@ resource "atlas_schema" "testdb" {
   url = "sqlite://database.sqlite3?cache=shared"
 }
 `
-
-func TestAccInvalidSchemaReturnsError(t *testing.T) {
 	t.Cleanup(func() {
 		os.Remove("database.sqlite3")
 	})
@@ -158,11 +156,11 @@ func TestAccInvalidSchemaReturnsError(t *testing.T) {
 		},
 		Steps: []resource.TestStep{
 			{
-				Config:             testAccValidSqliteSchema,
+				Config:             testAccValidSQLiteSchema,
 				ExpectNonEmptyPlan: true,
 			},
 			{
-				Config:      testAccInvalidSqliteSchema,
+				Config:      testAccInvalidSQLiteSchema,
 				ExpectError: regexp.MustCompile("schemahcl: failed decoding"),
 			},
 		},
@@ -191,14 +189,15 @@ func TestAccInvalidSchemaReturnsError(t *testing.T) {
 	}
 }
 
-const createTableStmt = `create table type_table
+func TestAccRemoveColumns(t *testing.T) {
+	const createTableStmt = `create table type_table
 (
-    tBit                        bit(10)              default 4                                              null,
-    tInt                        int(10)              default 4                                               not null,
-    tTinyInt                    tinyint(10)          default 8                                                   null
+  tBit           bit(10)           default 4          null,
+  tInt           int(10)           default 4      not null,
+  tTinyInt       tinyint(10)       default 8          null
 ) CHARSET = utf8mb4 COLLATE utf8mb4_0900_ai_ci;`
 
-var testAccSanity = fmt.Sprintf(`
+	var testAccSanity = fmt.Sprintf(`
 data "atlas_schema" "sanity" {
   dev_db_url = "%s"
   src = <<-EOT
@@ -222,9 +221,9 @@ resource "atlas_schema" "testdb" {
   hcl = data.atlas_schema.sanity.hcl
   url = "%s"
 }
-`, MYSQL_DEV_URL, MYSQL_URL)
+`, mysql_dev_url, mysql_url)
 
-const sanityState = `table "type_table" {
+	const sanityState = `table "type_table" {
   schema = schema.test
   column "tInt" {
     null    = false
@@ -237,8 +236,6 @@ schema "test" {
   collate = "utf8mb4_0900_ai_ci"
 }
 `
-
-func TestAccRemoveColumns(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		Providers: map[string]*schema.Provider{
 			"atlas": Provider(),
@@ -246,7 +243,7 @@ func TestAccRemoveColumns(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				PreConfig: func() {
-					cli, err := sqlclient.Open(context.Background(), MYSQL_URL)
+					cli, err := sqlclient.Open(context.Background(), mysql_url)
 					if err != nil {
 						t.Error(err)
 					}
@@ -257,7 +254,7 @@ func TestAccRemoveColumns(t *testing.T) {
 				},
 				Config: testAccSanity,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", MYSQL_URL),
+					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysql_url),
 					resource.TestCheckResourceAttr("atlas_schema.testdb", "hcl", sanityState),
 				),
 			},
