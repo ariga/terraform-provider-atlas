@@ -116,7 +116,7 @@ func TestAccDestroySchemas(t *testing.T) {
 		EOT
 		url = "mysql://root:pass@localhost:3306"
 	}`
-	// when the following destroys - it only deletes schema "main"
+	// When the following destroys, it only deletes schema "main".
 	tfSchema := `resource "atlas_schema" "testdb" {
 		hcl = <<-EOT
 		table "orders" {
