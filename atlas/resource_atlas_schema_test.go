@@ -108,7 +108,7 @@ func TestAccAtlasDatabase(t *testing.T) {
 }
 
 func TestAccDestroySchemas(t *testing.T) {
-	// create schemas "main" and "do-not-delete"
+	// Create schemas "main" and "do-not-delete".
 	preExistingSchema := `resource "atlas_schema" "testdb" {
 		hcl = <<-EOT
 		schema "do-not-delete" {}
@@ -116,7 +116,7 @@ func TestAccDestroySchemas(t *testing.T) {
 		EOT
 		url = "mysql://root:pass@localhost:3306"
 	}`
-	// when the following destroys - it only deletes schema "main"
+	// When the following destroys, it only deletes schema "main".
 	tfSchema := `resource "atlas_schema" "testdb" {
 		hcl = <<-EOT
 		table "orders" {
