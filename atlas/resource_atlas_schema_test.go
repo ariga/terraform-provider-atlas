@@ -137,12 +137,14 @@ func TestAccDestroySchemas(t *testing.T) {
 		},
 		Steps: []resource.TestStep{
 			{
-				Config:             preExistingSchema,
-				Destroy:            false,
+				Config:  preExistingSchema,
+				Destroy: false,
+				// ignore non-normalized schema
 				ExpectNonEmptyPlan: true,
 			},
 			{
-				Config:             tfSchema,
+				Config: tfSchema,
+				// ignore non-normalized schema
 				ExpectNonEmptyPlan: true,
 			},
 		},
