@@ -23,7 +23,7 @@ resource "docker_container" "dev" {
   name  = "devdb"
   env = [
     "MYSQL_ROOT_PASSWORD=pass",
-    "MYSQL_DATABASE=test",
+    "MYSQL_DATABASE=market",
   ]
   ports {
     external = 3307
@@ -36,7 +36,7 @@ resource "docker_container" "prod" {
   name  = "proddb"
   env = [
     "MYSQL_ROOT_PASSWORD=pass",
-    "MYSQL_DATABASE=test",
+    "MYSQL_DATABASE=market",
   ]
   ports {
     external = 3306
@@ -46,13 +46,13 @@ resource "docker_container" "prod" {
 
 data "atlas_schema" "market" {
   depends_on = [ docker_container.dev ]
-  dev_db_url = "mysql://root:pass@localhost:3307/test"
+  dev_db_url = "mysql://root:pass@localhost:3307/market"
   src = file("${path.module}/schema.hcl")
 }
 
 resource "atlas_schema" "market" {
   depends_on = [ docker_container.prod ]
   hcl = data.atlas_schema.market.hcl
-  url = "mysql://root:pass@localhost:3306/test"
-  dev_db_url = "mysql://root:pass@localhost:3307/test"
+  url = "mysql://root:pass@localhost:3306/market"
+  dev_db_url = "mysql://root:pass@localhost:3307/market"
 }

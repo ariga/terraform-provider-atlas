@@ -18,7 +18,7 @@ func newSchemaResource() *schema.Resource {
 		CreateContext: applySchema,
 		UpdateContext: applySchema,
 		ReadContext:   readSchema,
-		DeleteContext: readSchema,
+		DeleteContext: deleteSchema,
 		Schema: map[string]*schema.Schema{
 			"hcl": {
 				Type:        schema.TypeString,
@@ -39,6 +39,33 @@ func newSchemaResource() *schema.Resource {
 			},
 		},
 	}
+}
+
+func deleteSchema(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+	var diags diag.Diagnostics
+	url := d.Get("url").(string)
+
+	cli, err := sqlclient.Open(ctx, url)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+	var schemas []string
+	if cli.URL.Schema != "" {
+		schemas = append(schemas, cli.URL.Schema)
+	}
+	realm, err := cli.InspectRealm(ctx, &atlaschema.InspectRealmOption{Schemas: schemas})
+	if err != nil {
+		return diag.FromErr(err)
+	}
+	desired := &atlaschema.Realm{}
+	changes, err := cli.RealmDiff(realm, desired)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+	if err = cli.ApplyChanges(ctx, changes); err != nil {
+		return diag.FromErr(err)
+	}
+	return diags
 }
 
 func readSchema(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
@@ -72,17 +99,18 @@ func applySchema(ctx context.Context, d *schema.ResourceData, m interface{}) dia
 	if err != nil {
 		return diag.FromErr(err)
 	}
-
-	realm, err := cli.InspectRealm(ctx, nil)
+	var schemas []string
+	if cli.URL.Schema != "" {
+		schemas = append(schemas, cli.URL.Schema)
+	}
+	realm, err := cli.InspectRealm(ctx, &atlaschema.InspectRealmOption{Schemas: schemas})
 	if err != nil {
 		return diag.FromErr(err)
 	}
-
 	desired := &atlaschema.Realm{}
 	if err = cli.Evaluator.Eval([]byte(hcl), desired, nil); err != nil {
 		return diag.FromErr(err)
 	}
-
 	if devURL, ok := d.GetOk("dev_db_url"); ok {
 		dev, err := sqlclient.Open(ctx, devURL.(string))
 		if err != nil {
