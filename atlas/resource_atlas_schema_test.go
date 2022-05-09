@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	mysql_url     = "mysql://root:pass@localhost:3306"
-	mysql_dev_url = "mysql://root:pass@localhost:3307"
+	mysqlURL    = "mysql://root:pass@localhost:3306"
+	mysqlDevURL = "mysql://root:pass@localhost:3307"
 )
 
 func TestAccAtlasDatabase(t *testing.T) {
@@ -43,7 +43,7 @@ resource "atlas_schema" "testdb" {
   hcl = data.atlas_schema.market.hcl
   url = "%s"
 }
-`, mysql_dev_url, mysql_url)
+`, mysqlDevURL, mysqlURL)
 
 	var testAccActionConfigUpdate = fmt.Sprintf(`
 data "atlas_schema" "market" {
@@ -74,7 +74,7 @@ resource "atlas_schema" "testdb" {
   hcl = data.atlas_schema.market.hcl
   url = "%s"
 }
-`, mysql_dev_url, mysql_url)
+`, mysqlDevURL, mysqlURL)
 	resource.Test(t, resource.TestCase{
 		Providers: map[string]*schema.Provider{
 			"atlas": Provider(),
@@ -83,13 +83,13 @@ resource "atlas_schema" "testdb" {
 			{
 				Config: testAccActionConfigCreate,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysql_url),
+					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysqlURL),
 				),
 			},
 			{
 				Config: testAccActionConfigUpdate,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysql_url),
+					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysqlURL),
 					func(s *terraform.State) error {
 						res := s.RootModule().Resources["atlas_schema.testdb"]
 						cli, err := sqlclient.Open(context.Background(), res.Primary.ID)
@@ -134,7 +134,7 @@ func TestAccInvalidSchemaReturnsError(t *testing.T) {
 		EOT
 	  url = "%s"
 	}
-	`, mysql_url)
+	`, mysqlURL)
 	// invalid hcl file (missing `"` in 'table "orders...')
 	testAccInvalidSchema := fmt.Sprintf(`
 	resource "atlas_schema" "testdb" {
@@ -157,7 +157,7 @@ func TestAccInvalidSchemaReturnsError(t *testing.T) {
 		EOT
 	  url = "%s"
 	}
-	`, mysql_url)
+	`, mysqlURL)
 
 	resource.Test(t, resource.TestCase{
 		Providers: map[string]*schema.Provider{
@@ -176,7 +176,7 @@ func TestAccInvalidSchemaReturnsError(t *testing.T) {
 				Destroy:            false,
 				ExpectNonEmptyPlan: true,
 				Check: func(s *terraform.State) error {
-					cli, err := sqlclient.Open(context.Background(), mysql_url)
+					cli, err := sqlclient.Open(context.Background(), mysqlURL)
 					if err != nil {
 						return err
 					}
@@ -184,7 +184,6 @@ func TestAccInvalidSchemaReturnsError(t *testing.T) {
 					if err != nil {
 						return err
 					}
-
 					tbl, ok := realm.Schemas[0].Table("orders")
 					if !ok {
 						return fmt.Errorf("expected database to have table \"orders\"")
@@ -231,7 +230,7 @@ resource "atlas_schema" "testdb" {
   hcl = data.atlas_schema.sanity.hcl
   url = "%s"
 }
-`, mysql_dev_url, mysql_url)
+`, mysqlDevURL, mysqlURL)
 
 	const sanityState = `table "type_table" {
   schema = schema.test3
@@ -253,7 +252,7 @@ schema "test3" {
 		Steps: []resource.TestStep{
 			{
 				PreConfig: func() {
-					cli, err := sqlclient.Open(context.Background(), mysql_url)
+					cli, err := sqlclient.Open(context.Background(), mysqlURL)
 					if err != nil {
 						t.Error(err)
 					}
@@ -273,7 +272,7 @@ schema "test3" {
 				},
 				Config: testAccSanity,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysql_url),
+					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysqlURL),
 					resource.TestCheckResourceAttr("atlas_schema.testdb", "hcl", sanityState),
 				),
 			},
@@ -289,7 +288,7 @@ func TestAccDestroySchemas(t *testing.T) {
 		schema "test4" {}
 		EOT
 		url = "%s"
-	}`, mysql_url)
+	}`, mysqlURL)
 	// When the following destroys, it only deletes schema "test4".
 	tfSchema := fmt.Sprintf(`resource "atlas_schema" "testdb" {
 		hcl = <<-EOT
@@ -304,7 +303,7 @@ func TestAccDestroySchemas(t *testing.T) {
 		}
 		EOT
 		url = "%s/test4"
-	}`, mysql_url)
+	}`, mysqlURL)
 	resource.Test(t, resource.TestCase{
 		Providers: map[string]*schema.Provider{
 			"atlas": Provider(),
@@ -323,7 +322,7 @@ func TestAccDestroySchemas(t *testing.T) {
 			},
 		},
 		CheckDestroy: func(s *terraform.State) error {
-			cli, err := sqlclient.Open(context.Background(), mysql_url)
+			cli, err := sqlclient.Open(context.Background(), mysqlURL)
 			if err != nil {
 				return err
 			}
@@ -352,7 +351,7 @@ func TestAccMultipleSchemas(t *testing.T) {
 		schema "m_test5" {}
 		EOT
 		url = "%s"
-	}`, mysql_url)
+	}`, mysqlURL)
 	resource.Test(t, resource.TestCase{
 		Providers: map[string]*schema.Provider{
 			"atlas": Provider(),
@@ -364,7 +363,7 @@ func TestAccMultipleSchemas(t *testing.T) {
 				// ignore non-normalized schema
 				ExpectNonEmptyPlan: true,
 				Check: func(s *terraform.State) error {
-					cli, err := sqlclient.Open(context.Background(), mysql_url)
+					cli, err := sqlclient.Open(context.Background(), mysqlURL)
 					if err != nil {
 						return err
 					}
@@ -383,7 +382,7 @@ func TestAccMultipleSchemas(t *testing.T) {
 			},
 		},
 		CheckDestroy: func(s *terraform.State) error {
-			cli, err := sqlclient.Open(context.Background(), mysql_url)
+			cli, err := sqlclient.Open(context.Background(), mysqlURL)
 			if err != nil {
 				return err
 			}
