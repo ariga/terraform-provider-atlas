@@ -76,7 +76,11 @@ func readSchema(ctx context.Context, d *schema.ResourceData, m interface{}) diag
 	if err != nil {
 		return diag.FromErr(err)
 	}
-	realm, err := cli.InspectRealm(ctx, nil)
+	var schemas []string
+	if cli.URL.Schema != "" {
+		schemas = append(schemas, cli.URL.Schema)
+	}
+	realm, err := cli.InspectRealm(ctx, &atlaschema.InspectRealmOption{Schemas: schemas})
 	if err != nil {
 		return diag.FromErr(err)
 	}

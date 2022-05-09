@@ -1,9 +1,14 @@
 ariga.io/atlas v0.3.8-0.20220501150530-25b6dbb99ff8 h1:KlX16MG8+3AjFl3CK33wTLg2FtLvApubha9VTjT98sI=
 ariga.io/atlas v0.3.8-0.20220501150530-25b6dbb99ff8/go.mod h1:URT1boACQmnulqRF07NkSOEkzx/OmO/48AmVX7pPaJg=
+ariga.io/atlas v0.3.8-0.20220504100457-95b8a765a96f h1:1NC8dEB9hUl4o7sU/llxgn3WD/4LMYMgXIBqhDjUX4A=
+ariga.io/atlas v0.3.8-0.20220504100457-95b8a765a96f/go.mod h1:D/d0a5QyMFU2R5E8ArmpnWbMjFP9LOr0TsQNbKqhT20=
+ariga.io/atlas v0.3.8-0.20220508082407-70f71a80d0a1 h1:4EMvZC/fEsUNMKBWQGTS6V39kyOM0hkLuduMI+QRKkQ=
+ariga.io/atlas v0.3.8-0.20220508082407-70f71a80d0a1/go.mod h1:D/d0a5QyMFU2R5E8ArmpnWbMjFP9LOr0TsQNbKqhT20=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.34.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 entgo.io/ent v0.10.2-0.20220428114225-0c8f9a977c99 h1:++Y53GODlpz4OZOJ4VjANc9OxKUR6NZRgXcFg+CEtOc=
 entgo.io/ent v0.10.2-0.20220428114225-0c8f9a977c99/go.mod h1:rUH4yiUVADR2XHnv0ZERDnwF/YjR42m3Qra6CZ4ZxBA=
+entgo.io/ent v0.10.2-0.20220502113020-4ac82f5bb3f0/go.mod h1:Zh61BPvB+cL6VWEyN8f1YoDacrMjQf2KDlDeX26xq2k=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/DATA-DOG/go-sqlmock v1.5.0 h1:Shsta01QNfFxHCfpW6YH2STWB0MudeXXEWMr20OEh60=
 github.com/Masterminds/goutils v1.1.0 h1:zukEsf/1JZwCMgHiK3GZftabmxiCw4apj3a28RPBiVg=

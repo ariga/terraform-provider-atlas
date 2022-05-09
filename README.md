@@ -16,7 +16,9 @@ Contrary to existing tools, Atlas intelligently plans schema migrations for you,
 * SQLite
 * TiDB
 
-Link to Terraform documentation. 
+### Docs
+* [Provider Docs](https://registry.terraform.io/providers/ariga/atlas/latest/docs)
+* [Atlas Docs](https://atlasgo.io)
 
 ## Installation
 
@@ -60,13 +62,13 @@ provider "atlas" {}
  ```terraform
  data "atlas_schema" "my_schema" {
   src = file("${path.module}/schema.hcl")
-  dev_db_url = "mysql://root:pass@localhost:3307/test"
+  dev_db_url = "mysql://root:pass@localhost:3307/example"
  }
 
  resource "atlas_schema" "example_db" {
   hcl = data.atlas_schema.my_schema.hcl
-  url = "mysql://root:pass@localhost:3306/test"
-  dev_db_url = "mysql://root:pass@localhost:3307/test"
+  url = "mysql://root:pass@localhost:3306/example"
+  dev_db_url = "mysql://root:pass@localhost:3307/example"
  }
  ```
 
