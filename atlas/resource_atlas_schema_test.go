@@ -3,7 +3,6 @@ package atlas
 import (
 	"context"
 	"fmt"
-	"os"
 	"regexp"
 	"testing"
 
@@ -23,12 +22,12 @@ func TestAccAtlasDatabase(t *testing.T) {
 data "atlas_schema" "market" {
   dev_db_url = "%s"
   src = <<-EOT
-	schema "test" {
+	schema "test1" {
 		charset = "utf8mb4"
 		collate = "utf8mb4_0900_ai_ci"
 	}
 	table "foo" {
-		schema = schema.test
+		schema = schema.test1
 		column "id" {
 			null           = false
 			type           = int
@@ -50,12 +49,12 @@ resource "atlas_schema" "testdb" {
 data "atlas_schema" "market" {
   dev_db_url = "%s"
   src = <<-EOT
-	schema "test" {
+	schema "test1" {
 		charset = "utf8mb4"
 		collate = "utf8mb4_0900_ai_ci"
 	}
 	table "foo" {
-		schema = schema.test
+		schema = schema.test1
 		column "id" {
 			null           = false
 			type           = int
@@ -114,79 +113,90 @@ resource "atlas_schema" "testdb" {
 }
 
 func TestAccInvalidSchemaReturnsError(t *testing.T) {
-	const testAccValidSQLiteSchema = `
-resource "atlas_schema" "testdb" {
-  hcl = <<-EOT
-	table "orders" {
-		schema = schema.main
-		column "id" {
-			null = true
-			type = int
+	testAccValidSchema := fmt.Sprintf(`
+	resource "atlas_schema" "testdb" {
+	  hcl = <<-EOT
+		schema "test2" {
+			charset = "utf8mb4"
+			collate = "utf8mb4_0900_ai_ci"
 		}
+		table "foo" {
+			schema = schema.test2
+			column "id" {
+				null           = false
+				type           = int
+				auto_increment = true
+			}
+			primary_key {
+				columns = [column.id]
+			}
+		}
+		EOT
+	  url = "%s"
 	}
-	schema "main" {
-	}
-	EOT
-  url = "sqlite://database.sqlite3?cache=shared"
-}
-`
+	`, mysql_url)
 	// invalid hcl file (missing `"` in 'table "orders...')
-	const testAccInvalidSQLiteSchema = `
-resource "atlas_schema" "testdb" {
-  hcl = <<-EOT
-	table "orders { # missing closing " here
-		schema = schema.main
-		column "id" {
-			null = true
-			type = int
+	testAccInvalidSchema := fmt.Sprintf(`
+	resource "atlas_schema" "testdb" {
+	  hcl = <<-EOT
+		schema "test2" {
+			charset = "utf8mb4"
+			collate = "utf8mb4_0900_ai_ci"
 		}
+		table "orders {
+			schema = schema.test2
+			column "id" {
+				null           = false
+				type           = int
+				auto_increment = true
+			}
+			primary_key {
+				columns = [column.id]
+			}
+		}
+		EOT
+	  url = "%s"
 	}
-	schema "main" {
-	}
-	EOT
-  url = "sqlite://database.sqlite3?cache=shared"
-}
-`
-	t.Cleanup(func() {
-		os.Remove("database.sqlite3")
-	})
+	`, mysql_url)
+
 	resource.Test(t, resource.TestCase{
 		Providers: map[string]*schema.Provider{
 			"atlas": Provider(),
 		},
+		IsUnitTest: true,
 		Steps: []resource.TestStep{
 			{
-				Config:             testAccValidSQLiteSchema,
+				Config:             testAccValidSchema,
 				ExpectNonEmptyPlan: true,
+				Destroy:            false,
 			},
 			{
-				Config:      testAccInvalidSQLiteSchema,
-				ExpectError: regexp.MustCompile("schemahcl: failed decoding"),
+				Config:             testAccInvalidSchema,
+				ExpectError:        regexp.MustCompile("schemahcl: failed decoding"),
+				Destroy:            false,
+				ExpectNonEmptyPlan: true,
+				Check: func(s *terraform.State) error {
+					cli, err := sqlclient.Open(context.Background(), mysql_url)
+					if err != nil {
+						return err
+					}
+					realm, err := cli.InspectRealm(context.Background(), nil)
+					if err != nil {
+						return err
+					}
+
+					tbl, ok := realm.Schemas[0].Table("orders")
+					if !ok {
+						return fmt.Errorf("expected database to have table \"orders\"")
+					}
+					if _, ok := tbl.Column("id"); !ok {
+						return fmt.Errorf("expected database to have table \"orders\" but got: %s", realm.Schemas[0].Tables[0].Name)
+					}
+					return nil
+				},
 			},
 		},
 	})
-
-	url := "sqlite://database.sqlite3?cache=shared"
-	cli, err := sqlclient.Open(context.Background(), url)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	realm, err := cli.InspectRealm(context.Background(), nil)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	tbl, ok := realm.Schemas[0].Table("orders")
-	if !ok {
-		t.Error("expected database to have table \"orders\"")
-		return
-	}
-	if _, ok := tbl.Column("id"); !ok {
-		t.Error(fmt.Errorf("expected database to have table \"orders\" but got: %s", realm.Schemas[0].Tables[0].Name))
-		return
-	}
 }
 
 func TestAccRemoveColumns(t *testing.T) {
@@ -202,7 +212,7 @@ data "atlas_schema" "sanity" {
   dev_db_url = "%s"
   src = <<-EOT
 	table "type_table" {
-		schema  = schema.test
+		schema  = schema.test3
 		charset = "utf8mb4"
 		collate = "utf8mb4_0900_ai_ci"
 		column "tInt" {
@@ -211,7 +221,7 @@ data "atlas_schema" "sanity" {
 			default = 4
 		}
 	}
-	schema "test" {
+	schema "test3" {
 		charset = "utf8mb4"
 		collate = "utf8mb4_0900_ai_ci"
 	}
@@ -224,14 +234,14 @@ resource "atlas_schema" "testdb" {
 `, mysql_dev_url, mysql_url)
 
 	const sanityState = `table "type_table" {
-  schema = schema.test
+  schema = schema.test3
   column "tInt" {
     null    = false
     type    = int
     default = 4
   }
 }
-schema "test" {
+schema "test3" {
   charset = "utf8mb4"
   collate = "utf8mb4_0900_ai_ci"
 }
@@ -247,6 +257,9 @@ schema "test" {
 					if err != nil {
 						t.Error(err)
 					}
+					defer cli.Close()
+					cli.DB.Exec("CREATE DATABASE IF NOT EXISTS test3;")
+					cli.DB.Exec("USE test3;")
 					_, err = cli.DB.Exec(createTableStmt)
 					if err != nil {
 						t.Error(err)
@@ -263,28 +276,28 @@ schema "test" {
 }
 
 func TestAccDestroySchemas(t *testing.T) {
-	// Create schemas "main" and "do-not-delete".
+	// Create schemas "test4" and "do-not-delete".
 	preExistingSchema := fmt.Sprintf(`resource "atlas_schema" "testdb" {
 		hcl = <<-EOT
 		schema "do-not-delete" {}
-		schema "main" {}
+		schema "test4" {}
 		EOT
 		url = "%s"
 	}`, mysql_url)
-	// When the following destroys, it only deletes schema "main".
+	// When the following destroys, it only deletes schema "test4".
 	tfSchema := fmt.Sprintf(`resource "atlas_schema" "testdb" {
 		hcl = <<-EOT
 		table "orders" {
-			schema = schema.main
+			schema = schema.test4
 			column "id" {
 				null = true
 				type = int
 			}
 		}
-		schema "main" {
+		schema "test4" {
 		}
 		EOT
-		url = "%s/main"
+		url = "%s/test4"
 	}`, mysql_url)
 	resource.Test(t, resource.TestCase{
 		Providers: map[string]*schema.Provider{
@@ -315,8 +328,8 @@ func TestAccDestroySchemas(t *testing.T) {
 			if _, ok := realm.Schema("do-not-delete"); !ok {
 				return fmt.Errorf("schema 'do-not-delete' does not exist, but expected to not be destroyed.")
 			}
-			if _, ok := realm.Schema("main"); ok {
-				return fmt.Errorf("schema 'main' wasn't deleted.")
+			if _, ok := realm.Schema("test4"); ok {
+				return fmt.Errorf("schema 'test4' wasn't deleted.")
 			}
 			return nil
 		},
