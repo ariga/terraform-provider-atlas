@@ -335,3 +335,64 @@ func TestAccDestroySchemas(t *testing.T) {
 		},
 	})
 }
+
+func TestAccMultipleSchemas(t *testing.T) {
+	// When the following destroys, it only deletes schema "test4".
+	mulSchema := fmt.Sprintf(`resource "atlas_schema" "testdb" {
+		hcl = <<-EOT
+		schema "m_test1" {}
+		schema "m_test2" {}
+		schema "m_test3" {}
+		schema "m_test4" {}
+		schema "m_test5" {}
+		EOT
+		url = "%s"
+	}`, mysql_url)
+	resource.Test(t, resource.TestCase{
+		Providers: map[string]*schema.Provider{
+			"atlas": Provider(),
+		},
+		Steps: []resource.TestStep{
+			{
+				Config:  mulSchema,
+				Destroy: false,
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+				Check: func(s *terraform.State) error {
+					cli, err := sqlclient.Open(context.Background(), mysql_url)
+					if err != nil {
+						return err
+					}
+					realm, err := cli.InspectRealm(context.Background(), nil)
+					if err != nil {
+						return err
+					}
+					schemas := []string{"m_test1", "m_test2", "m_test3", "m_test4", "m_test5"}
+					for _, s := range schemas {
+						if _, ok := realm.Schema(s); !ok {
+							return fmt.Errorf("schema '%s' does not exist.", s)
+						}
+					}
+					return nil
+				},
+			},
+		},
+		CheckDestroy: func(s *terraform.State) error {
+			cli, err := sqlclient.Open(context.Background(), mysql_url)
+			if err != nil {
+				return err
+			}
+			realm, err := cli.InspectRealm(context.Background(), nil)
+			if err != nil {
+				return err
+			}
+			schemas := []string{"m_test1", "m_test2", "m_test3", "m_test4", "m_test5"}
+			for _, s := range schemas {
+				if _, ok := realm.Schema(s); ok {
+					return fmt.Errorf("schema '%s' exists.", s)
+				}
+			}
+			return nil
+		},
+	})
+}
