@@ -1,13 +1,13 @@
 page_title: "atlas_schema Resource - terraform-provider-atlas"
 subcategory: ""
 description: |-
-  Atlas database resource manages the data schema of the database, using an HCL file describing the wanted state of the database. see https://atlasgo.io/
+  Atlas database resource manages the data schema of the database, using an HCL file describing the wanted state of the database.
 ---
 <!-- source: https://github.dev/hashicorp/terraform-plugin-docs/blob/main/internal/provider/template.go -->
 <!-- Bug: Type and Name are switched -->
 # Resource (atlas_schema)
 
-Atlas database resource manages the data schema of the database, using an HCL file describing the wanted state of the database. see https://atlasgo.io/
+Atlas database resource manages the data schema of the database, using an HCL file describing the wanted state of the database.
 
 ## Example Usage
 
