@@ -258,8 +258,14 @@ schema "test3" {
 						t.Error(err)
 					}
 					defer cli.Close()
-					cli.DB.Exec("CREATE DATABASE IF NOT EXISTS test3;")
-					cli.DB.Exec("USE test3;")
+					_, err = cli.DB.Exec("CREATE DATABASE IF NOT EXISTS test3;")
+					if err != nil {
+						t.Error(err)
+					}
+					_, err = cli.DB.Exec("USE test3;")
+					if err != nil {
+						t.Error(err)
+					}
 					_, err = cli.DB.Exec(createTableStmt)
 					if err != nil {
 						t.Error(err)
