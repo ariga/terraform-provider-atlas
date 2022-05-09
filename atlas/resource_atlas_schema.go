@@ -13,7 +13,7 @@ import (
 
 func newSchemaResource() *schema.Resource {
 	return &schema.Resource{
-		Description: "Atlas database resource manages the data schema of the database, using an HCL file describing the wanted state of the database.",
+		Description: "Atlas database resource manages the data schema of the database, using an HCL file describing the wanted state of the database. see https://atlasgo.io/",
 		// Create&Update both apply migrations
 		CreateContext: applySchema,
 		UpdateContext: applySchema,
