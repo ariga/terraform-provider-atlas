@@ -343,7 +343,6 @@ func TestAccDestroySchemas(t *testing.T) {
 }
 
 func TestAccMultipleSchemas(t *testing.T) {
-	// When the following destroys, it only deletes schema "test4".
 	mulSchema := fmt.Sprintf(`resource "atlas_schema" "testdb" {
 		hcl = <<-EOT
 		schema "m_test1" {}
