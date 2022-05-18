@@ -38,6 +38,8 @@ provider "atlas" {}
 
 1\. To create a schema for your database, first install `atlas`:  
  ### MacOS:
+ 
+ Install via [Homebrew](https://brew.sh/):
  ```shell
  brew install atlas
  ```
