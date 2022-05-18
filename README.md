@@ -39,7 +39,7 @@ provider "atlas" {}
 1\. To create a schema for your database, first install `atlas`:  
  ### MacOS:
  ```shell
- brew install ariga/tap/atlas
+ brew install atlas
  ```
  ### Linux
  Download:
