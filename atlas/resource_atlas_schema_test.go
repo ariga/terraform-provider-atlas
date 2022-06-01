@@ -172,7 +172,7 @@ func TestAccInvalidSchemaReturnsError(t *testing.T) {
 			},
 			{
 				Config:             testAccInvalidSchema,
-				ExpectError:        regexp.MustCompile("schemahcl: failed decoding"),
+				ExpectError:        regexp.MustCompile("Invalid multi-line"),
 				Destroy:            false,
 				ExpectNonEmptyPlan: true,
 				Check: func(s *terraform.State) error {
