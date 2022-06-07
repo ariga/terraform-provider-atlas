@@ -15,6 +15,7 @@ Contrary to existing tools, Atlas intelligently plans schema migrations for you,
 * PostgresSQL
 * SQLite
 * TiDB
+* CockroachDB
 
 ### Docs
 * [Provider Docs](https://registry.terraform.io/providers/ariga/atlas/latest/docs)
