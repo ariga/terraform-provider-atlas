@@ -1,11 +1,12 @@
 package atlas
 
 import (
-	atlaschema "ariga.io/atlas/sql/schema"
-	"ariga.io/atlas/sql/sqlclient"
 	"context"
 	"fmt"
 	"strings"
+
+	atlaschema "ariga.io/atlas/sql/schema"
+	"ariga.io/atlas/sql/sqlclient"
 
 	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -43,7 +44,7 @@ func newSchemaResource() *schema.Resource {
 	}
 }
 
-func customizeDiff(ctx context.Context, diff *schema.ResourceDiff, i interface{}) error {
+func customizeDiff(ctx context.Context, diff *schema.ResourceDiff, _ interface{}) error {
 	oldV, newV := diff.GetChange("hcl")
 	if oldV == nil {
 		return nil
@@ -86,6 +87,14 @@ func customizeDiff(ctx context.Context, diff *schema.ResourceDiff, i interface{}
 					causes = append(causes, fmt.Sprintf("DROP COLUMN %q.%q", c.T.Name, d.C.Name))
 				}
 			}
+		case *atlaschema.DropIndex:
+			causes = append(causes, fmt.Sprintf("DROP INDEX %q", c.I.Name))
+		case *atlaschema.DropForeignKey:
+			causes = append(causes, fmt.Sprintf("DROP FOREIGN KEY %v", c.F.Columns))
+		case *atlaschema.DropAttr:
+			causes = append(causes, fmt.Sprintf("DROP ATTRIBUTE %T", c.A))
+		case *atlaschema.DropCheck:
+			causes = append(causes, fmt.Sprintf("DROP CHECK CONSTRAINT %q", c.C.Name))
 		}
 	}
 	if len(causes) > 0 {
