@@ -92,7 +92,8 @@ func customizeDiff(ctx context.Context, diff *schema.ResourceDiff, i interface{}
 		return fmt.Errorf(`The database contains resources that Atlas wants to drop because they are not defined in the HCL file on the first run.
 - %s
 
-To learn how to add an existing database to a project, read: https://atlasgo.io/terraform-provider#working-with-an-existing-database`, strings.Join(causes, "\n- "))
+To learn how to add an existing database to a project, read:
+https://atlasgo.io/terraform-provider#working-with-an-existing-database`, strings.Join(causes, "\n- "))
 	}
 	return nil
 }
