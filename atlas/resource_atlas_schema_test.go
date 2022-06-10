@@ -18,16 +18,17 @@ const (
 )
 
 func TestAccAtlasDatabase(t *testing.T) {
+	tempSchemas(t, "test")
 	var testAccActionConfigCreate = fmt.Sprintf(`
 data "atlas_schema" "market" {
   dev_db_url = "%s"
   src = <<-EOT
-	schema "test1" {
+	schema "test" {
 		charset = "utf8mb4"
 		collate = "utf8mb4_0900_ai_ci"
 	}
 	table "foo" {
-		schema = schema.test1
+		schema = schema.test
 		column "id" {
 			null           = false
 			type           = int
@@ -49,12 +50,12 @@ resource "atlas_schema" "testdb" {
 data "atlas_schema" "market" {
   dev_db_url = "%s"
   src = <<-EOT
-	schema "test1" {
+	schema "test" {
 		charset = "utf8mb4"
 		collate = "utf8mb4_0900_ai_ci"
 	}
 	table "foo" {
-		schema = schema.test1
+		schema = schema.test
 		column "id" {
 			null           = false
 			type           = int
@@ -113,15 +114,16 @@ resource "atlas_schema" "testdb" {
 }
 
 func TestAccInvalidSchemaReturnsError(t *testing.T) {
+	tempSchemas(t, "test")
 	testAccValidSchema := fmt.Sprintf(`
 	resource "atlas_schema" "testdb" {
 	  hcl = <<-EOT
-		schema "test2" {
+		schema "test" {
 			charset = "utf8mb4"
 			collate = "utf8mb4_0900_ai_ci"
 		}
 		table "foo" {
-			schema = schema.test2
+			schema = schema.test
 			column "id" {
 				null           = false
 				type           = int
@@ -139,12 +141,12 @@ func TestAccInvalidSchemaReturnsError(t *testing.T) {
 	testAccInvalidSchema := fmt.Sprintf(`
 	resource "atlas_schema" "testdb" {
 	  hcl = <<-EOT
-		schema "test2" {
+		schema "test" {
 			charset = "utf8mb4"
 			collate = "utf8mb4_0900_ai_ci"
 		}
 		table "orders {
-			schema = schema.test2
+			schema = schema.test
 			column "id" {
 				null           = false
 				type           = int
@@ -198,53 +200,91 @@ func TestAccInvalidSchemaReturnsError(t *testing.T) {
 	})
 }
 
+func TestEnsureSyncOnFirstRun(t *testing.T) {
+	tempSchemas(t, "test1", "test2")
+	hcl := fmt.Sprintf(`
+	resource "atlas_schema" "new_schema" {
+	  hcl = <<-EOT
+		schema "test1" {
+			charset = "utf8mb4"
+			collate = "utf8mb4_0900_ai_ci"
+		}
+		EOT
+	  url = "%s"
+	}
+	`, mysqlURL)
+
+	resource.Test(t, resource.TestCase{
+		Providers: map[string]*schema.Provider{
+			"atlas": Provider(),
+		},
+		IsUnitTest: true,
+		Steps: []resource.TestStep{
+			{
+				Config:      hcl,
+				ExpectError: regexp.MustCompile("Error: The database contains resources that Atlas wants to drop because they are not defined in the HCL file on the first run."),
+			},
+		},
+	})
+}
+
 func TestAccRemoveColumns(t *testing.T) {
-	const createTableStmt = `create table type_table
+	tempSchemas(t, "test")
+	const createTableStmt = `create table test.type_table
 (
-  tBit           bit(10)           default 4          null,
-  tInt           int(10)           default 4      not null,
-  tTinyInt       tinyint(10)       default 8          null
+  tBit           bit(10)                 not null,
+  tInt           int(10)                 not null,
+  tTinyInt       tinyint(10)             not null
 ) CHARSET = utf8mb4 COLLATE utf8mb4_0900_ai_ci;`
 
-	var testAccSanity = fmt.Sprintf(`
+	var (
+		steps = []string{
+			`table "type_table" {
+  schema = schema.test
+  column "tBit" {
+    null = false
+    type = bit
+  }
+  column "tInt" {
+    null = false
+    type = int
+  }
+  column "tTinyInt" {
+    null = false
+    type = tinyint
+  }
+}
+schema "test" {
+  charset = "utf8mb4"
+  collate = "utf8mb4_0900_ai_ci"
+}
+`,
+			`table "type_table" {
+  schema = schema.test
+  column "tInt" {
+    null = false
+    type = int
+  }
+}
+schema "test" {
+  charset = "utf8mb4"
+  collate = "utf8mb4_0900_ai_ci"
+}
+`,
+		}
+		testAccSanityT = `
 data "atlas_schema" "sanity" {
   dev_db_url = "%s"
   src = <<-EOT
-	table "type_table" {
-		schema  = schema.test3
-		charset = "utf8mb4"
-		collate = "utf8mb4_0900_ai_ci"
-		column "tInt" {
-			null    = false
-			type    = int
-			default = 4
-		}
-	}
-	schema "test3" {
-		charset = "utf8mb4"
-		collate = "utf8mb4_0900_ai_ci"
-	}
+	%s
 	EOT
 }
 resource "atlas_schema" "testdb" {
   hcl = data.atlas_schema.sanity.hcl
   url = "%s"
 }
-`, mysqlDevURL, mysqlURL)
-
-	const sanityState = `table "type_table" {
-  schema = schema.test3
-  column "tInt" {
-    null    = false
-    type    = int
-    default = 4
-  }
-}
-schema "test3" {
-  charset = "utf8mb4"
-  collate = "utf8mb4_0900_ai_ci"
-}
 `
+	)
 	resource.Test(t, resource.TestCase{
 		Providers: map[string]*schema.Provider{
 			"atlas": Provider(),
@@ -257,23 +297,22 @@ schema "test3" {
 						t.Error(err)
 					}
 					defer cli.Close()
-					_, err = cli.DB.Exec("CREATE DATABASE IF NOT EXISTS test3;")
-					if err != nil {
-						t.Error(err)
-					}
-					_, err = cli.DB.Exec("USE test3;")
-					if err != nil {
-						t.Error(err)
-					}
 					_, err = cli.DB.Exec(createTableStmt)
 					if err != nil {
 						t.Error(err)
 					}
 				},
-				Config: testAccSanity,
+				Config: fmt.Sprintf(testAccSanityT, mysqlDevURL, steps[0], mysqlURL),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysqlURL),
-					resource.TestCheckResourceAttr("atlas_schema.testdb", "hcl", sanityState),
+					resource.TestCheckResourceAttr("atlas_schema.testdb", "hcl", steps[0]),
+				),
+			},
+			{
+				Config: fmt.Sprintf(testAccSanityT, mysqlDevURL, steps[1], mysqlURL),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysqlURL),
+					resource.TestCheckResourceAttr("atlas_schema.testdb", "hcl", steps[1]),
 				),
 			},
 		},
@@ -281,6 +320,7 @@ schema "test3" {
 }
 
 func TestAccDestroySchemas(t *testing.T) {
+	tempSchemas(t, "test4", "do-not-delete")
 	// Create schemas "test4" and "do-not-delete".
 	preExistingSchema := fmt.Sprintf(`resource "atlas_schema" "testdb" {
 		hcl = <<-EOT
@@ -342,6 +382,7 @@ func TestAccDestroySchemas(t *testing.T) {
 }
 
 func TestAccMultipleSchemas(t *testing.T) {
+	tempSchemas(t, "m_test1", "m_test2", "m_test3", "m_test4", "m_test5")
 	mulSchema := fmt.Sprintf(`resource "atlas_schema" "testdb" {
 		hcl = <<-EOT
 		schema "m_test1" {}
@@ -398,5 +439,34 @@ func TestAccMultipleSchemas(t *testing.T) {
 			}
 			return nil
 		},
+	})
+}
+
+func tempSchemas(t *testing.T, schemas ...string) {
+	c, err := sqlclient.Open(context.Background(), mysqlURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range schemas {
+		_, err := c.ExecContext(context.Background(), fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", s))
+		if err != nil {
+			t.Errorf("failed creating schema: %s", err)
+		}
+	}
+	drop(t, c, schemas...)
+}
+
+func drop(t *testing.T, c *sqlclient.Client, schemas ...string) {
+	t.Cleanup(func() {
+		t.Log("Dropping all schemas")
+		for _, s := range schemas {
+			_, err := c.ExecContext(context.Background(), fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", s))
+			if err != nil {
+				t.Errorf("failed dropping schema: %s", err)
+			}
+		}
+		if err := c.Close(); err != nil {
+			t.Errorf("failed closing client: %s", err)
+		}
 	})
 }
