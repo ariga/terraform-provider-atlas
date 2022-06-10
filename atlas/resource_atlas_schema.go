@@ -83,18 +83,19 @@ func customizeDiff(ctx context.Context, diff *schema.ResourceDiff, _ interface{}
 			causes = append(causes, fmt.Sprintf("DROP TABLE %q", c.T.Name))
 		case *atlaschema.ModifyTable:
 			for _, c1 := range c.Changes {
-				if d, ok := c1.(*atlaschema.DropColumn); ok {
-					causes = append(causes, fmt.Sprintf("DROP COLUMN %q.%q", c.T.Name, d.C.Name))
+				switch t := c1.(type) {
+				case *atlaschema.DropColumn:
+					causes = append(causes, fmt.Sprintf("DROP COLUMN %q.%q", c.T.Name, t.C.Name))
+				case *atlaschema.DropIndex:
+					causes = append(causes, fmt.Sprintf("DROP INDEX %q.%q", c.T.Name, t.I.Name))
+				case *atlaschema.DropForeignKey:
+					causes = append(causes, fmt.Sprintf("DROP FOREIGN KEY %q.%q", c.T.Name, t.F.Symbol))
+				case *atlaschema.DropAttr:
+					causes = append(causes, fmt.Sprintf("DROP ATTRIBUTE %q.%T", c.T.Name, t.A))
+				case *atlaschema.DropCheck:
+					causes = append(causes, fmt.Sprintf("DROP CHECK CONSTRAINT %q.%q", c.T.Name, t.C.Name))
 				}
 			}
-		case *atlaschema.DropIndex:
-			causes = append(causes, fmt.Sprintf("DROP INDEX %q", c.I.Name))
-		case *atlaschema.DropForeignKey:
-			causes = append(causes, fmt.Sprintf("DROP FOREIGN KEY %v", c.F.Columns))
-		case *atlaschema.DropAttr:
-			causes = append(causes, fmt.Sprintf("DROP ATTRIBUTE %T", c.A))
-		case *atlaschema.DropCheck:
-			causes = append(causes, fmt.Sprintf("DROP CHECK CONSTRAINT %q", c.C.Name))
 		}
 	}
 	if len(causes) > 0 {
