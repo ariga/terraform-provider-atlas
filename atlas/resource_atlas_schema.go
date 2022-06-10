@@ -1,10 +1,11 @@
 package atlas
 
 import (
-	"context"
-
 	atlaschema "ariga.io/atlas/sql/schema"
 	"ariga.io/atlas/sql/sqlclient"
+	"context"
+	"fmt"
+	"strings"
 
 	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -19,6 +20,7 @@ func newSchemaResource() *schema.Resource {
 		UpdateContext: applySchema,
 		ReadContext:   readSchema,
 		DeleteContext: deleteSchema,
+		CustomizeDiff: customizeDiff,
 		Schema: map[string]*schema.Schema{
 			"hcl": {
 				Type:        schema.TypeString,
@@ -39,6 +41,61 @@ func newSchemaResource() *schema.Resource {
 			},
 		},
 	}
+}
+
+func customizeDiff(ctx context.Context, diff *schema.ResourceDiff, i interface{}) error {
+	oldV, newV := diff.GetChange("hcl")
+	if oldV == nil {
+		return nil
+	}
+	s, ok := oldV.(string)
+	if !ok || s != "" {
+		return nil
+	}
+	url := diff.Get("url").(string)
+	cli, err := sqlclient.Open(ctx, url)
+	if err != nil {
+		return err
+	}
+	var schemas []string
+	if cli.URL.Schema != "" {
+		schemas = append(schemas, cli.URL.Schema)
+	}
+	current, err := cli.InspectRealm(ctx, &atlaschema.InspectRealmOption{Schemas: schemas})
+	if err != nil {
+		return err
+	}
+	desired := &atlaschema.Realm{}
+	if err = cli.Evaluator.Eval([]byte(newV.(string)), desired, nil); err != nil {
+		return err
+	}
+	changes, err := cli.RealmDiff(current, desired)
+	if err != nil {
+		return err
+	}
+	var causes []string
+	for _, c := range changes {
+		switch c := c.(type) {
+		case *atlaschema.DropSchema:
+			causes = append(causes, fmt.Sprintf("DROP SCHEMA %q", c.S.Name))
+		case *atlaschema.DropTable:
+			causes = append(causes, fmt.Sprintf("DROP TABLE %q", c.T.Name))
+		case *atlaschema.ModifyTable:
+			for _, c1 := range c.Changes {
+				if d, ok := c1.(*atlaschema.DropColumn); ok {
+					causes = append(causes, fmt.Sprintf("DROP COLUMN %q.%q", c.T.Name, d.C.Name))
+				}
+			}
+		}
+	}
+	if len(causes) > 0 {
+		return fmt.Errorf(`The database contains resources that Atlas wants to drop because they are not defined in the HCL file on the first run.
+- %s
+
+To learn how to add an existing database to a project, read:
+https://atlasgo.io/terraform-provider#working-with-an-existing-database`, strings.Join(causes, "\n- "))
+	}
+	return nil
 }
 
 func deleteSchema(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
