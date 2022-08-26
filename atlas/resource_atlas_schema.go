@@ -54,6 +54,10 @@ func customizeDiff(ctx context.Context, diff *schema.ResourceDiff, _ interface{}
 		return nil
 	}
 	url := diff.Get("url").(string)
+	if url == "" {
+		diff.ForceNew("url")
+		return nil
+	}
 	cli, err := sqlclient.Open(ctx, url)
 	if err != nil {
 		return err
