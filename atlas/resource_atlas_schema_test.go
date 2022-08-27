@@ -243,7 +243,7 @@ func TestAccRemoveColumns(t *testing.T) {
   schema = schema.test
   column "tBit" {
     null = false
-    type = bit
+    type = bit(10)
   }
   column "tInt" {
     null = false
