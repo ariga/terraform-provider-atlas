@@ -7,8 +7,8 @@ import (
 
 	atlaschema "ariga.io/atlas/sql/schema"
 	"ariga.io/atlas/sql/sqlclient"
-
 	"github.com/hashicorp/go-cty/cty"
+	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
@@ -70,8 +70,12 @@ func customizeDiff(ctx context.Context, diff *schema.ResourceDiff, _ interface{}
 	if err != nil {
 		return err
 	}
+	p := hclparse.NewParser()
+	if _, err := p.ParseHCL([]byte(newV.(string)), ""); err != nil {
+		return err
+	}
 	desired := &atlaschema.Realm{}
-	if err = cli.Evaluator.Eval([]byte(newV.(string)), desired, nil); err != nil {
+	if err = cli.Evaluator.Eval(p, desired, nil); err != nil {
 		return err
 	}
 	changes, err := cli.RealmDiff(current, desired)
@@ -182,8 +186,12 @@ func applySchema(ctx context.Context, d *schema.ResourceData, m interface{}) dia
 	if err != nil {
 		return diag.FromErr(err)
 	}
+	p := hclparse.NewParser()
+	if _, err := p.ParseHCL([]byte(hcl), ""); err != nil {
+		return diag.FromErr(err)
+	}
 	desired := &atlaschema.Realm{}
-	if err = cli.Evaluator.Eval([]byte(hcl), desired, nil); err != nil {
+	if err = cli.Evaluator.Eval(p, desired, nil); err != nil {
 		return diag.FromErr(err)
 	}
 	if devURL, ok := d.GetOk("dev_db_url"); ok {

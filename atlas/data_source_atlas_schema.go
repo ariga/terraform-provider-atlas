@@ -7,6 +7,7 @@ import (
 
 	atlaschema "ariga.io/atlas/sql/schema"
 	"ariga.io/atlas/sql/sqlclient"
+	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
@@ -45,8 +46,12 @@ func normalize(ctx context.Context, d *schema.ResourceData, m interface{}) diag.
 	if err != nil {
 		return diag.FromErr(err)
 	}
+	p := hclparse.NewParser()
+	if _, err := p.ParseHCL([]byte(hcl), "src"); err != nil {
+		return diag.FromErr(err)
+	}
 	realm := &atlaschema.Realm{}
-	if err = cli.Eval([]byte(hcl), realm, nil); err != nil {
+	if err = cli.Eval(p, realm, nil); err != nil {
 		return diag.FromErr(err)
 	}
 	realm, err = cli.Driver.(atlaschema.Normalizer).NormalizeRealm(ctx, realm)
