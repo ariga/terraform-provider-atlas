@@ -13,7 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 type (
@@ -92,10 +91,6 @@ func (r *AtlasSchemaResource) Create(ctx context.Context, req resource.CreateReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	// Write logs using the tflog package
-	// Documentation: https://terraform.io/plugin/log
-	tflog.Trace(ctx, "created a resource")
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -229,7 +224,7 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	resp.Diagnostics.Append(r.firstRunCheck(ctx, plan.URL.Value, plan.HCL.Value)...)
+	resp.Diagnostics.Append(r.firstRunCheck(ctx, plan)...)
 }
 
 func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
@@ -295,7 +290,11 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 	return diags
 }
 
-func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, url, hcl string) (diags diag.Diagnostics) {
+func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+	var (
+		hcl = data.HCL.Value
+		url = data.URL.Value
+	)
 	cli, err := sqlclient.Open(ctx, url)
 	if err != nil {
 		diags.AddError("Client Error", fmt.Sprintf("Unable to open connection, got error: %s", err))
