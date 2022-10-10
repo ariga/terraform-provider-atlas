@@ -64,7 +64,7 @@ func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, di
 				Computed:    true,
 			},
 			"id": {
-				Description: "Example identifier",
+				Description: "The ID of this resource",
 				Type:        types.StringType,
 				Computed:    true,
 			},

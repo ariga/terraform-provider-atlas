@@ -49,14 +49,6 @@ func (r *AtlasSchemaResource) GetSchema(ctx context.Context) (tfsdk.Schema, diag
 			"using an HCL file describing the wanted state of the database. " +
 			"See https://atlasgo.io/",
 		Attributes: map[string]tfsdk.Attribute{
-			"id": {
-				Description: "identifier",
-				Computed:    true,
-				PlanModifiers: tfsdk.AttributePlanModifiers{
-					resource.UseStateForUnknown(),
-				},
-				Type: types.StringType,
-			},
 			"hcl": {
 				Description: "The schema definition for the database " +
 					"(preferably normalized - see `atlas_schema` data source)",
@@ -74,6 +66,14 @@ func (r *AtlasSchemaResource) GetSchema(ctx context.Context) (tfsdk.Schema, diag
 				Type:        types.StringType,
 				Optional:    true,
 				Sensitive:   true,
+			},
+			"id": {
+				Description: "The ID of this resource",
+				Computed:    true,
+				PlanModifiers: tfsdk.AttributePlanModifiers{
+					resource.UseStateForUnknown(),
+				},
+				Type: types.StringType,
 			},
 		},
 	}, nil

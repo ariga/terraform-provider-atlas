@@ -32,6 +32,6 @@ data "atlas_schema" "norm" {
 ### Read-Only
 
 - `hcl` (String) The normalized form of the HCL
-- `id` (String) Example identifier
+- `id` (String) The ID of this resource
 
 
