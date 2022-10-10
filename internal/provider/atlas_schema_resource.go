@@ -92,6 +92,7 @@ func (r *AtlasSchemaResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
+	data.ID = types.String{Value: data.URL.Value}
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -278,15 +279,6 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 		diags.AddError("Apply Error", fmt.Sprintf("Unable to apply changes, got error: %s", err))
 		return
 	}
-	if data.ID.IsUnknown() {
-		data.ID = types.String{Value: url}
-	}
-	// desiredHCL, err := cli.MarshalSpec(desired)
-	// if err != nil {
-	// 	diags.AddError("Marshal Error", fmt.Sprintf("Unable to marshal, got error: %s", err))
-	// 	return
-	// }
-	// data.HCL = types.String{Value: string(desiredHCL)}
 	return diags
 }
 
