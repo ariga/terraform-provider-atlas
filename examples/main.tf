@@ -46,13 +46,13 @@ resource "docker_container" "prod" {
 }
 
 data "atlas_schema" "market" {
-  depends_on = [ docker_container.dev ]
+  depends_on = [docker_container.dev]
   dev_db_url = "mysql://root:pass@localhost:3307/market"
-  src = file("${path.module}/schema.hcl")
+  src        = file("${path.module}/schema.hcl")
 }
 
 resource "atlas_schema" "market" {
-  depends_on = [ docker_container.prod ]
-  hcl = data.atlas_schema.market.hcl
-  url = "mysql://root:pass@localhost:3306/market"
+  depends_on = [docker_container.prod]
+  hcl        = data.atlas_schema.market.hcl
+  url        = "mysql://root:pass@localhost:3306/market"
 }

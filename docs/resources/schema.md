@@ -3,27 +3,24 @@
 page_title: "atlas_schema Resource - terraform-provider-atlas"
 subcategory: ""
 description: |-
-  Atlas database resource manages the data schema of the database, using an HCL file describing the wanted state of the database. see https://atlasgo.io/
+  Atlas database resource manages the data schema of the database, using an HCL file describing the wanted state of the database. See https://atlasgo.io/
 ---
-<!-- source: https://github.dev/hashicorp/terraform-plugin-docs/blob/main/internal/provider/template.go -->
-<!-- Bug: Type and Name are switched -->
-# Resource (atlas_schema)
 
-Atlas database resource manages the data schema of the database, using an HCL file describing the wanted state of the database. see https://atlasgo.io/
+# atlas_schema (Resource)
+
+Atlas database resource manages the data schema of the database, using an HCL file describing the wanted state of the database. See https://atlasgo.io/
 
 ## Example Usage
-
-### Basic
 
 ```terraform
 data "atlas_schema" "market" {
   dev_db_url = "mysql://root:pass@localhost:3307/test"
-  src = file("${path.module}/schema.hcl")
+  src        = file("${path.module}/schema.hcl")
 }
 
 resource "atlas_schema" "market" {
   hcl = data.atlas_schema.market.hcl
-  url = "mysql://root:pass@localhost:3306/test"  
+  url = "mysql://root:pass@localhost:3306/test"
 }
 ```
 
@@ -38,5 +35,9 @@ resource "atlas_schema" "market" {
 ### Optional
 
 - `dev_db_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
-- `id` (String) The ID of this resource.
+
+### Read-Only
+
+- `id` (String) identifier
+
 
