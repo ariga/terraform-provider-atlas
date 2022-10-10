@@ -17,15 +17,13 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           args: --verbose
-      - name: Setup tools
-        run: make setup
       - name: generate docs
-        run: make gen-docs
+        run: go generate
       - name: Check generated files
         run: |
           status=$(git status --porcelain)
           if [ -n "$status" ]; then
-            echo "you need to run 'make gen-docs' and commit the changes"
+            echo "you need to run 'go generate' and commit the changes"
             echo "$status"
             exit 1
           fi
