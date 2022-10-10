@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"ariga.io/atlas/sql/schema"
 	"ariga.io/atlas/sql/sqlclient"
@@ -212,6 +213,23 @@ func (r AtlasSchemaResource) ValidateConfig(ctx context.Context, req resource.Va
 }
 
 func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	var state *AtlasSchemaResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if state != nil && state.HCL.Value != "" {
+		// This isn't a new resource, so we don't need to do anything
+		return
+	}
+
+	var plan *AtlasSchemaResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(r.firstRunCheck(ctx, plan.URL.Value, plan.HCL.Value)...)
 }
 
 func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
@@ -275,4 +293,70 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 	// }
 	// data.HCL = types.String{Value: string(desiredHCL)}
 	return diags
+}
+
+func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, url, hcl string) (diags diag.Diagnostics) {
+	cli, err := sqlclient.Open(ctx, url)
+	if err != nil {
+		diags.AddError("Client Error", fmt.Sprintf("Unable to open connection, got error: %s", err))
+		return
+	}
+	var schemas []string
+	if cli.URL.Schema != "" {
+		schemas = append(schemas, cli.URL.Schema)
+	}
+	current, err := cli.InspectRealm(ctx, &schema.InspectRealmOption{Schemas: schemas})
+	if err != nil {
+		diags.AddError("Inspect Error", fmt.Sprintf("Unable to inspect realm, got error: %s", err))
+		return
+	}
+	p := hclparse.NewParser()
+	if _, err := p.ParseHCL([]byte(hcl), ""); err != nil {
+		diags.AddError("Parse HCL Error", fmt.Sprintf("Unable to parse HCL, got error: %s", err))
+		return
+	}
+	desired := &schema.Realm{}
+	if err = cli.Evaluator.Eval(p, desired, nil); err != nil {
+		diags.AddError("Eval HCL Error", fmt.Sprintf("Unable to eval HCL, got error: %s", err))
+		return
+	}
+	changes, err := cli.RealmDiff(current, desired)
+	if err != nil {
+		diags.AddError("Diff Error", fmt.Sprintf("Unable to diff changes, got error: %s", err))
+		return
+	}
+	var causes []string
+	for _, c := range changes {
+		switch c := c.(type) {
+		case *schema.DropSchema:
+			causes = append(causes, fmt.Sprintf("DROP SCHEMA %q", c.S.Name))
+		case *schema.DropTable:
+			causes = append(causes, fmt.Sprintf("DROP TABLE %q", c.T.Name))
+		case *schema.ModifyTable:
+			for _, c1 := range c.Changes {
+				switch t := c1.(type) {
+				case *schema.DropColumn:
+					causes = append(causes, fmt.Sprintf("DROP COLUMN %q.%q", c.T.Name, t.C.Name))
+				case *schema.DropIndex:
+					causes = append(causes, fmt.Sprintf("DROP INDEX %q.%q", c.T.Name, t.I.Name))
+				case *schema.DropForeignKey:
+					causes = append(causes, fmt.Sprintf("DROP FOREIGN KEY %q.%q", c.T.Name, t.F.Symbol))
+				case *schema.DropAttr:
+					causes = append(causes, fmt.Sprintf("DROP ATTRIBUTE %q.%T", c.T.Name, t.A))
+				case *schema.DropCheck:
+					causes = append(causes, fmt.Sprintf("DROP CHECK CONSTRAINT %q.%q", c.T.Name, t.C.Name))
+				}
+			}
+		}
+	}
+	if len(causes) > 0 {
+		diags.AddError(
+			"Unrecognized schema resources",
+			fmt.Sprintf(`The database contains resources that Atlas wants to drop because they are not defined in the HCL file on the first run.
+- %s
+To learn how to add an existing database to a project, read:
+https://atlasgo.io/terraform-provider#working-with-an-existing-database`, strings.Join(causes, "\n- ")))
+	}
+
+	return
 }

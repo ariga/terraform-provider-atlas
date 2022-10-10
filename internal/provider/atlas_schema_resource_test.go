@@ -218,7 +218,7 @@ func TestEnsureSyncOnFirstRun(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config:      hcl,
-				ExpectError: regexp.MustCompile("Error: The database contains resources that Atlas wants to drop because they are not defined in the HCL file on the first run."),
+				ExpectError: regexp.MustCompile("Error: Unrecognized schema resources"),
 			},
 		},
 	})
