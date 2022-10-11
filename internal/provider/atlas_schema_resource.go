@@ -92,8 +92,9 @@ func (r *AtlasSchemaResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
+	// Only set ID when creating a new resource
 	data.ID = types.String{Value: data.URL.Value}
-	// Save data into Terraform state
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -165,29 +166,11 @@ func (r *AtlasSchemaResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
-	cli, err := sqlclient.Open(ctx, data.URL.Value)
-	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to open connection, got error: %s", err))
-		return
-	}
-	var schemas []string
-	if cli.URL.Schema != "" {
-		schemas = append(schemas, cli.URL.Schema)
-	}
-	realm, err := cli.InspectRealm(ctx, &schema.InspectRealmOption{
-		Schemas: schemas,
-	})
-	if err != nil {
-		resp.Diagnostics.AddError("Inspect Error", fmt.Sprintf("Unable to inspect realm, got error: %s", err))
-		return
-	}
-	changes, err := cli.RealmDiff(realm, &schema.Realm{})
-	if err != nil {
-		resp.Diagnostics.AddError("Diff Error", fmt.Sprintf("Unable to diff changes, got error: %s", err))
-		return
-	}
-	if err = cli.ApplyChanges(ctx, changes); err != nil {
-		resp.Diagnostics.AddError("Apply Error", fmt.Sprintf("Unable to apply changes, got error: %s", err))
+	// Delete the resource by setting
+	// the HCL to an empty string
+	data.HCL = types.String{Null: true}
+	resp.Diagnostics.Append(r.applySchema(ctx, data)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 }
@@ -229,53 +212,37 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 }
 
 func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	var (
-		hcl = data.HCL.Value
-		url = data.URL.Value
-	)
-	cli, err := sqlclient.Open(ctx, url)
-	if err != nil {
-		diags.AddError("Client Error", fmt.Sprintf("Unable to open connection, got error: %s", err))
-		return
-	}
-	var schemas []string
-	if cli.URL.Schema != "" {
-		schemas = append(schemas, cli.URL.Schema)
-	}
-	realm, err := cli.InspectRealm(ctx, &schema.InspectRealmOption{Schemas: schemas})
-	if err != nil {
-		diags.AddError("Inspect Error", fmt.Sprintf("Unable to inspect realm, got error: %s", err))
-		return
-	}
-	p := hclparse.NewParser()
-	if _, err := p.ParseHCL([]byte(hcl), ""); err != nil {
-		diags.AddError("Parse HCL Error", fmt.Sprintf("Unable to parse HCL, got error: %s", err))
-		return
-	}
-	desired := &schema.Realm{}
-	if err = cli.Evaluator.Eval(p, desired, nil); err != nil {
-		diags.AddError("Eval HCL Error", fmt.Sprintf("Unable to eval HCL, got error: %s", err))
-		return
-	}
-	if data.DevURL.Value != "" {
-		dev, err := sqlclient.Open(ctx, data.DevURL.Value)
-		if err != nil {
-			diags.AddError("Client Error", fmt.Sprintf("Unable to open connection, got error: %s", err))
+	createDesired := func(ctx context.Context, cli *sqlclient.Client) (desired *schema.Realm, err error) {
+		desired = &schema.Realm{}
+		if data.HCL.Value == "" {
 			return
 		}
-		defer dev.Close()
-		desired, err = dev.Driver.(schema.Normalizer).NormalizeRealm(ctx, desired)
-		if err != nil {
-			diags.AddError("Normalize Error", fmt.Sprintf("Unable to normalize, got error: %s", err))
+		p := hclparse.NewParser()
+		if _, err := p.ParseHCL([]byte(data.HCL.Value), ""); err != nil {
+			return nil, err
+		}
+		if err = cli.Evaluator.Eval(p, desired, nil); err != nil {
 			return
 		}
-	}
-	changes, err := cli.RealmDiff(realm, desired)
-	if err != nil {
-		diags.AddError("Diff Error", fmt.Sprintf("Unable to diff changes, got error: %s", err))
+		if data.DevURL.Value != "" {
+			dev, err := sqlclient.Open(ctx, data.DevURL.Value)
+			if err != nil {
+				return nil, err
+			}
+			defer dev.Close()
+			desired, err = dev.Driver.(schema.Normalizer).NormalizeRealm(ctx, desired)
+			if err != nil {
+				return nil, err
+			}
+		}
 		return
 	}
-	if err = cli.ApplyChanges(ctx, changes); err != nil {
+	changes, cli, diags := atlasChanges(ctx, data.URL.Value, createDesired)
+	if diags.HasError() {
+		return
+	}
+	defer cli.Close()
+	if err := cli.ApplyChanges(ctx, changes); err != nil {
 		diags.AddError("Apply Error", fmt.Sprintf("Unable to apply changes, got error: %s", err))
 		return
 	}
@@ -283,39 +250,23 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 }
 
 func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	var (
-		hcl = data.HCL.Value
-		url = data.URL.Value
-	)
-	cli, err := sqlclient.Open(ctx, url)
-	if err != nil {
-		diags.AddError("Client Error", fmt.Sprintf("Unable to open connection, got error: %s", err))
+	createDesired := func(ctx context.Context, cli *sqlclient.Client) (desired *schema.Realm, err error) {
+		desired = &schema.Realm{}
+		p := hclparse.NewParser()
+		if _, err := p.ParseHCL([]byte(data.HCL.Value), ""); err != nil {
+			return nil, err
+		}
+		if err = cli.Evaluator.Eval(p, desired, nil); err != nil {
+			return
+		}
 		return
 	}
-	var schemas []string
-	if cli.URL.Schema != "" {
-		schemas = append(schemas, cli.URL.Schema)
-	}
-	current, err := cli.InspectRealm(ctx, &schema.InspectRealmOption{Schemas: schemas})
-	if err != nil {
-		diags.AddError("Inspect Error", fmt.Sprintf("Unable to inspect realm, got error: %s", err))
+	changes, cli, diags := atlasChanges(ctx, data.URL.Value, createDesired)
+	if diags.HasError() {
 		return
 	}
-	p := hclparse.NewParser()
-	if _, err := p.ParseHCL([]byte(hcl), ""); err != nil {
-		diags.AddError("Parse HCL Error", fmt.Sprintf("Unable to parse HCL, got error: %s", err))
-		return
-	}
-	desired := &schema.Realm{}
-	if err = cli.Evaluator.Eval(p, desired, nil); err != nil {
-		diags.AddError("Eval HCL Error", fmt.Sprintf("Unable to eval HCL, got error: %s", err))
-		return
-	}
-	changes, err := cli.RealmDiff(current, desired)
-	if err != nil {
-		diags.AddError("Diff Error", fmt.Sprintf("Unable to diff changes, got error: %s", err))
-		return
-	}
+	defer cli.Close()
+
 	var causes []string
 	for _, c := range changes {
 		switch c := c.(type) {
@@ -349,5 +300,48 @@ To learn how to add an existing database to a project, read:
 https://atlasgo.io/terraform-provider#working-with-an-existing-database`, strings.Join(causes, "\n- ")))
 	}
 
+	return
+}
+
+func atlasChanges(ctx context.Context, url string, createDesired func(ctx context.Context, cli *sqlclient.Client) (*schema.Realm, error)) (changes []schema.Change, cli *sqlclient.Client, diags diag.Diagnostics) {
+	cli, err := sqlclient.Open(ctx, url)
+	if err != nil {
+		diags.AddError(
+			"Client Connection Error",
+			fmt.Sprintf("Unable to open connection, got error: %s", err),
+		)
+		return
+	}
+	var schemas []string
+	if cli.URL.Schema != "" {
+		schemas = append(schemas, cli.URL.Schema)
+	}
+	current, err := cli.InspectRealm(ctx, &schema.InspectRealmOption{Schemas: schemas})
+	if err != nil {
+		diags.AddError(
+			"Inspect Error",
+			fmt.Sprintf("Unable to inspect realm, got error: %s", err),
+		)
+		cli.Close()
+		return
+	}
+	desired, err := createDesired(ctx, cli)
+	if err != nil {
+		diags.AddError(
+			"Create Desired Realm Error",
+			fmt.Sprintf("Unable to create desired realm, got error: %s", err),
+		)
+		cli.Close()
+		return
+	}
+	changes, err = cli.RealmDiff(current, desired)
+	if err != nil {
+		diags.AddError(
+			"Diff Error",
+			fmt.Sprintf("Unable to diff changes, got error: %s", err),
+		)
+		cli.Close()
+		return
+	}
 	return
 }

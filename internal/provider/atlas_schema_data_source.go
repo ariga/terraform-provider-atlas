@@ -91,12 +91,12 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 	p := hclparse.NewParser()
-	if _, err := p.ParseHCL([]byte(src), "src"); err != nil {
+	if _, err := p.ParseHCL([]byte(src), ""); err != nil {
 		resp.Diagnostics.AddError("Parse HCL Error", fmt.Sprintf("Unable to parse HCL, got error: %s", err))
 		return
 	}
 	realm := &schema.Realm{}
-	if err = cli.Eval(p, realm, nil); err != nil {
+	if err = cli.Evaluator.Eval(p, realm, nil); err != nil {
 		resp.Diagnostics.AddError("Eval HCL Error", fmt.Sprintf("Unable to eval HCL, got error: %s", err))
 		return
 	}
