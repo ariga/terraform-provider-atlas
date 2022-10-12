@@ -35,6 +35,7 @@ var (
 	_ provider.ProviderWithMetadata = &AtlasProvider{}
 )
 
+// New returns a new provider.
 func New(version string) func() provider.Provider {
 	return func() provider.Provider {
 		return &AtlasProvider{
@@ -43,11 +44,13 @@ func New(version string) func() provider.Provider {
 	}
 }
 
+// Metadata implements provider.ProviderWithMetadata.
 func (p *AtlasProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
 	resp.TypeName = "atlas"
 	resp.Version = p.version
 }
 
+// GetSchema implements provider.Provider.
 func (p *AtlasProvider) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
 		Description: "The Atlas provider is used to manage your database migrations, using the DDL of Atlas.\n" +
@@ -56,22 +59,20 @@ func (p *AtlasProvider) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagn
 	}, nil
 }
 
+// Configure implements provider.Provider.
 func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	var data AtlasProviderModel
-	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
 }
 
-func (p *AtlasProvider) Resources(ctx context.Context) []func() resource.Resource {
-	return []func() resource.Resource{
-		NewAtlasSchemaResource,
-	}
-}
-
+// DataSources implements provider.Provider.
 func (p *AtlasProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewAtlasSchemaDataSource,
+	}
+}
+
+// Resources implements provider.Provider.
+func (p *AtlasProvider) Resources(ctx context.Context) []func() resource.Resource {
+	return []func() resource.Resource{
+		NewAtlasSchemaResource,
 	}
 }

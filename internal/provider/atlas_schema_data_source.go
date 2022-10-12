@@ -32,14 +32,17 @@ var (
 	_ datasource.DataSource = &AtlasSchemaDataSource{}
 )
 
+// NewAtlasSchemaDataSource returns a new AtlasSchemaDataSource.
 func NewAtlasSchemaDataSource() datasource.DataSource {
 	return &AtlasSchemaDataSource{}
 }
 
+// Metadata implements datasource.DataSource.
 func (d *AtlasSchemaDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_schema"
 }
 
+// GetSchema implements datasource.DataSource.
 func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
 		// This description is used by the documentation generator and the language server.
@@ -72,6 +75,7 @@ func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, di
 	}, nil
 }
 
+// Read implements datasource.DataSource.
 func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data AtlasSchemaDataSourceModel
 

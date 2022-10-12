@@ -34,14 +34,17 @@ var (
 	_ resource.ResourceWithValidateConfig = &AtlasSchemaResource{}
 )
 
+// NewAtlasSchemaResource returns a new AtlasSchemaResource.
 func NewAtlasSchemaResource() resource.Resource {
 	return &AtlasSchemaResource{}
 }
 
+// Metadata implements resource.Resource.
 func (r *AtlasSchemaResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_schema"
 }
 
+// GetSchema implements resource.Resource.
 func (r *AtlasSchemaResource) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
 		Description: "Atlas database resource manages the data schema of the database, " +
@@ -78,6 +81,7 @@ func (r *AtlasSchemaResource) GetSchema(ctx context.Context) (tfsdk.Schema, diag
 	}, nil
 }
 
+// Create implements resource.Resource.
 func (r *AtlasSchemaResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data *AtlasSchemaResourceModel
 
@@ -98,6 +102,7 @@ func (r *AtlasSchemaResource) Create(ctx context.Context, req resource.CreateReq
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
+// Read implements resource.Resource.
 func (r *AtlasSchemaResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var data *AtlasSchemaResourceModel
 
@@ -139,6 +144,7 @@ func (r *AtlasSchemaResource) Read(ctx context.Context, req resource.ReadRequest
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
+// Update implements resource.Resource.
 func (r *AtlasSchemaResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var data *AtlasSchemaResourceModel
 
@@ -157,6 +163,7 @@ func (r *AtlasSchemaResource) Update(ctx context.Context, req resource.UpdateReq
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
+// Delete implements resource.Resource.
 func (r *AtlasSchemaResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var data *AtlasSchemaResourceModel
 
@@ -175,6 +182,7 @@ func (r *AtlasSchemaResource) Delete(ctx context.Context, req resource.DeleteReq
 	}
 }
 
+// Validate implements resource.ResourceWithValidateConfig.
 func (r AtlasSchemaResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	var data AtlasSchemaResourceModel
 
@@ -191,6 +199,7 @@ func (r AtlasSchemaResource) ValidateConfig(ctx context.Context, req resource.Va
 	}
 }
 
+// ModifyPlan implements resource.ResourceWithModifyPlan.
 func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	var state *AtlasSchemaResourceModel
 
