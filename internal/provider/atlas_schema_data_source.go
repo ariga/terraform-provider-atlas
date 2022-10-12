@@ -23,7 +23,7 @@ type (
 		DevURL types.String `tfsdk:"dev_db_url"`
 		Src    types.String `tfsdk:"src"`
 		HCL    types.String `tfsdk:"hcl"`
-		Id     types.String `tfsdk:"id"`
+		ID     types.String `tfsdk:"id"`
 	}
 )
 
@@ -115,7 +115,7 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 
-	data.Id = types.String{Value: hclID(normalHCL)}
+	data.ID = types.String{Value: hclID(normalHCL)}
 	data.HCL = types.String{Value: string(normalHCL)}
 
 	// Save data into Terraform state
