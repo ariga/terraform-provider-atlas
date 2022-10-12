@@ -201,23 +201,22 @@ func (r AtlasSchemaResource) ValidateConfig(ctx context.Context, req resource.Va
 
 // ModifyPlan implements resource.ResourceWithModifyPlan.
 func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	var state *AtlasSchemaResourceModel
-
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	if state != nil && state.HCL.Value != "" {
-		// This isn't a new resource, so we don't need to do anything
-		return
-	}
-
 	var plan *AtlasSchemaResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	resp.Diagnostics.Append(r.firstRunCheck(ctx, plan)...)
+	var state *AtlasSchemaResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if state == nil || state.HCL.Value == "" {
+		// New terraform resource will be create,
+		// do the first run check to ensure the user doesn't
+		// drops schema resources by accident
+		resp.Diagnostics.Append(r.firstRunCheck(ctx, plan)...)
+	}
 }
 
 func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
