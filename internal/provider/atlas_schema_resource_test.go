@@ -1,4 +1,4 @@
-package atlas
+package provider_test
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 
 	"ariga.io/atlas/sql/sqlclient"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 )
 
@@ -77,9 +76,8 @@ resource "atlas_schema" "testdb" {
 }
 `, mysqlDevURL, mysqlURL)
 	resource.Test(t, resource.TestCase{
-		Providers: map[string]*schema.Provider{
-			"atlas": Provider(),
-		},
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
 				Config: testAccActionConfigCreate,
@@ -162,10 +160,9 @@ func TestAccInvalidSchemaReturnsError(t *testing.T) {
 	`, mysqlURL)
 
 	resource.Test(t, resource.TestCase{
-		Providers: map[string]*schema.Provider{
-			"atlas": Provider(),
-		},
-		IsUnitTest: true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		IsUnitTest:               true,
 		Steps: []resource.TestStep{
 			{
 				Config:             testAccValidSchema,
@@ -215,14 +212,13 @@ func TestEnsureSyncOnFirstRun(t *testing.T) {
 	`, mysqlURL)
 
 	resource.Test(t, resource.TestCase{
-		Providers: map[string]*schema.Provider{
-			"atlas": Provider(),
-		},
-		IsUnitTest: true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		IsUnitTest:               true,
 		Steps: []resource.TestStep{
 			{
 				Config:      hcl,
-				ExpectError: regexp.MustCompile("Error: The database contains resources that Atlas wants to drop because they are not defined in the HCL file on the first run."),
+				ExpectError: regexp.MustCompile("Error: Unrecognized schema resources"),
 			},
 		},
 	})
@@ -286,9 +282,8 @@ resource "atlas_schema" "testdb" {
 `
 	)
 	resource.Test(t, resource.TestCase{
-		Providers: map[string]*schema.Provider{
-			"atlas": Provider(),
-		},
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
 				PreConfig: func() {
@@ -345,9 +340,8 @@ func TestAccDestroySchemas(t *testing.T) {
 		url = "%s/test4"
 	}`, mysqlURL)
 	resource.Test(t, resource.TestCase{
-		Providers: map[string]*schema.Provider{
-			"atlas": Provider(),
-		},
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
 				Config:  preExistingSchema,
@@ -394,9 +388,8 @@ func TestAccMultipleSchemas(t *testing.T) {
 		url = "%s"
 	}`, mysqlURL)
 	resource.Test(t, resource.TestCase{
-		Providers: map[string]*schema.Provider{
-			"atlas": Provider(),
-		},
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
 				Config:  mulSchema,

@@ -1,10 +1,9 @@
-package atlas
+package provider_test
 
 import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
 const testAccData = `
@@ -47,17 +46,17 @@ schema "test" {
 }
 `
 
-func TestAccDataNormalHCL(t *testing.T) {
+func TestAccSchemaDataSource(t *testing.T) {
 	resource.Test(t, resource.TestCase{
-		Providers: map[string]*schema.Provider{
-			"atlas": Provider(),
-		},
-		PreventPostDestroyRefresh: true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
+			// Read testing
 			{
 				Config: testAccData,
-				Check: resource.ComposeTestCheckFunc(
+				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.atlas_schema.market", "hcl", normalHCL),
+					resource.TestCheckResourceAttr("data.atlas_schema.market", "id", "/WWD4tjYzwMDMHxlNwuhrg"),
 				),
 			},
 		},
