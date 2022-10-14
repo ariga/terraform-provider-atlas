@@ -85,11 +85,16 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 
-	var (
-		src = data.Src.Value
-		url = data.DevURL.Value
-	)
-	cli, err := sqlclient.Open(ctx, url)
+	src := data.Src.Value
+	if src == "" {
+		// We don't have a schema to normalize,
+		// so we don't do anything.
+		data.ID = types.String{Value: hclID(nil)}
+		data.HCL = types.String{Null: true}
+		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+		return
+	}
+	cli, err := sqlclient.Open(ctx, data.DevURL.Value)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to open connection, got error: %s", err))
 		return
@@ -117,8 +122,6 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 
 	data.ID = types.String{Value: hclID(normalHCL)}
 	data.HCL = types.String{Value: string(normalHCL)}
-
-	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 

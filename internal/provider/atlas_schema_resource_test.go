@@ -197,6 +197,26 @@ func TestAccInvalidSchemaReturnsError(t *testing.T) {
 	})
 }
 
+func TestEmptyHCL(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		IsUnitTest:               true,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				resource "atlas_schema" "testdb" {
+					hcl = ""
+					url = "%s"
+				}
+				`, mysqlURL),
+				ExpectError: regexp.MustCompile("Error: Invalid Attribute Value Length"),
+				Destroy:     false,
+			},
+		},
+	})
+}
+
 func TestEnsureSyncOnFirstRun(t *testing.T) {
 	tempSchemas(t, "test1", "test2")
 	hcl := fmt.Sprintf(`

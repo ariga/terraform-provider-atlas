@@ -8,6 +8,7 @@ import (
 	"ariga.io/atlas/sql/schema"
 	"ariga.io/atlas/sql/sqlclient"
 	"github.com/hashicorp/hcl/v2/hclparse"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -56,6 +57,9 @@ func (r *AtlasSchemaResource) GetSchema(ctx context.Context) (tfsdk.Schema, diag
 					"(preferably normalized - see `atlas_schema` data source)",
 				Type:     types.StringType,
 				Required: true,
+				Validators: []tfsdk.AttributeValidator{
+					stringvalidator.LengthAtLeast(1),
+				},
 			},
 			"url": {
 				Description: "The url of the database see https://atlasgo.io/cli/url",
