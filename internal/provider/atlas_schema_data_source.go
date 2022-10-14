@@ -85,12 +85,12 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 
-	var src = data.Src.Value
+	src := data.Src.Value
 	if src == "" {
 		// We don't have a schema to normalize,
 		// so we don't do anything.
 		data.ID = types.String{Value: hclID(nil)}
-		data.HCL = types.String{Value: ""}
+		data.HCL = types.String{Null: true}
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 		return
 	}

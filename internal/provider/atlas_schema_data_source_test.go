@@ -72,7 +72,7 @@ func TestAccSchemaDataSource(t *testing.T) {
 	src = ""
 }`,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.atlas_schema.market", "hcl", ""),
+					resource.TestCheckNoResourceAttr("data.atlas_schema.market", "hcl"),
 					resource.TestCheckResourceAttr("data.atlas_schema.market", "id", "bGInLge7AUJiuCF1YpXFjQ"),
 				),
 			},
