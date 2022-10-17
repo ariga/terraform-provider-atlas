@@ -216,6 +216,10 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		return
 	}
 	if state == nil || state.HCL.Value == "" {
+		if plan.URL.IsUnknown() {
+			resp.RequiresReplace = append(resp.RequiresReplace, path.Root("url"))
+			return
+		}
 		// New terraform resource will be create,
 		// do the first run check to ensure the user doesn't
 		// drops schema resources by accident
