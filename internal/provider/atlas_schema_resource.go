@@ -21,10 +21,11 @@ type (
 	AtlasSchemaResource struct{}
 	// AtlasSchemaResourceModel describes the resource data model.
 	AtlasSchemaResourceModel struct {
-		ID     types.String `tfsdk:"id"`
-		HCL    types.String `tfsdk:"hcl"`
-		URL    types.String `tfsdk:"url"`
-		DevURL types.String `tfsdk:"dev_db_url"`
+		ID      types.String `tfsdk:"id"`
+		HCL     types.String `tfsdk:"hcl"`
+		URL     types.String `tfsdk:"url"`
+		DevURL  types.String `tfsdk:"dev_db_url"`
+		Exclude types.List   `tfsdk:"exclude"`
 	}
 )
 
@@ -73,6 +74,13 @@ func (r *AtlasSchemaResource) GetSchema(ctx context.Context) (tfsdk.Schema, diag
 				Optional:    true,
 				Sensitive:   true,
 			},
+			"exclude": {
+				Description: "Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#flags",
+				Type: types.ListType{
+					ElemType: types.StringType,
+				},
+				Optional: true,
+			},
 			"id": {
 				Description: "The ID of this resource",
 				Computed:    true,
@@ -115,7 +123,11 @@ func (r *AtlasSchemaResource) Read(ctx context.Context, req resource.ReadRequest
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
+	var exclude []string
+	resp.Diagnostics.Append(data.Exclude.ElementsAs(ctx, &exclude, false)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	var (
 		diags = resp.Diagnostics
 		url   = data.URL.Value
@@ -129,7 +141,10 @@ func (r *AtlasSchemaResource) Read(ctx context.Context, req resource.ReadRequest
 	if cli.URL.Schema != "" {
 		schemas = append(schemas, cli.URL.Schema)
 	}
-	realm, err := cli.InspectRealm(ctx, &schema.InspectRealmOption{Schemas: schemas})
+	realm, err := cli.InspectRealm(ctx, &schema.InspectRealmOption{
+		Exclude: exclude,
+		Schemas: schemas,
+	})
 	if err != nil {
 		diags.AddError("Inspect Error", fmt.Sprintf("Unable to inspect realm, got error: %s", err))
 		return
@@ -253,7 +268,7 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 		}
 		return
 	}
-	changes, cli, diags := atlasChanges(ctx, data.URL.Value, createDesired)
+	changes, cli, diags := atlasChanges(ctx, data, createDesired)
 	if diags.HasError() {
 		return
 	}
@@ -277,7 +292,7 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 		}
 		return
 	}
-	changes, cli, diags := atlasChanges(ctx, data.URL.Value, createDesired)
+	changes, cli, diags := atlasChanges(ctx, data, createDesired)
 	if diags.HasError() {
 		return
 	}
@@ -319,8 +334,13 @@ https://atlasgo.io/terraform-provider#working-with-an-existing-database`, string
 	return
 }
 
-func atlasChanges(ctx context.Context, url string, createDesired func(ctx context.Context, cli *sqlclient.Client) (*schema.Realm, error)) (changes []schema.Change, cli *sqlclient.Client, diags diag.Diagnostics) {
-	cli, err := sqlclient.Open(ctx, url)
+func atlasChanges(ctx context.Context, data *AtlasSchemaResourceModel, createDesired func(ctx context.Context, cli *sqlclient.Client) (*schema.Realm, error)) (changes []schema.Change, cli *sqlclient.Client, diags diag.Diagnostics) {
+	var exclude []string
+	diags = data.Exclude.ElementsAs(ctx, &exclude, false)
+	if diags.HasError() {
+		return
+	}
+	cli, err := sqlclient.Open(ctx, data.URL.Value)
 	if err != nil {
 		diags.AddError(
 			"Client Connection Error",
@@ -332,7 +352,10 @@ func atlasChanges(ctx context.Context, url string, createDesired func(ctx contex
 	if cli.URL.Schema != "" {
 		schemas = append(schemas, cli.URL.Schema)
 	}
-	current, err := cli.InspectRealm(ctx, &schema.InspectRealmOption{Schemas: schemas})
+	current, err := cli.InspectRealm(ctx, &schema.InspectRealmOption{
+		Exclude: exclude,
+		Schemas: schemas,
+	})
 	if err != nil {
 		diags.AddError(
 			"Inspect Error",
