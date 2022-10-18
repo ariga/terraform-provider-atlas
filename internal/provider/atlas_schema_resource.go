@@ -75,7 +75,7 @@ func (r *AtlasSchemaResource) GetSchema(ctx context.Context) (tfsdk.Schema, diag
 				Sensitive:   true,
 			},
 			"exclude": {
-				Description: "Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#flags",
+				Description: "Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude-schemas",
 				Type: types.ListType{
 					ElemType: types.StringType,
 				},
@@ -139,7 +139,7 @@ func (r *AtlasSchemaResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	var url = data.URL.Value
+	url := data.URL.Value
 	data.ID = types.String{Value: url}
 	data.URL = types.String{Value: url}
 	data.HCL = types.String{Value: string(hcl)}
