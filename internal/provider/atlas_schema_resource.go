@@ -325,6 +325,12 @@ func atlasInspect(ctx context.Context, data *AtlasSchemaResourceModel) (_ *schem
 	if diags.HasError() {
 		return
 	}
+	nonEmptyExclude := make([]string, 0, len(exclude))
+	for _, e := range exclude {
+		if e != "" {
+			nonEmptyExclude = append(nonEmptyExclude, e)
+		}
+	}
 	cli, err := sqlclient.Open(ctx, data.URL.Value)
 	if err != nil {
 		diags.AddError(
@@ -338,7 +344,7 @@ func atlasInspect(ctx context.Context, data *AtlasSchemaResourceModel) (_ *schem
 		schemas = append(schemas, cli.URL.Schema)
 	}
 	realm, err := cli.InspectRealm(ctx, &schema.InspectRealmOption{
-		Exclude: exclude,
+		Exclude: nonEmptyExclude,
 		Schemas: schemas,
 	})
 	if err != nil {
