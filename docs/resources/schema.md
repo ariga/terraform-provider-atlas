@@ -35,6 +35,7 @@ resource "atlas_schema" "market" {
 ### Optional
 
 - `dev_db_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
+- `exclude` (List of String) Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude-schemas
 
 ### Read-Only
 

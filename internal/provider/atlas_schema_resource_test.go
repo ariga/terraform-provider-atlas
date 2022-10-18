@@ -244,6 +244,54 @@ func TestEnsureSyncOnFirstRun(t *testing.T) {
 	})
 }
 
+func TestExcludeSchema(t *testing.T) {
+	tempSchemas(t, "test1", "test2", "test3")
+	hcl := fmt.Sprintf(`
+resource "atlas_schema" "new_schema" {
+	hcl = <<-EOT
+schema "test1" {
+  charset = "utf8mb4"
+  collate = "utf8mb4_0900_ai_ci"
+}
+EOT
+	exclude = ["test2", "test3", ""]
+	url = "%s"
+}`, mysqlURL)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: hcl,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("atlas_schema.new_schema", "id", mysqlURL),
+				),
+			},
+		},
+	})
+	hcl = fmt.Sprintf(`
+	resource "atlas_schema" "new_schema" {
+		hcl = <<-EOT
+schema "test1" {
+  charset = "utf8mb4"
+  collate = "utf8mb4_0900_ai_ci"
+}
+EOT
+		exclude = [null]
+		url = "%s"
+	}`, mysqlURL)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      hcl,
+				ExpectError: regexp.MustCompile("Error: Value Conversion Error"),
+			},
+		},
+	})
+}
+
 func TestAccRemoveColumns(t *testing.T) {
 	tempSchemas(t, "test")
 	const createTableStmt = `create table test.type_table
