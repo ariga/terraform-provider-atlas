@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"ariga.io/atlas/sql/schema"
@@ -109,7 +110,7 @@ func (r *AtlasSchemaResource) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	// Only set ID when creating a new resource
-	data.ID = types.String{Value: data.URL.Value}
+	data.ID = types.String{Value: urlToID(data.URL.Value)}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -140,7 +141,7 @@ func (r *AtlasSchemaResource) Read(ctx context.Context, req resource.ReadRequest
 	}
 
 	url := data.URL.Value
-	data.ID = types.String{Value: url}
+	data.ID = types.String{Value: urlToID(url)}
 	data.URL = types.String{Value: url}
 	data.HCL = types.String{Value: string(hcl)}
 
@@ -382,4 +383,13 @@ func atlasChanges(ctx context.Context, data *AtlasSchemaResourceModel, createDes
 		return
 	}
 	return
+}
+
+func urlToID(u string) string {
+	uu, err := url.Parse(u)
+	if err != nil {
+		return u
+	}
+	uu.User = nil
+	return uu.String()
 }

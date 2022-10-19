@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	mysqlURL    = "mysql://root:pass@localhost:3306"
-	mysqlDevURL = "mysql://root:pass@localhost:3307"
+	mysqlURL             = "mysql://root:pass@localhost:3306"
+	mysqlDevURL          = "mysql://root:pass@localhost:3307"
+	mysqlURLWithoutCreds = "mysql://localhost:3306"
 )
 
 func TestAccAtlasDatabase(t *testing.T) {
@@ -82,16 +83,16 @@ resource "atlas_schema" "testdb" {
 			{
 				Config: testAccActionConfigCreate,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysqlURL),
+					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysqlURLWithoutCreds),
 				),
 			},
 			{
 				Config: testAccActionConfigUpdate,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysqlURL),
+					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysqlURLWithoutCreds),
 					func(s *terraform.State) error {
 						res := s.RootModule().Resources["atlas_schema.testdb"]
-						cli, err := sqlclient.Open(context.Background(), res.Primary.ID)
+						cli, err := sqlclient.Open(context.Background(), res.Primary.Attributes["url"])
 						if err != nil {
 							return err
 						}
@@ -264,7 +265,7 @@ EOT
 			{
 				Config: hcl,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_schema.new_schema", "id", mysqlURL),
+					resource.TestCheckResourceAttr("atlas_schema.new_schema", "id", mysqlURLWithoutCreds),
 				),
 			},
 		},
@@ -367,14 +368,14 @@ resource "atlas_schema" "testdb" {
 				},
 				Config: fmt.Sprintf(testAccSanityT, mysqlDevURL, steps[0], mysqlURL),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysqlURL),
+					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysqlURLWithoutCreds),
 					resource.TestCheckResourceAttr("atlas_schema.testdb", "hcl", steps[0]),
 				),
 			},
 			{
 				Config: fmt.Sprintf(testAccSanityT, mysqlDevURL, steps[1], mysqlURL),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysqlURL),
+					resource.TestCheckResourceAttr("atlas_schema.testdb", "id", mysqlURLWithoutCreds),
 					resource.TestCheckResourceAttr("atlas_schema.testdb", "hcl", steps[1]),
 				),
 			},
