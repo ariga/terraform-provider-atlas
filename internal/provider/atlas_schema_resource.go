@@ -226,6 +226,60 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		// drops schema resources by accident
 		resp.Diagnostics.Append(r.firstRunCheck(ctx, plan)...)
 	}
+	resp.Diagnostics.Append(r.printPlanSQL(ctx, plan)...)
+}
+
+func (r *AtlasSchemaResource) printPlanSQL(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+	createDesired := func(ctx context.Context, cli *sqlclient.Client) (desired *schema.Realm, err error) {
+		desired = &schema.Realm{}
+		if data.HCL.Value == "" {
+			return
+		}
+		p := hclparse.NewParser()
+		if _, err := p.ParseHCL([]byte(data.HCL.Value), ""); err != nil {
+			return nil, err
+		}
+		if err = cli.Evaluator.Eval(p, desired, nil); err != nil {
+			return
+		}
+		if data.DevURL.Value != "" {
+			dev, err := sqlclient.Open(ctx, data.DevURL.Value)
+			if err != nil {
+				return nil, err
+			}
+			defer dev.Close()
+			desired, err = dev.Driver.(schema.Normalizer).NormalizeRealm(ctx, desired)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return
+	}
+	changes, cli, diags := atlasChanges(ctx, data, createDesired)
+	if diags.HasError() {
+		return
+	}
+	if len(changes) > 0 {
+		plan, err := cli.PlanChanges(ctx, "", changes)
+		if err != nil {
+			diags.AddError("Plan Error",
+				fmt.Sprintf("Unable to plan changes, got error: %s", err),
+			)
+			return
+		}
+		buf := &strings.Builder{}
+		for _, stmt := range plan.Changes {
+			if stmt.Comment == "" {
+				fmt.Fprintln(buf, stmt.Cmd)
+			} else {
+				fmt.Fprintf(buf, "-- %s\n%s\n", stmt.Comment, stmt.Cmd)
+			}
+		}
+		diags.AddWarning("Atlas plan",
+			fmt.Sprintf("The following SQL statements will be executed:\n\n\n%s", buf.String()),
+		)
+	}
+	return diags
 }
 
 func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
