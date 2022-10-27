@@ -17,7 +17,9 @@ const testAccData = `
 data "atlas_schema" "market" {
 	dev_db_url = "mysql://root:pass@localhost:3307/test"
 	variables = [
-		"tenant: bar",
+		yamlencode({
+			tenant = "bar",
+		}),
 	]
 	src = <<-EOT
 	variable "tenant" {
