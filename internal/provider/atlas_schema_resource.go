@@ -226,6 +226,23 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		// drops schema resources by accident
 		resp.Diagnostics.Append(r.firstRunCheck(ctx, plan)...)
 	}
+	if plan == nil {
+		// This is a delete operation
+		if state == nil {
+			// This is a delete operation on a resource that doesn't exist
+			// in the state, so we can safely ignore it
+			return
+		}
+		plan = &AtlasSchemaResourceModel{
+			ID:      state.ID,
+			URL:     state.URL,
+			DevURL:  state.DevURL,
+			Exclude: state.Exclude,
+			// Delete the resource by setting
+			// the HCL to an empty string.
+			HCL: types.String{Null: true},
+		}
+	}
 	resp.Diagnostics.Append(r.printPlanSQL(ctx, plan)...)
 }
 
