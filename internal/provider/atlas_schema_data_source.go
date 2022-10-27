@@ -13,6 +13,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	yaml "github.com/zclconf/go-cty-yaml"
+	"github.com/zclconf/go-cty/cty"
+	// "sigs.k8s.io/yaml"
 )
 
 type (
@@ -20,10 +23,11 @@ type (
 	AtlasSchemaDataSource struct{}
 	// AtlasSchemaDataSourceModel describes the data source data model.
 	AtlasSchemaDataSourceModel struct {
-		DevURL types.String `tfsdk:"dev_db_url"`
-		Src    types.String `tfsdk:"src"`
-		HCL    types.String `tfsdk:"hcl"`
-		ID     types.String `tfsdk:"id"`
+		DevURL    types.String `tfsdk:"dev_db_url"`
+		Src       types.String `tfsdk:"src"`
+		HCL       types.String `tfsdk:"hcl"`
+		ID        types.String `tfsdk:"id"`
+		Variables types.List   `tfsdk:"variables"`
 	}
 )
 
@@ -71,6 +75,13 @@ func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, di
 				Type:        types.StringType,
 				Computed:    true,
 			},
+			"variables": {
+				Description: "The variables used in the HCL",
+				Optional:    true,
+				Type: types.ListType{
+					ElemType: types.StringType,
+				},
+			},
 		},
 	}, nil
 }
@@ -104,8 +115,16 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		resp.Diagnostics.AddError("Parse HCL Error", fmt.Sprintf("Unable to parse HCL, got error: %s", err))
 		return
 	}
+	var variables map[string]cty.Value
+	if !data.Variables.IsNull() {
+		variables = make(map[string]cty.Value)
+		resp.Diagnostics.Append(ParseVariablesToHCL(ctx, data.Variables, variables)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
 	realm := &schema.Realm{}
-	if err = cli.Evaluator.Eval(p, realm, nil); err != nil {
+	if err = cli.Evaluator.Eval(p, realm, variables); err != nil {
 		resp.Diagnostics.AddError("Eval HCL Error", fmt.Sprintf("Unable to eval HCL, got error: %s", err))
 		return
 	}
@@ -129,4 +148,25 @@ func hclID(hcl []byte) string {
 	h := fnv.New128()
 	h.Write(hcl)
 	return base64.RawStdEncoding.EncodeToString(h.Sum(nil))
+}
+
+func ParseVariablesToHCL(ctx context.Context, data types.List, variables map[string]cty.Value) (diags diag.Diagnostics) {
+	var vars []string
+	diags = data.ElementsAs(ctx, &vars, false)
+	if diags.HasError() {
+		return
+	}
+	for _, v := range vars {
+		val, err := yaml.Unmarshal([]byte(v), cty.Map(cty.DynamicPseudoType))
+		if err != nil {
+			diags.AddError("Unmarshal Error",
+				fmt.Sprintf("Unable to unmarshal, got error: %s, %s", err, v),
+			)
+			return
+		}
+		for k, v := range val.AsValueMap() {
+			variables[k] = v
+		}
+	}
+	return
 }

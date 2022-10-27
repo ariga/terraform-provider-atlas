@@ -3,7 +3,7 @@ module ariga.io/ariga/terraform-provider-atlas
 go 1.19
 
 require (
-	ariga.io/atlas v0.7.3-0.20221018074052-11609502ec55
+	ariga.io/atlas v0.8.2-0.20221026192725-4c8a934a4737
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/hashicorp/hcl/v2 v2.14.0
 	github.com/hashicorp/terraform-plugin-docs v0.7.0
@@ -13,6 +13,7 @@ require (
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.23.0
 	github.com/lib/pq v1.10.5
 	github.com/mattn/go-sqlite3 v1.14.10
+	sigs.k8s.io/yaml v1.3.0
 )
 
 require (
@@ -63,6 +64,7 @@ require (
 	github.com/vmihailenco/msgpack/v4 v4.3.12 // indirect
 	github.com/vmihailenco/tagparser v0.1.2 // indirect
 	github.com/zclconf/go-cty v1.11.0 // indirect
+	github.com/zclconf/go-cty-yaml v1.0.2 // indirect
 	golang.org/x/crypto v0.0.0-20220517005047-85d78b3ac167 // indirect
 	golang.org/x/mod v0.5.1 // indirect
 	golang.org/x/net v0.0.0-20220708220712-1185a9018129 // indirect
@@ -72,4 +74,5 @@ require (
 	google.golang.org/genproto v0.0.0-20211208223120-3a66f561d7aa // indirect
 	google.golang.org/grpc v1.48.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
