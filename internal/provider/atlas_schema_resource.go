@@ -37,6 +37,10 @@ var (
 	_ resource.ResourceWithValidateConfig = &AtlasSchemaResource{}
 )
 
+func (m AtlasSchemaResourceModel) Clone() *AtlasSchemaResourceModel {
+	return &m
+}
+
 // NewAtlasSchemaResource returns a new AtlasSchemaResource.
 func NewAtlasSchemaResource() resource.Resource {
 	return &AtlasSchemaResource{}
@@ -233,15 +237,10 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 			// in the state, so we can safely ignore it
 			return
 		}
-		plan = &AtlasSchemaResourceModel{
-			ID:      state.ID,
-			URL:     state.URL,
-			DevURL:  state.DevURL,
-			Exclude: state.Exclude,
-			// Delete the resource by setting
-			// the HCL to an empty string.
-			HCL: types.String{Null: true},
-		}
+		plan = state.Clone()
+		// Delete the resource by setting
+		// the HCL to an empty string.
+		plan.HCL = types.String{Null: true}
 	}
 	resp.Diagnostics.Append(r.printPlanSQL(ctx, plan)...)
 }
