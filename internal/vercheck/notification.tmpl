@@ -7,4 +7,13 @@ A new version of Atlas Provider is available ({{ .Version }}){{ with .Link }}: {
 {{- with .Summary }}
 {{ . }}
 {{- end }}
+
+terraform {
+  required_providers {
+    atlas = {
+      version = "~> {{ .Version }}"
+      source  = "ariga/atlas"
+    }
+  }
+}
 {{- end }}

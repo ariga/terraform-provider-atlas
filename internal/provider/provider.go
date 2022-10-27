@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"time"
 
 	_ "ariga.io/atlas/sql/mysql"
 	_ "ariga.io/atlas/sql/postgres"
@@ -47,7 +46,7 @@ const (
 	// envNoUpdate when enabled it cancels checking for update
 	envNoUpdate = "ATLAS_NO_UPDATE_NOTIFIER"
 	vercheckURL = "https://vercheck.ariga.io"
-	versionFile = "~/.terraform-provider-atlas/release.json"
+	versionFile = "~/.atlas/terraform-provider-release.json"
 )
 
 // New returns a new provider.
@@ -94,7 +93,7 @@ func (p *AtlasProvider) Resources(ctx context.Context) []func() resource.Resourc
 
 // ConfigValidators returns a list of functions which will all be performed during validation.
 func (p *AtlasProvider) ValidateConfig(ctx context.Context, req provider.ValidateConfigRequest, resp *provider.ValidateConfigResponse) {
-	msg := checkForUpdate(p.version)()
+	msg := checkForUpdate(ctx, p.version)()
 	if msg != "" {
 		resp.Diagnostics.AddWarning(
 			"Update Available",
@@ -106,7 +105,7 @@ func (p *AtlasProvider) ValidateConfig(ctx context.Context, req provider.Validat
 func noText() string { return "" }
 
 // checkForUpdate checks for version updates and security advisories for Atlas.
-func checkForUpdate(version string) func() string {
+func checkForUpdate(ctx context.Context, version string) func() string {
 	done := make(chan struct{})
 	// Users may skip update checking behavior.
 	if v := os.Getenv(envNoUpdate); v != "" {
@@ -137,7 +136,7 @@ func checkForUpdate(version string) func() string {
 	return func() string {
 		select {
 		case <-done:
-		case <-time.After(time.Millisecond * 500):
+		case <-ctx.Done():
 		}
 		return message
 	}
