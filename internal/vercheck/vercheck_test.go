@@ -30,7 +30,7 @@ func TestVerCheck(t *testing.T) {
 	vc := New(srv.URL, "")
 	check, err := vc.Check("v0.1.2")
 
-	require.EqualValues(t, "/atlas/v0.1.2", path)
+	require.EqualValues(t, "/terraform-provider-atlas/v0.1.2", path)
 	require.EqualValues(t, "Ariga-Atlas-CLI", ua)
 	require.NoError(t, err)
 	require.EqualValues(t, &Payload{
@@ -120,8 +120,17 @@ func TestTemplate(t *testing.T) {
 					Link:    "https://atlasgo.io/v0.7.2",
 				},
 			},
-			exp: `A new version of Atlas is available (v0.7.2): https://atlasgo.io/v0.7.2
-A great version including amazing features.`,
+			exp: `A new version of Atlas Provider is available (v0.7.2): https://atlasgo.io/v0.7.2
+A great version including amazing features.
+
+terraform {
+  required_providers {
+    atlas = {
+      version = "~> v0.7.2"
+      source  = "ariga/atlas"
+    }
+  }
+}`,
 		},
 		{
 			name: "version",
@@ -131,7 +140,16 @@ A great version including amazing features.`,
 					Link:    "https://atlasgo.io/v0.7.2",
 				},
 			},
-			exp: `A new version of Atlas is available (v0.7.2): https://atlasgo.io/v0.7.2`,
+			exp: `A new version of Atlas Provider is available (v0.7.2): https://atlasgo.io/v0.7.2
+
+terraform {
+  required_providers {
+    atlas = {
+      version = "~> v0.7.2"
+      source  = "ariga/atlas"
+    }
+  }
+}`,
 		},
 		{
 			name: "with advisory",
