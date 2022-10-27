@@ -217,6 +217,9 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		return
 	}
 	if state == nil || state.HCL.Value == "" {
+		if plan == nil {
+			return
+		}
 		if plan.URL.IsUnknown() {
 			resp.RequiresReplace = append(resp.RequiresReplace, path.Root("url"))
 			return
