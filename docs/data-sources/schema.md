@@ -29,6 +29,10 @@ data "atlas_schema" "norm" {
 - `dev_db_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `src` (String) The schema definition of the database
 
+### Optional
+
+- `variables` (List of String) The variables used in the HCL
+
 ### Read-Only
 
 - `hcl` (String) The normalized form of the HCL
