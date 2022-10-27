@@ -15,7 +15,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	yaml "github.com/zclconf/go-cty-yaml"
 	"github.com/zclconf/go-cty/cty"
-	// "sigs.k8s.io/yaml"
 )
 
 type (
