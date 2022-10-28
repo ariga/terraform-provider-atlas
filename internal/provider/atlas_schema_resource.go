@@ -228,7 +228,7 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		// New terraform resource will be create,
 		// do the first run check to ensure the user doesn't
 		// drops schema resources by accident
-		resp.Diagnostics.Append(r.firstRunCheck(ctx, plan)...)
+		resp.Diagnostics.Append(firstRunCheck(ctx, plan)...)
 	}
 	if plan == nil {
 		// This is a delete operation
@@ -242,10 +242,10 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		// the HCL to an empty string.
 		plan.HCL = types.String{Null: true}
 	}
-	resp.Diagnostics.Append(r.printPlanSQL(ctx, plan)...)
+	resp.Diagnostics.Append(PrintPlanSQL(ctx, plan)...)
 }
 
-func (r *AtlasSchemaResource) printPlanSQL(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+func PrintPlanSQL(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
 	createDesired := func(ctx context.Context, cli *sqlclient.Client) (desired *schema.Realm, err error) {
 		desired = &schema.Realm{}
 		if data.HCL.Value == "" {
@@ -291,7 +291,7 @@ func (r *AtlasSchemaResource) printPlanSQL(ctx context.Context, data *AtlasSchem
 				fmt.Fprintf(buf, "-- %s\n%s\n", stmt.Comment, stmt.Cmd)
 			}
 		}
-		diags.AddWarning("Atlas plan",
+		diags.AddWarning("Atlas Plan",
 			fmt.Sprintf("The following SQL statements will be executed:\n\n\n%s", buf.String()),
 		)
 	}
@@ -336,7 +336,7 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 	return diags
 }
 
-func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+func firstRunCheck(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
 	createDesired := func(ctx context.Context, cli *sqlclient.Client) (desired *schema.Realm, err error) {
 		desired = &schema.Realm{}
 		p := hclparse.NewParser()

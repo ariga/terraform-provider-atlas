@@ -3,10 +3,15 @@ package provider_test
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"regexp"
+	"strings"
 	"testing"
 
+	"ariga.io/ariga/terraform-provider-atlas/internal/provider"
 	"ariga.io/atlas/sql/sqlclient"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 )
@@ -531,4 +536,62 @@ func drop(t *testing.T, c *sqlclient.Client, schemas ...string) {
 			t.Errorf("failed closing client: %s", err)
 		}
 	})
+}
+
+func TestPrintPlanSQL(t *testing.T) {
+	type args struct {
+		ctx  context.Context
+		data *provider.AtlasSchemaResourceModel
+	}
+	tests := []struct {
+		name      string
+		args      args
+		wantDiags diag.Diagnostics
+	}{
+		{
+			args: args{
+				ctx: context.Background(),
+				data: &provider.AtlasSchemaResourceModel{
+					URL:     types.String{Value: mysqlURL},
+					DevURL:  types.String{Value: mysqlDevURL},
+					Exclude: types.List{ElemType: types.StringType},
+					HCL: types.String{Value: `schema "test" {
+  charset = "utf8mb4"
+  collate = "utf8mb4_0900_ai_ci"
+}
+table "orders" {
+  schema = schema.test
+  column "id" {
+    null           = false
+    type           = int
+    auto_increment = true
+  }
+  primary_key {
+    columns = [column.id]
+  }
+}
+`,
+					},
+				},
+			},
+			wantDiags: []diag.Diagnostic{
+				diag.NewWarningDiagnostic("Atlas Plan",
+					strings.Join([]string{
+						"The following SQL statements will be executed:",
+						"",
+						"",
+						`-- create "orders" table`,
+						"CREATE TABLE `test`.`orders` (`id` int NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`)) CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci",
+						"",
+					}, "\n")),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if gotDiags := provider.PrintPlanSQL(tt.args.ctx, tt.args.data); !reflect.DeepEqual(gotDiags, tt.wantDiags) {
+				t.Errorf("PrintPlanSQL() = %v, want %v", gotDiags, tt.wantDiags)
+			}
+		})
+	}
 }
