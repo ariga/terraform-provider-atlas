@@ -112,6 +112,7 @@ func (v *VerChecker) verifyTime() error {
 	if err != nil {
 		return nil
 	}
+	defer f.Close()
 	if err := json.NewDecoder(f).Decode(&s); err != nil {
 		return nil
 	}
