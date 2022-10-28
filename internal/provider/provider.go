@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"path"
 
 	_ "ariga.io/atlas/sql/mysql"
 	_ "ariga.io/atlas/sql/postgres"
@@ -17,7 +18,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
-	"github.com/mitchellh/go-homedir"
 	"golang.org/x/mod/semver"
 
 	"ariga.io/ariga/terraform-provider-atlas/internal/vercheck"
@@ -46,7 +46,7 @@ const (
 	// envNoUpdate when enabled it cancels checking for update
 	envNoUpdate = "ATLAS_NO_UPDATE_NOTIFIER"
 	vercheckURL = "https://vercheck.ariga.io"
-	versionFile = "~/.atlas/terraform-provider-release.json"
+	versionFile = "release.json"
 )
 
 // New returns a new provider.
@@ -115,14 +115,14 @@ func checkForUpdate(ctx context.Context, version string) func() string {
 	if !semver.IsValid(version) {
 		return noText
 	}
-	path, err := homedir.Expand(versionFile)
+	curDir, err := os.Getwd()
 	if err != nil {
 		return noText
 	}
 	var message string
 	go func() {
 		defer close(done)
-		vc := vercheck.New(vercheckURL, path)
+		vc := vercheck.New(vercheckURL, path.Join(curDir, versionFile))
 		payload, err := vc.Check(version)
 		if err != nil {
 			return
