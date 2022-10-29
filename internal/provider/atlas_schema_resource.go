@@ -37,6 +37,10 @@ var (
 	_ resource.ResourceWithValidateConfig = &AtlasSchemaResource{}
 )
 
+func (m AtlasSchemaResourceModel) Clone() *AtlasSchemaResourceModel {
+	return &m
+}
+
 // NewAtlasSchemaResource returns a new AtlasSchemaResource.
 func NewAtlasSchemaResource() resource.Resource {
 	return &AtlasSchemaResource{}
@@ -224,8 +228,74 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		// New terraform resource will be create,
 		// do the first run check to ensure the user doesn't
 		// drops schema resources by accident
-		resp.Diagnostics.Append(r.firstRunCheck(ctx, plan)...)
+		resp.Diagnostics.Append(firstRunCheck(ctx, plan)...)
 	}
+	if plan == nil {
+		// This is a delete operation
+		if state == nil {
+			// This is a delete operation on a resource that doesn't exist
+			// in the state, so we can safely ignore it
+			return
+		}
+		plan = state.Clone()
+		// Delete the resource by setting
+		// the HCL to an empty string.
+		plan.HCL = types.String{Null: true}
+	}
+	resp.Diagnostics.Append(PrintPlanSQL(ctx, plan)...)
+}
+
+func PrintPlanSQL(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+	createDesired := func(ctx context.Context, cli *sqlclient.Client) (desired *schema.Realm, err error) {
+		desired = &schema.Realm{}
+		if data.HCL.Value == "" {
+			return
+		}
+		p := hclparse.NewParser()
+		if _, err := p.ParseHCL([]byte(data.HCL.Value), ""); err != nil {
+			return nil, err
+		}
+		if err = cli.Evaluator.Eval(p, desired, nil); err != nil {
+			return
+		}
+		if data.DevURL.Value != "" {
+			dev, err := sqlclient.Open(ctx, data.DevURL.Value)
+			if err != nil {
+				return nil, err
+			}
+			defer dev.Close()
+			desired, err = dev.Driver.(schema.Normalizer).NormalizeRealm(ctx, desired)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return
+	}
+	changes, cli, diags := atlasChanges(ctx, data, createDesired)
+	if diags.HasError() {
+		return
+	}
+	if len(changes) > 0 {
+		plan, err := cli.PlanChanges(ctx, "", changes)
+		if err != nil {
+			diags.AddError("Plan Error",
+				fmt.Sprintf("Unable to plan changes, got error: %s", err),
+			)
+			return
+		}
+		buf := &strings.Builder{}
+		for _, stmt := range plan.Changes {
+			if stmt.Comment == "" {
+				fmt.Fprintln(buf, stmt.Cmd)
+			} else {
+				fmt.Fprintf(buf, "-- %s\n%s\n", stmt.Comment, stmt.Cmd)
+			}
+		}
+		diags.AddWarning("Atlas Plan",
+			fmt.Sprintf("The following SQL statements will be executed:\n\n\n%s", buf.String()),
+		)
+	}
+	return diags
 }
 
 func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
@@ -266,7 +336,7 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 	return diags
 }
 
-func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+func firstRunCheck(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
 	createDesired := func(ctx context.Context, cli *sqlclient.Client) (desired *schema.Realm, err error) {
 		desired = &schema.Realm{}
 		p := hclparse.NewParser()
