@@ -580,6 +580,8 @@ table "orders" {
 						"The following SQL statements will be executed:",
 						"",
 						"",
+						`-- add new schema named "test"`,
+						"CREATE DATABASE `test`",
 						`-- create "orders" table`,
 						"CREATE TABLE `test`.`orders` (`id` int NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`)) CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci",
 						"",
