@@ -37,11 +37,9 @@ builds:
   binary: '{{ .ProjectName }}_v{{ .Version }}'
   hooks:
     post:
-      - >
-        curl "https://release.ariga.io/atlas/atlas-{{ .Os }}-{{ .Arch }}-latest{{ .Ext }}"
+      - curl "https://release.ariga.io/atlas/atlas-{{ .Os }}-{{ .Arch }}-latest{{ .Ext }}"
         -o {{ dir .Path }}/atlas{{ .Ext }}
         -A "Terraform-Provider-CI"
-      - chmod +x {{ dir .Path }}/atlas{{ .Ext }}
 archives:
 - format: zip
   files:
@@ -49,6 +47,8 @@ archives:
     - README.md
     - src: 'dist/{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ with .Amd64 }}_{{ . }}{{ end }}/atlas*'
       strip_parent: true
+      info:
+        mode: 0755
   name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
 checksum:
   extra_files:
