@@ -26,8 +26,6 @@ builds:
   ignore:
     - goos: darwin
       goarch: arm
-    - goos: darwin
-      goarch: arm64
     - goos: linux
       goarch: arm
     - goos: windows
@@ -37,7 +35,7 @@ builds:
   binary: '{{ .ProjectName }}_v{{ .Version }}'
   hooks:
     post:
-      - curl "https://release.ariga.io/atlas/atlas-{{ .Os }}-{{ .Arch }}-latest{{ .Ext }}"
+      - curl "https://release.ariga.io/atlas/atlas-{{ .Os }}-{{ if eq .Os "darwin" }}amd64{{ else }}{{ .Arch }}{{ end }}-latest{{ .Ext }}"
         -o {{ dir .Path }}/atlas{{ .Ext }}
         -A "Terraform-Provider-CI"
 archives:
