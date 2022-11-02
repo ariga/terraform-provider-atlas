@@ -23,7 +23,7 @@ const (
 )
 
 func TestAccAtlasDatabase(t *testing.T) {
-	tempSchemas(t, "test")
+	tempSchemas(t, mysqlURL, "test")
 	var testAccActionConfigCreate = fmt.Sprintf(`
 data "atlas_schema" "market" {
   dev_db_url = "%s"
@@ -118,7 +118,7 @@ resource "atlas_schema" "testdb" {
 }
 
 func TestAccInvalidSchemaReturnsError(t *testing.T) {
-	tempSchemas(t, "test")
+	tempSchemas(t, mysqlURL, "test")
 	testAccValidSchema := fmt.Sprintf(`
 	resource "atlas_schema" "testdb" {
 	  hcl = <<-EOT
@@ -224,7 +224,7 @@ func TestEmptyHCL(t *testing.T) {
 }
 
 func TestEnsureSyncOnFirstRun(t *testing.T) {
-	tempSchemas(t, "test1", "test2")
+	tempSchemas(t, mysqlURL, "test1", "test2")
 	hcl := fmt.Sprintf(`
 	resource "atlas_schema" "new_schema" {
 	  hcl = <<-EOT
@@ -251,7 +251,7 @@ func TestEnsureSyncOnFirstRun(t *testing.T) {
 }
 
 func TestExcludeSchema(t *testing.T) {
-	tempSchemas(t, "test1", "test2", "test3")
+	tempSchemas(t, mysqlURL, "test1", "test2", "test3")
 	hcl := fmt.Sprintf(`
 resource "atlas_schema" "new_schema" {
 	hcl = <<-EOT
@@ -299,7 +299,7 @@ EOT
 }
 
 func TestAccRemoveColumns(t *testing.T) {
-	tempSchemas(t, "test")
+	tempSchemas(t, mysqlURL, "test")
 	const createTableStmt = `create table test.type_table
 (
   tBit           bit(10)                 not null,
@@ -389,7 +389,7 @@ resource "atlas_schema" "testdb" {
 }
 
 func TestAccDestroySchemas(t *testing.T) {
-	tempSchemas(t, "test4", "do-not-delete")
+	tempSchemas(t, mysqlURL, "test4", "do-not-delete")
 	// Create schemas "test4" and "do-not-delete".
 	preExistingSchema := fmt.Sprintf(`resource "atlas_schema" "testdb" {
 		hcl = <<-EOT
@@ -450,7 +450,7 @@ func TestAccDestroySchemas(t *testing.T) {
 }
 
 func TestAccMultipleSchemas(t *testing.T) {
-	tempSchemas(t, "m_test1", "m_test2", "m_test3", "m_test4", "m_test5")
+	tempSchemas(t, mysqlURL, "m_test1", "m_test2", "m_test3", "m_test4", "m_test5")
 	mulSchema := fmt.Sprintf(`resource "atlas_schema" "testdb" {
 		hcl = <<-EOT
 		schema "m_test1" {}
@@ -509,8 +509,8 @@ func TestAccMultipleSchemas(t *testing.T) {
 	})
 }
 
-func tempSchemas(t *testing.T, schemas ...string) {
-	c, err := sqlclient.Open(context.Background(), mysqlURL)
+func tempSchemas(t *testing.T, url string, schemas ...string) *sqlclient.Client {
+	c, err := sqlclient.Open(context.Background(), url)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -521,6 +521,16 @@ func tempSchemas(t *testing.T, schemas ...string) {
 		}
 	}
 	drop(t, c, schemas...)
+	return c
+}
+
+func createTables(t *testing.T, c *sqlclient.Client, tables ...string) {
+	for _, tableDDL := range tables {
+		_, err := c.ExecContext(context.Background(), tableDDL)
+		if err != nil {
+			t.Errorf("failed creating schema: %s", err)
+		}
+	}
 }
 
 func drop(t *testing.T, c *sqlclient.Client, schemas ...string) {
