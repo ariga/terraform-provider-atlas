@@ -84,6 +84,11 @@ jobs:
         with:
           terraform_version: ${{ matrix.terraform-version }}
           terraform_wrapper: false
+      - name: Install Atlas-CLI
+        run: |
+          curl -s -A "Terraform-Provider-CI" -o /usr/local/bin/atlas \
+            https://release.ariga.io/atlas/atlas-linux-amd64-latest?test=1
+          chmod +x /usr/local/bin/atlas
       - run: go test -v -cover ./...
         env:
           TF_ACC: '1'
