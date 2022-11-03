@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 	"github.com/stretchr/testify/require"
 )
@@ -25,6 +26,9 @@ const (
 func TestAccAtlasDatabase(t *testing.T) {
 	tempSchemas(t, mysqlURL, "test")
 	var testAccActionConfigCreate = fmt.Sprintf(`
+resource "foo_mirror" "url" {
+	value = "%s"
+}
 data "atlas_schema" "market" {
   dev_db_url = "%s"
   src = <<-EOT
@@ -47,9 +51,9 @@ data "atlas_schema" "market" {
 }
 resource "atlas_schema" "testdb" {
   hcl = data.atlas_schema.market.hcl
-  url = "%s"
+  url = foo_mirror.url.result
 }
-`, mysqlDevURL, mysqlURL)
+`, mysqlURL, mysqlDevURL)
 
 	var testAccActionConfigUpdate = fmt.Sprintf(`
 data "atlas_schema" "market" {
@@ -84,6 +88,9 @@ resource "atlas_schema" "testdb" {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		ProviderFactories: map[string]func() (*schema.Provider, error){
+			"foo": newFooProvider("foo", "mirror"),
+		},
 		Steps: []resource.TestStep{
 			{
 				Config: testAccActionConfigCreate,

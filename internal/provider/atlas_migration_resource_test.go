@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
 func TestAccMigrationResource(t *testing.T) {
@@ -127,6 +128,36 @@ func TestAccMigrationResource(t *testing.T) {
 			},
 		},
 	})
+
+	// Handle unknown URL
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		ProviderFactories: map[string]func() (*schema.Provider, error){
+			"foo": newFooProvider("foo", "mirror"),
+		},
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+					resource "foo_mirror" "schema" {
+						value = "%s"
+					}
+					data "atlas_migration" "hello" {
+						dir = "migrations?format=atlas"
+						url = format("%s/%%s", foo_mirror.schema.result)
+					}
+					resource "atlas_migration" "testdb" {
+						dir     = "migrations?format=atlas"
+						version = data.atlas_migration.hello.latest
+						url     = data.atlas_migration.hello.url
+					}`, schema3, mysqlURL),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "20221101165415"),
+					resource.TestCheckNoResourceAttr("atlas_migration.testdb", "status.next"),
+				),
+			},
+		},
+	})
 }
 
 func TestAccMigrationResource_WithLatestVersion(t *testing.T) {
@@ -205,4 +236,42 @@ func TestAccMigrationResource_Dirty(t *testing.T) {
 			},
 		},
 	})
+}
+
+func newFooProvider(name, resource string) func() (*schema.Provider, error) {
+	return func() (*schema.Provider, error) {
+		return &schema.Provider{
+			Schema: map[string]*schema.Schema{},
+			ResourcesMap: map[string]*schema.Resource{
+				fmt.Sprintf("%s_%s", name, resource): {
+					Schema: map[string]*schema.Schema{
+						"value": {
+							Type:     schema.TypeString,
+							Required: true,
+						},
+						"result": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+					},
+					Read: func(d *schema.ResourceData, meta interface{}) error {
+						d.Set("result", d.Get("value"))
+						return nil
+					},
+					Create: func(d *schema.ResourceData, meta interface{}) error {
+						d.SetId("none")
+						d.Set("result", d.Get("value"))
+						return nil
+					},
+					Update: func(d *schema.ResourceData, meta interface{}) error {
+						d.Set("result", d.Get("value"))
+						return nil
+					},
+					Delete: func(d *schema.ResourceData, meta interface{}) error {
+						return nil
+					},
+				},
+			},
+		}, nil
+	}
 }
