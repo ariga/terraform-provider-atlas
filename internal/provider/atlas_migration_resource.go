@@ -183,14 +183,14 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if data.Version.Value == "" {
+	if !data.Version.IsUnknown() && data.Version.Value == "" {
 		resp.Diagnostics.AddAttributeWarning(
 			path.Root("version"),
 			"version is unset",
 			"We recommend that you use 'version' to specify a version of the migration to run.\n"+
 				"If you don't specify a version, the latest version will be used when the resource being created.\n"+
 				"For keeping the database schema up to date, you should use set the version to using the value from "+
-				"`atlas_migrate_status.next` or `atlas_migrate_status.latest`\n",
+				"`atlas_migration.next` or `atlas_migration.latest`\n",
 		)
 	}
 }
