@@ -43,12 +43,12 @@ func NewClient(name string) (*MigrateClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewClientWithPath(path)
+	return NewClientWithPath(path), nil
 }
 
 // NewClientWithPath returns a new Atlas client with the given atlas-cli path.
-func NewClientWithPath(path string) (*MigrateClient, error) {
-	return &MigrateClient{path: path}, nil
+func NewClientWithPath(path string) *MigrateClient {
+	return &MigrateClient{path: path}
 }
 
 // Apply runs the `migrate apply` command.
