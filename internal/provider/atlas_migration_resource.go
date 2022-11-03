@@ -208,6 +208,9 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		return
 	}
 	if plan != nil {
+		if plan.URL.IsUnknown() {
+			return
+		}
 		report, err := r.client.Status(ctx, &atlas.StatusParams{
 			DirURL:          plan.DirURL.Value,
 			URL:             plan.URL.Value,
