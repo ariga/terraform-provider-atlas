@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -23,6 +24,7 @@ type (
 	MigrationResourceModel struct {
 		DirURL          types.String `tfsdk:"dir"`
 		URL             types.String `tfsdk:"url"`
+		DevURL          types.String `tfsdk:"dev_url"`
 		RevisionsSchema types.String `tfsdk:"revisions_schema"`
 		Version         types.String `tfsdk:"version"`
 
@@ -93,6 +95,12 @@ func (r *MigrationResource) GetSchema(ctx context.Context) (tfsdk.Schema, diag.D
 				Description: "The url of the database see https://atlasgo.io/cli/url",
 				Type:        types.StringType,
 				Required:    true,
+				Sensitive:   true,
+			},
+			"dev_url": {
+				Description: "The url of the dev-db see https://atlasgo.io/cli/url",
+				Type:        types.StringType,
+				Optional:    true,
 				Sensitive:   true,
 			},
 			"revisions_schema": {
@@ -190,6 +198,13 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	if !data.DevURL.IsUnknown() && data.DevURL.Value == "" {
+		resp.Diagnostics.AddAttributeWarning(
+			path.Root("dev_url"),
+			"dev_url is unset",
+			"It is highly recommended that you use 'dev_url' to specify a dev database.\n"+
+				"to learn more about it, visit: https://atlasgo.io/dev-database")
+	}
 	if !data.Version.IsUnknown() && data.Version.Value == "" {
 		resp.Diagnostics.AddAttributeWarning(
 			path.Root("version"),
@@ -231,7 +246,39 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			v := report.LatestVersion()
 			plan.Version = types.String{Value: v, Null: v == ""}
 		}
-		// TODO(giautm): Add Atlas-Lint to report the issues
+		if plan.DevURL.Value == "" {
+			return
+		}
+		pendingCount, _ := report.Amount(plan.Version.Value)
+		if pendingCount == 0 {
+			return
+		}
+		lint, err := r.client.Lint(ctx, &atlas.LintParams{
+			DirURL: plan.DirURL.Value,
+			DevURL: plan.DevURL.Value,
+			Latest: pendingCount,
+		})
+		if err != nil {
+			resp.Diagnostics.Append(atlas.ErrorDiagnostic(err, "Failed to lint migration"))
+			return
+		}
+		for _, f := range lint.Files {
+			switch {
+			case len(f.Reports) > 0:
+				for _, r := range f.Reports {
+					lintDiags := []string{fmt.Sprintf("File: %s\n%s", f.Name, f.Error)}
+					for _, l := range r.Diagnostics {
+						lintDiags = append(lintDiags, fmt.Sprintf("- %s: %s", l.Code, l.Text))
+					}
+					resp.Diagnostics.AddWarning(
+						r.Text,
+						strings.Join(lintDiags, "\n"),
+					)
+				}
+			case f.Error != "":
+				resp.Diagnostics.AddError("Lint error", fmt.Sprintf("File: %s\n%s", f.Name, f.Error))
+			}
+		}
 	}
 }
 

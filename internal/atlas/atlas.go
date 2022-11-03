@@ -34,6 +34,13 @@ type (
 		URL             string
 		RevisionsSchema string
 	}
+	// LintParams are the parameters for the `migrate lint` command.
+	LintParams struct {
+		DevURL  string
+		DirURL  string
+		Latest  uint
+		GitBase bool
+	}
 )
 
 // NewClient returns a new Atlas client.
@@ -76,6 +83,26 @@ func (c *Client) Apply(ctx context.Context, data *ApplyParams) (*ApplyReport, er
 		args = append(args, fmt.Sprintf("%d", data.Amount))
 	}
 	var report ApplyReport
+	if err := c.runCommand(ctx, args, &report); err != nil {
+		return nil, err
+	}
+	return &report, nil
+}
+
+// Lint runs the `migrate lint` command.
+func (c *Client) Lint(ctx context.Context, data *LintParams) (*SummaryReport, error) {
+	args := []string{
+		"migrate", "lint", "--log", "{{ json . }}",
+		"--dev-url", data.DevURL,
+		"--dir", fmt.Sprintf("file://%s", data.DirURL),
+	}
+	if data.Latest > 0 {
+		args = append(args, "--latest", fmt.Sprintf("%d", data.Latest))
+	}
+	if data.GitBase {
+		args = append(args, "--git-base")
+	}
+	var report SummaryReport
 	if err := c.runCommand(ctx, args, &report); err != nil {
 		return nil, err
 	}

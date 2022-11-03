@@ -17,8 +17,10 @@ func TestAccMigrationResource(t *testing.T) {
 		schema1 = "test_1"
 		schema2 = "test_2"
 		schema3 = "test_3"
+		schema4 = "test_4"
 	)
-	tempSchemas(t, mysqlURL, schema1, schema2, schema3)
+	tempSchemas(t, mysqlURL, schema1, schema2, schema3, schema4)
+	tempSchemas(t, mysqlDevURL, schema1, schema2, schema3, schema4)
 
 	// Jump to one-by-one using the data source
 	config := fmt.Sprintf(`
@@ -161,6 +163,48 @@ func TestAccMigrationResource(t *testing.T) {
 			},
 		},
 	})
+
+	// Lint-Syntax
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				resource "atlas_migration" "testdb" {
+					dir     = "migrations-syntax?format=atlas"
+					version = "20221101163823"
+					url     = "%[1]s"
+					dev_url = "%[2]s"
+				}`,
+					fmt.Sprintf("%s/%s", mysqlURL, schema4),
+					fmt.Sprintf("%s/%s", mysqlDevURL, schema4),
+				),
+				ExpectError: regexp.MustCompile("You have an error in your SQL syntax"),
+			},
+		},
+	})
+
+	// // Lint-Drop
+	// resource.Test(t, resource.TestCase{
+	// 	PreCheck:                 func() { testAccPreCheck(t) },
+	// 	ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+	// 	Steps: []resource.TestStep{
+	// 		{
+	// 			Config: fmt.Sprintf(`
+	// 			resource "atlas_migration" "testdb" {
+	// 				dir     = "migrations-drop?format=atlas"
+	// 				version = "20221101163823"
+	// 				url     = "%[1]s"
+	// 				dev_url = "%[2]s"
+	// 			}`,
+	// 				fmt.Sprintf("%s/%s", mysqlURL, schema3),
+	// 				fmt.Sprintf("%s/%s", mysqlDevURL, schema3),
+	// 			),
+	// 			ExpectError: regexp.MustCompile("destructive changes detected"),
+	// 		},
+	// 	},
+	// })
 }
 
 func TestAccMigrationResource_WithLatestVersion(t *testing.T) {
