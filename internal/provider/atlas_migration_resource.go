@@ -235,18 +235,8 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 		diags.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
 		return
 	}
-	// The amount of migrations to apply
-	// We calculate this by subtracting the version from the latest version
-	var amount = 0
-	if data.Version.IsNull() {
-		amount = len(statusReport.Pending)
-	} else {
-		for idx, v := range statusReport.Pending {
-			if v.Version == data.Version.Value {
-				amount = idx + 1
-				break
-			}
-		}
+	amount, synced := statusReport.Amount(data.Version.Value)
+	if !synced {
 		if amount == 0 {
 			diags.AddAttributeError(
 				path.Root("version"),
@@ -255,13 +245,11 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			)
 			return
 		}
-	}
-	if amount > 0 {
 		report, err := r.client.Apply(ctx, &atlas.ApplyParams{
 			DirURL:          data.DirURL.Value,
 			URL:             data.URL.Value,
 			RevisionsSchema: data.RevisionsSchema.Value,
-			Amount:          uint(amount),
+			Amount:          amount,
 		})
 		if err != nil {
 			diags.Append(atlas.ErrorDiagnostic(err, "Failed to apply migrations"))

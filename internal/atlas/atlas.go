@@ -134,6 +134,31 @@ func (r StatusReport) LatestVersion() string {
 	return ""
 }
 
+// Amount returns the number of migrations need to apply
+// for the given version.
+//
+// The second return value is true if the version is found
+// and the database is up-to-date.
+//
+// If the version is not found, it returns 0 and the second
+// return value is false.
+func (r StatusReport) Amount(version string) (amount uint, ok bool) {
+	if version == "" {
+		amount := uint(len(r.Pending))
+		return amount, amount == 0
+	}
+	if r.Current == version {
+		return amount, true
+	}
+	for idx, v := range r.Pending {
+		if v.Version == version {
+			amount = uint(idx + 1)
+			break
+		}
+	}
+	return amount, false
+}
+
 func execPath(name string) (string, error) {
 	if runtime.GOOS == "windows" {
 		name += ".exe"

@@ -15,7 +15,6 @@ func TestAccMigrationResource(t *testing.T) {
 		schema3 = "test_3"
 	)
 	tempSchemas(t, mysqlURL, schema1, schema2, schema3)
-	tempSchemas(t, mysqlDevURL, schema1, schema2, schema3)
 
 	// Jump to one-by-one using the data source
 	config := fmt.Sprintf(`
@@ -125,6 +124,55 @@ func TestAccMigrationResource(t *testing.T) {
 					url     = "%[1]s"
 				}`, fmt.Sprintf("%s/%s", mysqlURL, schema3)),
 				ExpectError: regexp.MustCompile("checksum mismatch"),
+			},
+		},
+	})
+}
+
+func TestAccMigrationResource_WithLatestVersion(t *testing.T) {
+	schema := "test_1"
+	tempSchemas(t, mysqlURL, schema)
+
+	// Jump to the latest version
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				data "atlas_migration" "hello" {
+					dir = "migrations?format=atlas"
+					url = "%[1]s"
+				}
+				resource "atlas_migration" "testdb" {
+					dir     = "migrations?format=atlas"
+					version = data.atlas_migration.hello.latest
+					url     = "%[1]s"
+				}`, fmt.Sprintf("%s/%s", mysqlURL, schema)),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "20221101165415"),
+					resource.TestCheckNoResourceAttr("atlas_migration.testdb", "status.next"),
+				),
+			},
+		},
+	})
+
+	// Create new resource with the latest version already applied
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				resource "atlas_migration" "testdb" {
+					dir     = "migrations?format=atlas"
+					version = "20221101165415"
+					url     = "%[1]s"
+				}`, fmt.Sprintf("%s/%s", mysqlURL, schema)),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "20221101165415"),
+					resource.TestCheckNoResourceAttr("atlas_migration.testdb", "status.next"),
+				),
 			},
 		},
 	})
