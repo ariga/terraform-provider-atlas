@@ -14,8 +14,8 @@ import (
 )
 
 type (
-	// MigrateClient is a client for the Atlas CLI.
-	MigrateClient struct {
+	// Client is a client for the Atlas CLI.
+	Client struct {
 		path string
 	}
 	// ApplyParams are the parameters for the `migrate apply` command.
@@ -38,7 +38,7 @@ type (
 // NewClient returns a new Atlas client.
 // The client will try to find the Atlas CLI in the current directory,
 // and in the PATH.
-func NewClient(name string) (*MigrateClient, error) {
+func NewClient(name string) (*Client, error) {
 	path, err := execPath(name)
 	if err != nil {
 		return nil, err
@@ -47,12 +47,12 @@ func NewClient(name string) (*MigrateClient, error) {
 }
 
 // NewClientWithPath returns a new Atlas client with the given atlas-cli path.
-func NewClientWithPath(path string) *MigrateClient {
-	return &MigrateClient{path: path}
+func NewClientWithPath(path string) *Client {
+	return &Client{path: path}
 }
 
 // Apply runs the `migrate apply` command.
-func (c *MigrateClient) Apply(ctx context.Context, data *ApplyParams) (*ApplyReport, error) {
+func (c *Client) Apply(ctx context.Context, data *ApplyParams) (*ApplyReport, error) {
 	args := []string{
 		"migrate", "apply", "--log", "{{ json . }}",
 		"--url", data.URL,
@@ -78,7 +78,7 @@ func (c *MigrateClient) Apply(ctx context.Context, data *ApplyParams) (*ApplyRep
 }
 
 // Status runs the `migrate status` command.
-func (c *MigrateClient) Status(ctx context.Context, data *StatusParams) (*StatusReport, error) {
+func (c *Client) Status(ctx context.Context, data *StatusParams) (*StatusReport, error) {
 	args := []string{
 		"migrate", "status", "--log", "{{ json . }}",
 		"--url", data.URL,
@@ -96,7 +96,7 @@ func (c *MigrateClient) Status(ctx context.Context, data *StatusParams) (*Status
 
 // runCommand runs the given command and unmarshals the output into the given
 // interface.
-func (c *MigrateClient) runCommand(ctx context.Context, args []string, report interface{}) error {
+func (c *Client) runCommand(ctx context.Context, args []string, report interface{}) error {
 	cmd := exec.CommandContext(ctx, c.path, args...)
 	cmd.Env = append(cmd.Env, "ATLAS_NO_UPDATE_NOTIFIER=1")
 	output, err := cmd.Output()

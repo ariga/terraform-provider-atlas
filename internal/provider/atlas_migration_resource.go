@@ -17,7 +17,7 @@ import (
 type (
 	// MigrationResource defines the resource implementation.
 	MigrationResource struct {
-		client *atlas.MigrateClient
+		client *atlas.Client
 	}
 	// MigrationResourceModel describes the resource data model.
 	MigrationResourceModel struct {
@@ -63,7 +63,7 @@ func (r *MigrationResource) Configure(ctx context.Context, req resource.Configur
 	if req.ProviderData == nil {
 		return
 	}
-	c, ok := req.ProviderData.(*atlas.MigrateClient)
+	c, ok := req.ProviderData.(*atlas.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",

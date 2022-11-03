@@ -14,7 +14,7 @@ import (
 type (
 	// MigrationDataSource defines the data source implementation.
 	MigrationDataSource struct {
-		client *atlas.MigrateClient
+		client *atlas.Client
 	}
 	// MigrationDataSourceModel describes the data source data model.
 	MigrationDataSourceModel struct {
@@ -56,7 +56,7 @@ func (d *MigrationDataSource) Configure(ctx context.Context, req datasource.Conf
 	if req.ProviderData == nil {
 		return
 	}
-	c, ok := req.ProviderData.(*atlas.MigrateClient)
+	c, ok := req.ProviderData.(*atlas.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",

@@ -27,8 +27,8 @@ import (
 type (
 	// AtlasProvider defines the provider implementation.
 	AtlasProvider struct {
-		// MigrateClient is the client used to interact with the Atlas CLI.
-		client *atlas.MigrateClient
+		// client is the client used to interact with the Atlas CLI.
+		client *atlas.Client
 		// version is set to the provider version on release, "dev" when the
 		// provider is built and ran locally, and "test" when running acceptance
 		// testing.
