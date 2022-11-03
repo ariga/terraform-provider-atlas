@@ -3,7 +3,6 @@ package atlas_test
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"testing"
 
 	_ "ariga.io/atlas/sql/mysql"
@@ -52,9 +51,7 @@ func Test_MigrateApply(t *testing.T) {
 				t.Errorf("migrateApply() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got.Target, tt.wantTarget) {
-				t.Errorf("migrateApply() = %v, want %v", got.Target, tt.wantTarget)
-			}
+			require.EqualValues(t, tt.wantTarget, got.Target)
 		})
 	}
 }
@@ -95,12 +92,8 @@ func Test_MigrateStatus(t *testing.T) {
 				t.Errorf("migrateStatus() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got.Current, tt.wantCurrent) {
-				t.Errorf("migrateStatus() = %v, want %v", got.Current, tt.wantCurrent)
-			}
-			if !reflect.DeepEqual(got.Next, tt.wantNext) {
-				t.Errorf("migrateStatus() = %v, want %v", got.Next, tt.wantNext)
-			}
+			require.Equal(t, tt.wantCurrent, got.Current)
+			require.Equal(t, tt.wantNext, got.Next)
 		})
 	}
 }

@@ -3,7 +3,6 @@ package provider_test
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -14,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -601,9 +601,8 @@ table "orders" {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if gotDiags := provider.PrintPlanSQL(tt.args.ctx, tt.args.data); !reflect.DeepEqual(gotDiags, tt.wantDiags) {
-				t.Errorf("PrintPlanSQL() = %v, want %v", gotDiags, tt.wantDiags)
-			}
+			gotDiags := provider.PrintPlanSQL(tt.args.ctx, tt.args.data)
+			require.Equal(t, tt.wantDiags, gotDiags)
 		})
 	}
 }
