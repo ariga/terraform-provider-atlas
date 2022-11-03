@@ -47,6 +47,7 @@ schema "test" {
 `
 
 func TestAccSchemaDataSource(t *testing.T) {
+	tempSchemas(t, mysqlDevURL, "test")
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,

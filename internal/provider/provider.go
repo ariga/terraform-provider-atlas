@@ -20,12 +20,15 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"golang.org/x/mod/semver"
 
+	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
 	"ariga.io/ariga/terraform-provider-atlas/internal/vercheck"
 )
 
 type (
 	// AtlasProvider defines the provider implementation.
 	AtlasProvider struct {
+		// client is the client used to interact with the Atlas CLI.
+		client *atlas.Client
 		// version is set to the provider version on release, "dev" when the
 		// provider is built and ran locally, and "test" when running acceptance
 		// testing.
@@ -75,12 +78,21 @@ func (p *AtlasProvider) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagn
 
 // Configure implements provider.Provider.
 func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
+	c, err := atlas.NewClient("atlas")
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to create client", err.Error())
+		return
+	}
+	p.client = c
+	resp.DataSourceData = c
+	resp.ResourceData = c
 }
 
 // DataSources implements provider.Provider.
 func (p *AtlasProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewAtlasSchemaDataSource,
+		NewMigrationDataSource,
 	}
 }
 
@@ -88,6 +100,7 @@ func (p *AtlasProvider) DataSources(ctx context.Context) []func() datasource.Dat
 func (p *AtlasProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewAtlasSchemaResource,
+		NewMigrationResource,
 	}
 }
 
