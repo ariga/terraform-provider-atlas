@@ -183,7 +183,7 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if data.Version.Value == "" {
+	if !data.Version.IsUnknown() && data.Version.Value == "" {
 		resp.Diagnostics.AddAttributeWarning(
 			path.Root("version"),
 			"version is unset",
