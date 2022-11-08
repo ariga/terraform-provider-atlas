@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 type (
@@ -38,8 +39,8 @@ type (
 // NewClient returns a new Atlas client.
 // The client will try to find the Atlas CLI in the current directory,
 // and in the PATH.
-func NewClient(name string) (*Client, error) {
-	path, err := execPath(name)
+func NewClient(ctx context.Context, dir, name string) (*Client, error) {
+	path, err := execPath(ctx, dir, name)
 	if err != nil {
 		return nil, err
 	}
@@ -159,18 +160,22 @@ func (r StatusReport) Amount(version string) (amount uint, ok bool) {
 	return amount, false
 }
 
-func execPath(name string) (string, error) {
+func execPath(ctx context.Context, dir, name string) (string, error) {
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	p := path.Join(wd, name)
-	if _, err = os.Stat(p); os.IsExist(err) {
+	tflog.Debug(ctx, "atlas: looking for the Atlas CLI in the current directory", map[string]interface{}{
+		"dir":  dir,
+		"path": path.Join(dir, name),
+		"name": name,
+	})
+	p := path.Join(dir, name)
+	if _, err := os.Stat(p); os.IsExist(err) {
 		return p, nil
 	}
+	tflog.Debug(ctx, "atlas: looking for the Atlas CLI in the $PATH", map[string]interface{}{
+		"name": name,
+	})
 	// If the binary is not in the current directory,
 	// try to find it in the PATH.
 	return exec.LookPath(name)
