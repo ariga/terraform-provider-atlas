@@ -3,8 +3,10 @@ package provider
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path"
+	"runtime"
 
 	_ "ariga.io/atlas/sql/mysql"
 	_ "ariga.io/atlas/sql/postgres"
@@ -29,6 +31,8 @@ type (
 	AtlasProvider struct {
 		// client is the client used to interact with the Atlas CLI.
 		client *atlas.Client
+		// dir is the directory where the provider is installed.
+		dir string
 		// version is set to the provider version on release, "dev" when the
 		// provider is built and ran locally, and "test" when running acceptance
 		// testing.
@@ -53,9 +57,16 @@ const (
 )
 
 // New returns a new provider.
-func New(version, commit string) func() provider.Provider {
+func New(address, version, commit string) func() provider.Provider {
+	wd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	providersDir := path.Join(wd, ".terraform", "providers")
+	platform := fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)
 	return func() provider.Provider {
 		return &AtlasProvider{
+			dir:     path.Join(providersDir, address, version, platform),
 			version: version,
 		}
 	}
@@ -78,7 +89,7 @@ func (p *AtlasProvider) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagn
 
 // Configure implements provider.Provider.
 func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	c, err := atlas.NewClient("atlas")
+	c, err := atlas.NewClient(ctx, p.dir, "atlas")
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create client", err.Error())
 		return
@@ -106,7 +117,7 @@ func (p *AtlasProvider) Resources(ctx context.Context) []func() resource.Resourc
 
 // ConfigValidators returns a list of functions which will all be performed during validation.
 func (p *AtlasProvider) ValidateConfig(ctx context.Context, req provider.ValidateConfigRequest, resp *provider.ValidateConfigResponse) {
-	msg := checkForUpdate(ctx, p.version)()
+	msg := checkForUpdate(ctx, p.dir, p.version)()
 	if msg != "" {
 		resp.Diagnostics.AddWarning(
 			"Update Available",
@@ -118,7 +129,7 @@ func (p *AtlasProvider) ValidateConfig(ctx context.Context, req provider.Validat
 func noText() string { return "" }
 
 // checkForUpdate checks for version updates and security advisories for Atlas.
-func checkForUpdate(ctx context.Context, version string) func() string {
+func checkForUpdate(ctx context.Context, dir, version string) func() string {
 	done := make(chan struct{})
 	// Users may skip update checking behavior.
 	if v := os.Getenv(envNoUpdate); v != "" {
@@ -128,14 +139,10 @@ func checkForUpdate(ctx context.Context, version string) func() string {
 	if !semver.IsValid(version) {
 		return noText
 	}
-	curDir, err := os.Getwd()
-	if err != nil {
-		return noText
-	}
 	var message string
 	go func() {
 		defer close(done)
-		vc := vercheck.New(vercheckURL, path.Join(curDir, versionFile))
+		vc := vercheck.New(vercheckURL, path.Join(dir, versionFile))
 		payload, err := vc.Check(version)
 		if err != nil {
 			return

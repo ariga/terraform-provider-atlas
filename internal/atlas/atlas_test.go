@@ -3,6 +3,7 @@ package atlas_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	_ "ariga.io/atlas/sql/mysql"
@@ -42,7 +43,9 @@ func Test_MigrateApply(t *testing.T) {
 			wantTarget: "20221101165415",
 		},
 	}
-	c, err := atlas.NewClient("atlas")
+	wd, err := os.Getwd()
+	r.NoError(err)
+	c, err := atlas.NewClient(context.Background(), wd, "atlas")
 	r.NoError(err)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -83,7 +86,9 @@ func Test_MigrateStatus(t *testing.T) {
 			wantNext:    "20221101163823",
 		},
 	}
-	c, err := atlas.NewClient("atlas")
+	wd, err := os.Getwd()
+	r.NoError(err)
+	c, err := atlas.NewClient(context.Background(), wd, "atlas")
 	r.NoError(err)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
