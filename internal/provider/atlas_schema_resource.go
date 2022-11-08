@@ -199,7 +199,7 @@ func (r AtlasSchemaResource) ValidateConfig(ctx context.Context, req resource.Va
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if data.DevURL.Value == "" {
+	if !data.DevURL.IsUnknown() && data.DevURL.Value == "" {
 		resp.Diagnostics.AddAttributeWarning(
 			path.Root("dev_db_url"),
 			"dev_db_url is unset",
