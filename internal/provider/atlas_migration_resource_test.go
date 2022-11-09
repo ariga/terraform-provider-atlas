@@ -1,12 +1,15 @@
 package provider_test
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAccMigrationResource(t *testing.T) {
@@ -203,6 +206,47 @@ func TestAccMigrationResource_WithLatestVersion(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "20221101165415"),
 					resource.TestCheckNoResourceAttr("atlas_migration.testdb", "status.next"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccMigrationResource_NoLongerExists(t *testing.T) {
+	schema := "test_1"
+	c := tempSchemas(t, mysqlURL, schema)
+	config := fmt.Sprintf(`
+	data "atlas_migration" "hello" {
+		dir = "migrations?format=atlas"
+		url = "%s/%s"
+	}
+	resource "atlas_migration" "testdb" {
+		dir     = "migrations?format=atlas"
+		version = data.atlas_migration.hello.latest
+		url     = data.atlas_migration.hello.url
+	}`, mysqlURL, schema)
+
+	// Jump to the latest version
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:             config,
+				ExpectNonEmptyPlan: true,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "20221101165415"),
+					resource.TestCheckNoResourceAttr("atlas_migration.testdb", "status.next"),
+					func(s *terraform.State) (err error) {
+						// Drop the schema to simulate the schema no longer exists
+						// in the database
+						ctx := context.Background()
+						_, err = c.ExecContext(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", schema))
+						require.NoError(t, err)
+						_, err = c.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", schema))
+						require.NoError(t, err)
+						return
+					},
 				),
 			},
 		},
