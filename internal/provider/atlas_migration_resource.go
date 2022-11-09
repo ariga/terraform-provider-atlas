@@ -148,12 +148,19 @@ func (r *MigrationResource) Read(ctx context.Context, req resource.ReadRequest, 
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	err := r.buildStatus(ctx, data)
+	status, err := r.buildStatus(ctx, data)
 	if err != nil {
 		resp.Diagnostics.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
 		return
 	}
+	null := types.String{Null: true}
+	if !data.Status.Attrs["current"].Equal(null) && status.Attrs["current"].Equal(null) {
+		// The resource has been deleted
+		resp.State.RemoveResource(ctx)
+		return
+	}
 	data.ID = dirToID(data.DirURL.Value)
+	data.Status = status
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -263,21 +270,21 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			return
 		}
 	}
-	if err = r.buildStatus(ctx, data); err != nil {
+	if data.Status, err = r.buildStatus(ctx, data); err != nil {
 		diags.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
 		return
 	}
 	return
 }
 
-func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationResourceModel) error {
+func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationResourceModel) (types.Object, error) {
 	report, err := r.client.Status(ctx, &atlas.StatusParams{
 		DirURL:          data.DirURL.Value,
 		URL:             data.URL.Value,
 		RevisionsSchema: data.RevisionsSchema.Value,
 	})
 	if err != nil {
-		return err
+		return types.Object{}, err
 	}
 	var (
 		current types.String
@@ -294,7 +301,7 @@ func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationReso
 		next = types.String{Value: report.Next}
 	}
 	latestVersion := report.LatestVersion()
-	data.Status = types.Object{
+	return types.Object{
 		Attrs: map[string]attr.Value{
 			"status":  types.String{Value: report.Status},
 			"current": current,
@@ -302,8 +309,7 @@ func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationReso
 			"latest":  types.String{Value: latestVersion, Null: latestVersion == ""},
 		},
 		AttrTypes: statusObjectAttrs,
-	}
-	return nil
+	}, nil
 }
 
 func dirToID(dir string) types.String {
