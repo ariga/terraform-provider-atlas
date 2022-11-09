@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -169,19 +168,20 @@ func (r StatusReport) Amount(version string) (amount uint, ok bool) {
 	return amount, false
 }
 
-func execPath(ctx context.Context, dir, name string) (string, error) {
+func execPath(ctx context.Context, dir, name string) (file string, err error) {
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
+	file = filepath.Join(dir, name)
+	if _, err = os.Stat(file); err == nil {
+		return file, nil
+	}
 	tflog.Debug(ctx, "atlas: looking for the Atlas CLI in the current directory", map[string]interface{}{
 		"dir":  dir,
-		"path": path.Join(dir, name),
+		"file": file,
 		"name": name,
+		"err":  err.Error(),
 	})
-	p := path.Join(dir, name)
-	if _, err := os.Stat(p); os.IsExist(err) {
-		return p, nil
-	}
 	tflog.Debug(ctx, "atlas: looking for the Atlas CLI in the $PATH", map[string]interface{}{
 		"name": name,
 	})
