@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -173,7 +172,7 @@ func execPath(ctx context.Context, dir, name string) (file string, err error) {
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
-	file = path.Join(dir, name)
+	file = filepath.Join(dir, name)
 	if _, err = os.Stat(file); err == nil {
 		return file, nil
 	}
