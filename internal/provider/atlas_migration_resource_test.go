@@ -17,8 +17,10 @@ func TestAccMigrationResource(t *testing.T) {
 		schema1 = "test_1"
 		schema2 = "test_2"
 		schema3 = "test_3"
+		schema4 = "test_4"
 	)
-	tempSchemas(t, mysqlURL, schema1, schema2, schema3)
+	tempSchemas(t, mysqlURL, schema1, schema2, schema3, schema4)
+	tempSchemas(t, mysqlDevURL, schema1, schema2, schema3, schema4)
 
 	// Jump to one-by-one using the data source
 	config := fmt.Sprintf(`
@@ -158,6 +160,27 @@ func TestAccMigrationResource(t *testing.T) {
 					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "20221101165415"),
 					resource.TestCheckNoResourceAttr("atlas_migration.testdb", "status.next"),
 				),
+			},
+		},
+	})
+
+	// Lint-Syntax
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				resource "atlas_migration" "testdb" {
+					dir     = "migrations-syntax?format=atlas"
+					version = "20221101163823"
+					url     = "%[1]s"
+					dev_url = "%[2]s"
+				}`,
+					fmt.Sprintf("%s/%s", mysqlURL, schema4),
+					fmt.Sprintf("%s/%s", mysqlDevURL, schema4),
+				),
+				ExpectError: regexp.MustCompile("You have an error in your SQL syntax"),
 			},
 		},
 	})

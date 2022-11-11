@@ -35,6 +35,7 @@ resource "atlas_migration" "hello" {
 
 ### Optional
 
+- `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `revisions_schema` (String) The name of the schema the revisions table resides in
 - `version` (String) The version of the migration to apply, if not specified the latest version will be applied
 

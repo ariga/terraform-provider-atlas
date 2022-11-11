@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -26,13 +27,19 @@ type (
 		RevisionsSchema string
 		BaselineVersion string
 		TxMode          string
-		Amount          uint
+		Amount          uint64
 	}
 	// StatusParams are the parameters for the `migrate status` command.
 	StatusParams struct {
 		DirURL          string
 		URL             string
 		RevisionsSchema string
+	}
+	// LintParams are the parameters for the `migrate lint` command.
+	LintParams struct {
+		DevURL string
+		DirURL string
+		Latest uint64
 	}
 )
 
@@ -73,9 +80,26 @@ func (c *Client) Apply(ctx context.Context, data *ApplyParams) (*ApplyReport, er
 		args = append(args, "--tx-mode", data.TxMode)
 	}
 	if data.Amount > 0 {
-		args = append(args, fmt.Sprintf("%d", data.Amount))
+		args = append(args, strconv.FormatUint(data.Amount, 10))
 	}
 	var report ApplyReport
+	if err := c.runCommand(ctx, args, &report); err != nil {
+		return nil, err
+	}
+	return &report, nil
+}
+
+// Lint runs the `migrate lint` command.
+func (c *Client) Lint(ctx context.Context, data *LintParams) (*SummaryReport, error) {
+	args := []string{
+		"migrate", "lint", "--log", "{{ json . }}",
+		"--dev-url", data.DevURL,
+		"--dir", fmt.Sprintf("file://%s", data.DirURL),
+	}
+	if data.Latest > 0 {
+		args = append(args, "--latest", strconv.FormatUint(data.Latest, 10))
+	}
+	var report SummaryReport
 	if err := c.runCommand(ctx, args, &report); err != nil {
 		return nil, err
 	}
@@ -151,9 +175,9 @@ func (r StatusReport) LatestVersion() string {
 //
 // If the version is not found, it returns 0 and the second
 // return value is false.
-func (r StatusReport) Amount(version string) (amount uint, ok bool) {
+func (r StatusReport) Amount(version string) (amount uint64, ok bool) {
 	if version == "" {
-		amount := uint(len(r.Pending))
+		amount := uint64(len(r.Pending))
 		return amount, amount == 0
 	}
 	if r.Current == version {
@@ -161,7 +185,7 @@ func (r StatusReport) Amount(version string) (amount uint, ok bool) {
 	}
 	for idx, v := range r.Pending {
 		if v.Version == version {
-			amount = uint(idx + 1)
+			amount = uint64(idx + 1)
 			break
 		}
 	}

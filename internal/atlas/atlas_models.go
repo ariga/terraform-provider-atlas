@@ -2,6 +2,8 @@ package atlas
 
 import (
 	"time"
+
+	"ariga.io/atlas/sql/sqlcheck"
 )
 
 type (
@@ -64,5 +66,34 @@ type (
 		Status    string      `json:"Status,omitempty"`    // Status of migration (OK, PENDING)
 		Error     string      `json:"Error,omitempty"`     // Last Error that occurred
 		SQL       string      `json:"SQL,omitempty"`       // SQL that caused the last Error
+	}
+
+	// FileReport contains a summary of the analysis of a single file.
+	FileReport struct {
+		Name    string            `json:"Name,omitempty"`    // Name of the file.
+		Text    string            `json:"Text,omitempty"`    // Contents of the file.
+		Reports []sqlcheck.Report `json:"Reports,omitempty"` // List of reports.
+		Error   string            `json:"Error,omitempty"`   // File specific error.
+	}
+
+	// A SummaryReport contains a summary of the analysis of all files.
+	// It is used as an input to templates to report the CI results.
+	SummaryReport struct {
+		// Steps of the analysis. Added in verbose mode.
+		Steps []struct {
+			Name   string `json:"Name,omitempty"`   // Step name.
+			Text   string `json:"Text,omitempty"`   // Step description.
+			Error  string `json:"Error,omitempty"`  // Error that cause the execution to halt.
+			Result any    `json:"Result,omitempty"` // Result of the step. For example, a diagnostic.
+		}
+
+		// Schema versions found by the runner.
+		Schema struct {
+			Current string `json:"Current,omitempty"` // Current schema.
+			Desired string `json:"Desired,omitempty"` // Desired schema.
+		}
+
+		// Files reports. Non-empty in case there are findings.
+		Files []*FileReport `json:"Files,omitempty"`
 	}
 )
