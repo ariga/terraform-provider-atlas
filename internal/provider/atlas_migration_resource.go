@@ -276,7 +276,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 					)
 				}
 			case f.Error != "":
-				resp.Diagnostics.AddError("Lint error", fmt.Sprintf("File: %s\n%s", f.Name, f.Error))
+				resp.Diagnostics.AddWarning("Lint error", fmt.Sprintf("File: %s\n%s", f.Name, f.Error))
 			}
 		}
 	}
