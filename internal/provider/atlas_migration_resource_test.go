@@ -184,27 +184,6 @@ func TestAccMigrationResource(t *testing.T) {
 			},
 		},
 	})
-
-	// // Lint-Drop
-	// resource.Test(t, resource.TestCase{
-	// 	PreCheck:                 func() { testAccPreCheck(t) },
-	// 	ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-	// 	Steps: []resource.TestStep{
-	// 		{
-	// 			Config: fmt.Sprintf(`
-	// 			resource "atlas_migration" "testdb" {
-	// 				dir     = "migrations-drop?format=atlas"
-	// 				version = "20221101163823"
-	// 				url     = "%[1]s"
-	// 				dev_url = "%[2]s"
-	// 			}`,
-	// 				fmt.Sprintf("%s/%s", mysqlURL, schema3),
-	// 				fmt.Sprintf("%s/%s", mysqlDevURL, schema3),
-	// 			),
-	// 			ExpectError: regexp.MustCompile("destructive changes detected"),
-	// 		},
-	// 	},
-	// })
 }
 
 func TestAccMigrationResource_WithLatestVersion(t *testing.T) {
