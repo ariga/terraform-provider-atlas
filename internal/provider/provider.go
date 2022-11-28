@@ -14,12 +14,14 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/mitchellh/go-homedir"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"golang.org/x/mod/semver"
 
 	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
@@ -53,7 +55,7 @@ const (
 	// envNoUpdate when enabled it cancels checking for update
 	envNoUpdate = "ATLAS_NO_UPDATE_NOTIFIER"
 	vercheckURL = "https://vercheck.ariga.io"
-	versionFile = "release.json"
+	versionFile = "~/.atlas/terraform-provider-atlas-release.json"
 )
 
 // New returns a new provider.
@@ -117,7 +119,16 @@ func (p *AtlasProvider) Resources(ctx context.Context) []func() resource.Resourc
 
 // ConfigValidators returns a list of functions which will all be performed during validation.
 func (p *AtlasProvider) ValidateConfig(ctx context.Context, req provider.ValidateConfigRequest, resp *provider.ValidateConfigResponse) {
-	msg := checkForUpdate(ctx, p.dir, p.version)()
+	if p.version == "dev" || p.version == "test" {
+		return
+	}
+	msg, err := checkForUpdate(ctx, fmt.Sprintf("v%s", p.version))
+	if err != nil {
+		tflog.Error(ctx, "failed to check for update", map[string]interface{}{
+			"error": err,
+		})
+		return
+	}
 	if msg != "" {
 		resp.Diagnostics.AddWarning(
 			"Update Available",
@@ -126,38 +137,28 @@ func (p *AtlasProvider) ValidateConfig(ctx context.Context, req provider.Validat
 	}
 }
 
-func noText() string { return "" }
-
 // checkForUpdate checks for version updates and security advisories for Atlas.
-func checkForUpdate(ctx context.Context, dir, version string) func() string {
-	done := make(chan struct{})
+func checkForUpdate(ctx context.Context, version string) (string, error) {
 	// Users may skip update checking behavior.
 	if v := os.Getenv(envNoUpdate); v != "" {
-		return noText
+		return "", nil
 	}
 	// Skip if the current binary version isn't set (dev mode).
 	if !semver.IsValid(version) {
-		return noText
+		return "", nil
 	}
-	var message string
-	go func() {
-		defer close(done)
-		vc := vercheck.New(vercheckURL, path.Join(dir, versionFile))
-		payload, err := vc.Check(version)
-		if err != nil {
-			return
-		}
-		var b bytes.Buffer
-		if err := vercheck.Notify.Execute(&b, payload); err != nil {
-			return
-		}
-		message = b.String()
-	}()
-	return func() string {
-		select {
-		case <-done:
-		case <-ctx.Done():
-		}
-		return message
+	path, err := homedir.Expand(versionFile)
+	if err != nil {
+		return "", err
 	}
+	vc := vercheck.New(vercheckURL, path)
+	payload, err := vc.Check(version)
+	if err != nil {
+		return "", err
+	}
+	var b bytes.Buffer
+	if err := vercheck.Notify.Execute(&b, payload); err != nil {
+		return "", err
+	}
+	return b.String(), nil
 }
