@@ -1,5 +1,5 @@
-ariga.io/atlas v0.9.1-0.20230226111101-46e94a3b58ad h1:UQqoJNw+MG+pMyoRcCBYh/azlDWResB2XaM5zEoA944=
-ariga.io/atlas v0.9.1-0.20230226111101-46e94a3b58ad/go.mod h1:T230JFcENj4ZZzMkZrXFDSkv+2kXkUgpJ5FQQ5hMcKU=
+ariga.io/atlas v0.9.1 h1:EpoPMnwsQG0vn9c0sYExpwSYtr7bvuSUXzQclU2pMjc=
+ariga.io/atlas v0.9.1/go.mod h1:T230JFcENj4ZZzMkZrXFDSkv+2kXkUgpJ5FQQ5hMcKU=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.34.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=

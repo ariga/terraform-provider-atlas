@@ -3,7 +3,7 @@ module ariga.io/ariga/terraform-provider-atlas
 go 1.19
 
 require (
-	ariga.io/atlas v0.9.1-0.20230226111101-46e94a3b58ad
+	ariga.io/atlas v0.9.1
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/hashicorp/hcl/v2 v2.14.0
 	github.com/hashicorp/terraform-plugin-docs v0.7.0
