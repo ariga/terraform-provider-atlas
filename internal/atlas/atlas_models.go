@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"ariga.io/atlas/sql/sqlcheck"
+	"ariga.io/atlas/sql/sqlclient"
 )
 
 type (
@@ -95,5 +96,30 @@ type (
 
 		// Files reports. Non-empty in case there are findings.
 		Files []*FileReport `json:"Files,omitempty"`
+	}
+	// StmtError groups a statement with its execution error.
+	StmtError struct {
+		Stmt string `json:"Stmt,omitempty"` // SQL statement that failed.
+		Text string `json:"Text,omitempty"` // Error message as returned by the database.
+	}
+	// Env holds the environment information.
+	Env struct {
+		Driver string         `json:"Driver,omitempty"` // Driver name.
+		URL    *sqlclient.URL `json:"URL,omitempty"`    // URL to dev database.
+		Dir    string         `json:"Dir,omitempty"`    // Path to migration directory.
+	}
+	// Changes represents a list of changes that are pending or applied.
+	Changes struct {
+		Applied []string   `json:"Applied,omitempty"` // SQL changes applied with success
+		Pending []string   `json:"Pending,omitempty"` // SQL changes that were not applied
+		Error   *StmtError `json:"Error,omitempty"`   // Error that occurred during applying
+	}
+	// SchemaApply contains a summary of a 'schema apply' execution on a database.
+	SchemaApply struct {
+		Env
+		Changes Changes `json:"Changes,omitempty"`
+		// General error that occurred during execution.
+		// e.g., when committing or rolling back a transaction.
+		Error string `json:"Error,omitempty"`
 	}
 )
