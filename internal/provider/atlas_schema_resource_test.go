@@ -3,11 +3,11 @@ package provider_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
 
-	"ariga.io/ariga/terraform-provider-atlas/internal/provider"
 	"ariga.io/atlas/sql/sqlclient"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -15,6 +15,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 	"github.com/stretchr/testify/require"
+
+	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
+	"ariga.io/ariga/terraform-provider-atlas/internal/provider"
 )
 
 const (
@@ -235,10 +238,10 @@ func TestEnsureSyncOnFirstRun(t *testing.T) {
 	hcl := fmt.Sprintf(`
 	resource "atlas_schema" "new_schema" {
 	  hcl = <<-EOT
-		schema "test1" {
-			charset = "utf8mb4"
-			collate = "utf8mb4_0900_ai_ci"
-		}
+schema "test1" {
+  charset = "utf8mb4"
+  collate = "utf8mb4_0900_ai_ci"
+}
 		EOT
 	  url = "%s"
 	}
@@ -556,6 +559,10 @@ func drop(t *testing.T, c *sqlclient.Client, schemas ...string) {
 }
 
 func TestPrintPlanSQL(t *testing.T) {
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	c, err := atlas.NewClient(context.Background(), wd, "atlas")
+	require.NoError(t, err)
 	type args struct {
 		ctx  context.Context
 		data *provider.AtlasSchemaResourceModel
@@ -597,9 +604,7 @@ table "orders" {
 						"The following SQL statements will be executed:",
 						"",
 						"",
-						`-- add new schema named "test"`,
 						"CREATE DATABASE `test`",
-						`-- create "orders" table`,
 						"CREATE TABLE `test`.`orders` (`id` int NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`)) CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci",
 						"",
 					}, "\n")),
@@ -608,7 +613,7 @@ table "orders" {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotDiags := provider.PrintPlanSQL(tt.args.ctx, tt.args.data)
+			gotDiags := provider.PrintPlanSQL(tt.args.ctx, c, tt.args.data)
 			require.Equal(t, tt.wantDiags, gotDiags)
 		})
 	}

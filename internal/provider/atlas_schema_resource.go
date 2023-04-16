@@ -6,20 +6,22 @@ import (
 	"net/url"
 	"strings"
 
-	"ariga.io/atlas/sql/schema"
-	"ariga.io/atlas/sql/sqlclient"
-	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
+
+	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
 )
 
 type (
 	// AtlasSchemaResource defines the resource implementation.
-	AtlasSchemaResource struct{}
+	AtlasSchemaResource struct {
+		client *atlas.Client
+	}
 	// AtlasSchemaResourceModel describes the resource data model.
 	AtlasSchemaResourceModel struct {
 		ID      types.String `tfsdk:"id"`
@@ -34,6 +36,7 @@ type (
 var (
 	_ resource.Resource                   = &AtlasSchemaResource{}
 	_ resource.ResourceWithModifyPlan     = &AtlasSchemaResource{}
+	_ resource.ResourceWithConfigure      = &AtlasSchemaResource{}
 	_ resource.ResourceWithValidateConfig = &AtlasSchemaResource{}
 )
 
@@ -49,6 +52,22 @@ func NewAtlasSchemaResource() resource.Resource {
 // Metadata implements resource.Resource.
 func (r *AtlasSchemaResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_schema"
+}
+
+func (r *AtlasSchemaResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	// Prevent panic if the provider has not been configured.
+	if req.ProviderData == nil {
+		return
+	}
+	c, ok := req.ProviderData.(*atlas.Client)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *atlas.MigrateClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+		return
+	}
+	r.client = c
 }
 
 // GetSchema implements resource.Resource.
@@ -128,26 +147,24 @@ func (r *AtlasSchemaResource) Read(ctx context.Context, req resource.ReadRequest
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	realm, cli, diags := atlasInspect(ctx, data)
-	resp.Diagnostics.Append(diags...)
+	var exclude []string
+	resp.Diagnostics.Append(data.GetExclude(ctx, &exclude)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	hcl, err := cli.MarshalSpec(realm)
+	hcl, err := r.client.SchemaInspect(ctx, &atlas.SchemaInspectParams{
+		URL:     data.URL.Value,
+		Exclude: exclude,
+		Format:  "hcl",
+	})
 	if err != nil {
-		cli.Close()
-		resp.Diagnostics.AddError("Marshal Error",
-			fmt.Sprintf("Unable to marshal, got error: %s", err),
+		resp.Diagnostics.AddError("Inspect Error",
+			fmt.Sprintf("Unable to inspect, got error: %s", err),
 		)
 		return
 	}
-
-	url := data.URL.Value
-	data.ID = types.String{Value: urlToID(url)}
-	data.URL = types.String{Value: url}
-	data.HCL = types.String{Value: string(hcl)}
+	data.HCL = types.String{Value: hcl}
+	data.ID = types.String{Value: urlToID(data.URL.Value)}
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -221,6 +238,9 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		return
 	}
 	if state == nil || state.HCL.Value == "" {
+		if plan == nil {
+			return
+		}
 		if plan.URL.IsUnknown() {
 			resp.RequiresReplace = append(resp.RequiresReplace, path.Root("url"))
 			return
@@ -228,7 +248,7 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		// New terraform resource will be create,
 		// do the first run check to ensure the user doesn't
 		// drops schema resources by accident
-		resp.Diagnostics.Append(firstRunCheck(ctx, plan)...)
+		resp.Diagnostics.Append(r.firstRunCheck(ctx, plan)...)
 	}
 	if plan == nil {
 		// This is a delete operation
@@ -242,54 +262,46 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		// the HCL to an empty string.
 		plan.HCL = types.String{Null: true}
 	}
-	resp.Diagnostics.Append(PrintPlanSQL(ctx, plan)...)
+	resp.Diagnostics.Append(PrintPlanSQL(ctx, r.client, plan)...)
 }
 
-func PrintPlanSQL(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	createDesired := func(ctx context.Context, cli *sqlclient.Client) (desired *schema.Realm, err error) {
-		desired = &schema.Realm{}
-		if data.HCL.Value == "" {
-			return
-		}
-		p := hclparse.NewParser()
-		if _, err := p.ParseHCL([]byte(data.HCL.Value), ""); err != nil {
-			return nil, err
-		}
-		if err = cli.Evaluator.Eval(p, desired, nil); err != nil {
-			return
-		}
-		if data.DevURL.Value != "" {
-			dev, err := sqlclient.Open(ctx, data.DevURL.Value)
-			if err != nil {
-				return nil, err
-			}
-			defer dev.Close()
-			desired, err = dev.Driver.(schema.Normalizer).NormalizeRealm(ctx, desired)
-			if err != nil {
-				return nil, err
-			}
-		}
+func PrintPlanSQL(ctx context.Context, c *atlas.Client, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+	to, cleanup, err := data.handleHCL()
+	if err != nil {
+		diags.AddError("HCL Error",
+			fmt.Sprintf("Unable to parse HCL, got error: %s", err),
+		)
 		return
 	}
-	changes, cli, diags := atlasChanges(ctx, data, createDesired)
+	defer func() {
+		if err := cleanup(); err != nil {
+			tflog.Debug(ctx, "failed to remove HCL file", map[string]interface{}{
+				"error": err,
+			})
+		}
+	}()
+	var exclude []string
+	diags.Append(data.GetExclude(ctx, &exclude)...)
 	if diags.HasError() {
 		return
 	}
-	if len(changes) > 0 {
-		plan, err := cli.PlanChanges(ctx, "", changes)
-		if err != nil {
-			diags.AddError("Plan Error",
-				fmt.Sprintf("Unable to plan changes, got error: %s", err),
-			)
-			return
-		}
+	result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
+		DevURL:  data.DevURL.Value,
+		DryRun:  true,
+		Exclude: exclude,
+		To:      to,
+		URL:     data.URL.Value,
+	})
+	if err != nil {
+		diags.AddError("HCL Error",
+			fmt.Sprintf("Unable to parse HCL, got error: %s", err),
+		)
+		return
+	}
+	if len(result.Changes.Pending) > 0 {
 		buf := &strings.Builder{}
-		for _, stmt := range plan.Changes {
-			if stmt.Comment == "" {
-				fmt.Fprintln(buf, stmt.Cmd)
-			} else {
-				fmt.Fprintf(buf, "-- %s\n%s\n", stmt.Comment, stmt.Cmd)
-			}
+		for _, stmt := range result.Changes.Pending {
+			fmt.Fprintln(buf, stmt)
 		}
 		diags.AddWarning("Atlas Plan",
 			fmt.Sprintf("The following SQL statements will be executed:\n\n\n%s", buf.String()),
@@ -299,83 +311,73 @@ func PrintPlanSQL(ctx context.Context, data *AtlasSchemaResourceModel) (diags di
 }
 
 func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	createDesired := func(ctx context.Context, cli *sqlclient.Client) (desired *schema.Realm, err error) {
-		desired = &schema.Realm{}
-		if data.HCL.Value == "" {
-			return
-		}
-		p := hclparse.NewParser()
-		if _, err := p.ParseHCL([]byte(data.HCL.Value), ""); err != nil {
-			return nil, err
-		}
-		if err = cli.Evaluator.Eval(p, desired, nil); err != nil {
-			return
-		}
-		if data.DevURL.Value != "" {
-			dev, err := sqlclient.Open(ctx, data.DevURL.Value)
-			if err != nil {
-				return nil, err
-			}
-			defer dev.Close()
-			desired, err = dev.Driver.(schema.Normalizer).NormalizeRealm(ctx, desired)
-			if err != nil {
-				return nil, err
-			}
-		}
-		return
-	}
-	changes, cli, diags := atlasChanges(ctx, data, createDesired)
+	var exclude []string
+	diags.Append(data.GetExclude(ctx, &exclude)...)
 	if diags.HasError() {
 		return
 	}
-	defer cli.Close()
-	if err := cli.ApplyChanges(ctx, changes); err != nil {
+	to, cleanup, err := data.handleHCL()
+	if err != nil {
+		diags.AddError("Apply Error", fmt.Sprintf("Failed to create HCL file, got error: %s", err))
+		return
+	}
+	defer func() {
+		if err := cleanup(); err != nil {
+			tflog.Debug(ctx, "failed to remove HCL file", map[string]interface{}{
+				"error": err,
+			})
+		}
+	}()
+	_, err = r.client.SchemaApply(ctx, &atlas.SchemaApplyParams{
+		DevURL:  data.DevURL.Value,
+		Exclude: exclude,
+		To:      to,
+		URL:     data.URL.Value,
+	})
+	if err != nil {
 		diags.AddError("Apply Error", fmt.Sprintf("Unable to apply changes, got error: %s", err))
 		return
 	}
 	return diags
 }
 
-func firstRunCheck(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	createDesired := func(ctx context.Context, cli *sqlclient.Client) (desired *schema.Realm, err error) {
-		desired = &schema.Realm{}
-		p := hclparse.NewParser()
-		if _, err := p.ParseHCL([]byte(data.HCL.Value), ""); err != nil {
-			return nil, err
-		}
-		if err = cli.Evaluator.Eval(p, desired, nil); err != nil {
-			return
-		}
+func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+	to, cleanup, err := data.handleHCL()
+	if err != nil {
+		diags.AddError("HCL Error",
+			fmt.Sprintf("Unable to parse HCL, got error: %s", err),
+		)
 		return
 	}
-	changes, cli, diags := atlasChanges(ctx, data, createDesired)
+	defer func() {
+		if err := cleanup(); err != nil {
+			tflog.Debug(ctx, "failed to remove HCL file", map[string]interface{}{
+				"error": err,
+			})
+		}
+	}()
+	var exclude []string
+	diags.Append(data.GetExclude(ctx, &exclude)...)
 	if diags.HasError() {
 		return
 	}
-	defer cli.Close()
-
+	result, err := r.client.SchemaApply(ctx, &atlas.SchemaApplyParams{
+		DevURL:  data.DevURL.Value,
+		DryRun:  true,
+		Exclude: exclude,
+		To:      to,
+		URL:     data.URL.Value,
+	})
+	if err != nil {
+		diags.AddError("HCL Error",
+			fmt.Sprintf("Unable to parse HCL, got error: %s", err),
+		)
+		return
+	}
 	var causes []string
-	for _, c := range changes {
-		switch c := c.(type) {
-		case *schema.DropSchema:
-			causes = append(causes, fmt.Sprintf("DROP SCHEMA %q", c.S.Name))
-		case *schema.DropTable:
-			causes = append(causes, fmt.Sprintf("DROP TABLE %q", c.T.Name))
-		case *schema.ModifyTable:
-			for _, c1 := range c.Changes {
-				switch t := c1.(type) {
-				case *schema.DropColumn:
-					causes = append(causes, fmt.Sprintf("DROP COLUMN %q.%q", c.T.Name, t.C.Name))
-				case *schema.DropIndex:
-					causes = append(causes, fmt.Sprintf("DROP INDEX %q.%q", c.T.Name, t.I.Name))
-				case *schema.DropForeignKey:
-					causes = append(causes, fmt.Sprintf("DROP FOREIGN KEY %q.%q", c.T.Name, t.F.Symbol))
-				case *schema.DropAttr:
-					causes = append(causes, fmt.Sprintf("DROP ATTRIBUTE %q.%T", c.T.Name, t.A))
-				case *schema.DropCheck:
-					causes = append(causes, fmt.Sprintf("DROP CHECK CONSTRAINT %q.%q", c.T.Name, t.C.Name))
-				}
-			}
+	for _, c := range result.Changes.Pending {
+		if strings.HasPrefix(c, "DROP ") {
+			causes = append(causes, c)
 		}
 	}
 	if len(causes) > 0 {
@@ -390,69 +392,14 @@ https://atlasgo.io/terraform-provider#working-with-an-existing-database`, string
 	return
 }
 
-func atlasInspect(ctx context.Context, data *AtlasSchemaResourceModel) (_ *schema.Realm, cli *sqlclient.Client, diags diag.Diagnostics) {
-	var exclude []string
-	diags = data.Exclude.ElementsAs(ctx, &exclude, false)
-	if diags.HasError() {
-		return
-	}
-	nonEmptyExclude := make([]string, 0, len(exclude))
-	for _, e := range exclude {
-		if e != "" {
-			nonEmptyExclude = append(nonEmptyExclude, e)
+func nonEmptyStringSlice(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if s != "" {
+			out = append(out, s)
 		}
 	}
-	cli, err := sqlclient.Open(ctx, data.URL.Value)
-	if err != nil {
-		diags.AddError(
-			"Client Connection Error",
-			fmt.Sprintf("Unable to open connection, got error: %s", err),
-		)
-		return
-	}
-	var schemas []string
-	if cli.URL.Schema != "" {
-		schemas = append(schemas, cli.URL.Schema)
-	}
-	realm, err := cli.InspectRealm(ctx, &schema.InspectRealmOption{
-		Exclude: nonEmptyExclude,
-		Schemas: schemas,
-	})
-	if err != nil {
-		diags.AddError(
-			"Inspect Error",
-			fmt.Sprintf("Unable to inspect realm, got error: %s", err),
-		)
-		cli.Close()
-		return
-	}
-	return realm, cli, diags
-}
-
-func atlasChanges(ctx context.Context, data *AtlasSchemaResourceModel, createDesired func(ctx context.Context, cli *sqlclient.Client) (*schema.Realm, error)) (changes []schema.Change, cli *sqlclient.Client, diags diag.Diagnostics) {
-	current, cli, diags := atlasInspect(ctx, data)
-	if diags.HasError() {
-		return
-	}
-	desired, err := createDesired(ctx, cli)
-	if err != nil {
-		diags.AddError(
-			"Create Desired Realm Error",
-			fmt.Sprintf("Unable to create desired realm, got error: %s", err),
-		)
-		cli.Close()
-		return
-	}
-	changes, err = cli.RealmDiff(current, desired)
-	if err != nil {
-		diags.AddError(
-			"Diff Error",
-			fmt.Sprintf("Unable to diff changes, got error: %s", err),
-		)
-		cli.Close()
-		return
-	}
-	return
+	return out
 }
 
 func urlToID(u string) string {
@@ -462,4 +409,17 @@ func urlToID(u string) string {
 	}
 	uu.User = nil
 	return uu.String()
+}
+
+func (data *AtlasSchemaResourceModel) handleHCL() (string, func() error, error) {
+	return atlas.TempFile(data.HCL.Value, "hcl")
+}
+
+func (data *AtlasSchemaResourceModel) GetExclude(ctx context.Context, exclude *[]string) (diags diag.Diagnostics) {
+	diags = data.Exclude.ElementsAs(ctx, exclude, false)
+	if diags.HasError() {
+		return
+	}
+	*exclude = nonEmptyStringSlice(*exclude)
+	return
 }

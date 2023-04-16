@@ -41,6 +41,23 @@ type (
 		DirURL string
 		Latest uint64
 	}
+	// SchemaApplyParams are the parameters for the `schema apply` command.
+	SchemaApplyParams struct {
+		DevURL  string
+		DryRun  bool
+		Exclude []string
+		Schema  []string
+		To      string
+		URL     string
+	}
+	// SchemaInspectParams are the parameters for the `schema inspect` command.
+	SchemaInspectParams struct {
+		DevURL  string
+		Exclude []string
+		Format  string
+		Schema  []string
+		URL     string
+	}
 )
 
 // NewClient returns a new Atlas client.
@@ -83,10 +100,58 @@ func (c *Client) Apply(ctx context.Context, data *ApplyParams) (*ApplyReport, er
 		args = append(args, strconv.FormatUint(data.Amount, 10))
 	}
 	var report ApplyReport
-	if err := c.runCommand(ctx, args, &report); err != nil {
+	if _, err := c.runCommand(ctx, args, &report); err != nil {
 		return nil, err
 	}
 	return &report, nil
+}
+
+func (c *Client) SchemaApply(ctx context.Context, data *SchemaApplyParams) (*SchemaApply, error) {
+	args := []string{
+		"schema", "apply",
+		"--format", "{{ json . }}",
+		"--url", data.URL,
+		"--to", data.To,
+	}
+	if data.DryRun {
+		args = append(args, "--dry-run")
+	} else {
+		args = append(args, "--auto-approve")
+	}
+	if data.DevURL != "" {
+		args = append(args, "--dev-url", data.DevURL)
+	}
+	if len(data.Schema) > 0 {
+		args = append(args, "--schema", strings.Join(data.Schema, ","))
+	}
+	if len(data.Exclude) > 0 {
+		args = append(args, "--exclude", strings.Join(data.Exclude, ","))
+	}
+	var result SchemaApply
+	if _, err := c.runCommand(ctx, args, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *Client) SchemaInspect(ctx context.Context, data *SchemaInspectParams) (string, error) {
+	args := []string{
+		"schema", "inspect",
+		"--url", data.URL,
+	}
+	if data.DevURL != "" {
+		args = append(args, "--dev-url", data.DevURL)
+	}
+	if data.Format == "sql" {
+		args = append(args, "--format", "{{ sql . }}")
+	}
+	if len(data.Schema) > 0 {
+		args = append(args, "--schema", strings.Join(data.Schema, ","))
+	}
+	if len(data.Exclude) > 0 {
+		args = append(args, "--exclude", strings.Join(data.Exclude, ","))
+	}
+	return c.runCommand(ctx, args, nil)
 }
 
 // Lint runs the `migrate lint` command.
@@ -100,7 +165,7 @@ func (c *Client) Lint(ctx context.Context, data *LintParams) (*SummaryReport, er
 		args = append(args, "--latest", strconv.FormatUint(data.Latest, 10))
 	}
 	var report SummaryReport
-	if err := c.runCommand(ctx, args, &report); err != nil {
+	if _, err := c.runCommand(ctx, args, &report); err != nil {
 		return nil, err
 	}
 	return &report, nil
@@ -121,7 +186,7 @@ func (c *Client) Status(ctx context.Context, data *StatusParams) (*StatusReport,
 		args = append(args, "--revisions-schema", data.RevisionsSchema)
 	}
 	var report StatusReport
-	if err := c.runCommand(ctx, args, &report); err != nil {
+	if _, err := c.runCommand(ctx, args, &report); err != nil {
 		return nil, err
 	}
 	return &report, nil
@@ -129,23 +194,23 @@ func (c *Client) Status(ctx context.Context, data *StatusParams) (*StatusReport,
 
 // runCommand runs the given command and unmarshals the output into the given
 // interface.
-func (c *Client) runCommand(ctx context.Context, args []string, report interface{}) error {
+func (c *Client) runCommand(ctx context.Context, args []string, report interface{}) (string, error) {
 	cmd := exec.CommandContext(ctx, c.path, args...)
 	cmd.Env = append(cmd.Env, "ATLAS_NO_UPDATE_NOTIFIER=1")
 	output, err := cmd.Output()
 	if err != nil {
 		exitErr, ok := err.(*exec.ExitError)
 		if !ok {
-			return err
+			return string(output), err
 		}
 		if exitErr.Stderr != nil && len(exitErr.Stderr) > 0 {
-			return &cliError{
+			return string(output), &cliError{
 				summary: string(exitErr.Stderr),
 				detail:  string(output),
 			}
 		}
 		if exitErr.ExitCode() != 1 || !json.Valid(output) {
-			return &cliError{
+			return string(output), &cliError{
 				summary: "Atlas CLI",
 				detail:  string(output),
 			}
@@ -153,10 +218,12 @@ func (c *Client) runCommand(ctx context.Context, args []string, report interface
 		// When the exit code is 1, it means that the command
 		// was executed successfully, and the output is a JSON
 	}
-	if err := json.Unmarshal(output, report); err != nil {
-		return fmt.Errorf("atlas: unable to decode the report %w", err)
+	if report != nil {
+		if err := json.Unmarshal(output, report); err != nil {
+			return string(output), fmt.Errorf("atlas: unable to decode the report %w", err)
+		}
 	}
-	return nil
+	return string(output), nil
 }
 
 // LatestVersion returns the latest version of the migrations directory.
@@ -261,4 +328,19 @@ func ErrorDiagnostic(err error, summary string) diag.Diagnostic {
 		return diag
 	}
 	return diag.NewErrorDiagnostic(summary, err.Error())
+}
+
+func TempFile(content, ext string) (string, func() error, error) {
+	f, err := os.CreateTemp("", "atlas-tf-*."+ext)
+	if err != nil {
+		return "", nil, err
+	}
+	defer f.Close()
+	_, err = f.WriteString(content)
+	if err != nil {
+		return "", nil, err
+	}
+	return fmt.Sprintf("file://%s", f.Name()), func() error {
+		return os.Remove(f.Name())
+	}, nil
 }
