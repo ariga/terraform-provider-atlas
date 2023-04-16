@@ -5,19 +5,22 @@ import (
 	"encoding/base64"
 	"fmt"
 	"hash/fnv"
+	"net/url"
 
-	"ariga.io/atlas/sql/schema"
-	"ariga.io/atlas/sql/sqlclient"
-	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
+
+	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
 )
 
 type (
 	// AtlasSchemaDataSource defines the data source implementation.
-	AtlasSchemaDataSource struct{}
+	AtlasSchemaDataSource struct {
+		client *atlas.Client
+	}
 	// AtlasSchemaDataSourceModel describes the data source data model.
 	AtlasSchemaDataSourceModel struct {
 		DevURL types.String `tfsdk:"dev_db_url"`
@@ -29,7 +32,8 @@ type (
 
 // Ensure provider defined types fully satisfy framework interfaces
 var (
-	_ datasource.DataSource = &AtlasSchemaDataSource{}
+	_ datasource.DataSource              = &AtlasSchemaDataSource{}
+	_ datasource.DataSourceWithConfigure = &AtlasSchemaDataSource{}
 )
 
 // NewAtlasSchemaDataSource returns a new AtlasSchemaDataSource.
@@ -75,6 +79,23 @@ func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, di
 	}, nil
 }
 
+// Configure implements datasource.DataSourceWithConfigure.
+func (d *AtlasSchemaDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+	// Prevent panic if the provider has not been configured.
+	if req.ProviderData == nil {
+		return
+	}
+	c, ok := req.ProviderData.(*atlas.Client)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Data Source Configure Type",
+			fmt.Sprintf("Expected *atlas.MigrateClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+		return
+	}
+	d.client = c
+}
+
 // Read implements datasource.DataSource.
 func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data AtlasSchemaDataSourceModel
@@ -94,35 +115,45 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 		return
 	}
-	cli, err := sqlclient.Open(ctx, data.DevURL.Value)
+	if !isURL(src) {
+		var (
+			cleanup func() error
+			err     error
+		)
+		src, cleanup, err = atlas.TempFile(src, "hcl")
+		if err != nil {
+			resp.Diagnostics.AddError("HCL Error",
+				fmt.Sprintf("Unable to create temporary file for HCL, got error: %s", err),
+			)
+			return
+		}
+		defer func() {
+			if err := cleanup(); err != nil {
+				tflog.Debug(ctx, "Failed to remove HCL file", map[string]interface{}{
+					"error": err,
+				})
+			}
+		}()
+	}
+	normalHCL, err := d.client.SchemaInspect(ctx, &atlas.SchemaInspectParams{
+		DevURL: data.DevURL.Value,
+		Format: "hcl",
+		URL:    src,
+	})
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to open connection, got error: %s", err))
+		resp.Diagnostics.AddError("Inspect Error",
+			fmt.Sprintf("Unable to inspect given source, got error: %s", err),
+		)
 		return
 	}
-	p := hclparse.NewParser()
-	if _, err := p.ParseHCL([]byte(src), ""); err != nil {
-		resp.Diagnostics.AddError("Parse HCL Error", fmt.Sprintf("Unable to parse HCL, got error: %s", err))
-		return
-	}
-	realm := &schema.Realm{}
-	if err = cli.Evaluator.Eval(p, realm, nil); err != nil {
-		resp.Diagnostics.AddError("Eval HCL Error", fmt.Sprintf("Unable to eval HCL, got error: %s", err))
-		return
-	}
-	realm, err = cli.Driver.(schema.Normalizer).NormalizeRealm(ctx, realm)
-	if err != nil {
-		resp.Diagnostics.AddError("Normalize Error", fmt.Sprintf("Unable to normalize, got error: %s", err))
-		return
-	}
-	normalHCL, err := cli.MarshalSpec(realm)
-	if err != nil {
-		resp.Diagnostics.AddError("Marshal Error", fmt.Sprintf("Unable to marshal, got error: %s", err))
-		return
-	}
-
-	data.ID = types.String{Value: hclID(normalHCL)}
-	data.HCL = types.String{Value: string(normalHCL)}
+	data.ID = types.String{Value: hclID([]byte(normalHCL))}
+	data.HCL = types.String{Value: normalHCL}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func isURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && u.Scheme != ""
 }
 
 func hclID(hcl []byte) string {

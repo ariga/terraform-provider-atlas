@@ -79,4 +79,33 @@ func TestAccSchemaDataSource(t *testing.T) {
 			},
 		},
 	})
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Read testing
+			{
+				Config: `data "atlas_schema" "market" {
+	dev_db_url = "mysql://root:pass@localhost:3307/test"
+	src = "file://./sql-files/schema.sql"
+}`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.atlas_schema.market", "hcl", `table "hello" {
+  schema = schema.test
+  column "c1" {
+    null = true
+    type = int
+  }
+}
+schema "test" {
+  charset = "utf8mb4"
+  collate = "utf8mb4_0900_ai_ci"
+}
+`),
+					resource.TestCheckResourceAttr("data.atlas_schema.market", "id", "gvwVorlKca2eRP5hpAg5BQ"),
+				),
+			},
+		},
+	})
 }
