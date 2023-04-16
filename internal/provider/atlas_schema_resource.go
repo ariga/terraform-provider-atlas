@@ -275,7 +275,7 @@ func PrintPlanSQL(ctx context.Context, c *atlas.Client, data *AtlasSchemaResourc
 	}
 	defer func() {
 		if err := cleanup(); err != nil {
-			tflog.Debug(ctx, "failed to remove HCL file", map[string]interface{}{
+			tflog.Debug(ctx, "Failed to remove HCL file", map[string]interface{}{
 				"error": err,
 			})
 		}
@@ -293,8 +293,8 @@ func PrintPlanSQL(ctx context.Context, c *atlas.Client, data *AtlasSchemaResourc
 		URL:     data.URL.Value,
 	})
 	if err != nil {
-		diags.AddError("HCL Error",
-			fmt.Sprintf("Unable to parse HCL, got error: %s", err),
+		diags.AddError("Atlas Plan Error",
+			fmt.Sprintf("Unable to generate migration plan, got error: %s", err),
 		)
 		return
 	}
@@ -318,12 +318,14 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 	}
 	to, cleanup, err := data.handleHCL()
 	if err != nil {
-		diags.AddError("Apply Error", fmt.Sprintf("Failed to create HCL file, got error: %s", err))
+		diags.AddError("HCL Error",
+			fmt.Sprintf("Unable to create temporary file for HCL, got error: %s", err),
+		)
 		return
 	}
 	defer func() {
 		if err := cleanup(); err != nil {
-			tflog.Debug(ctx, "failed to remove HCL file", map[string]interface{}{
+			tflog.Debug(ctx, "Failed to remove HCL file", map[string]interface{}{
 				"error": err,
 			})
 		}
@@ -335,7 +337,9 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 		URL:     data.URL.Value,
 	})
 	if err != nil {
-		diags.AddError("Apply Error", fmt.Sprintf("Unable to apply changes, got error: %s", err))
+		diags.AddError("Apply Error",
+			fmt.Sprintf("Unable to apply changes, got error: %s", err),
+		)
 		return
 	}
 	return diags
@@ -345,13 +349,13 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 	to, cleanup, err := data.handleHCL()
 	if err != nil {
 		diags.AddError("HCL Error",
-			fmt.Sprintf("Unable to parse HCL, got error: %s", err),
+			fmt.Sprintf("Unable to create temporary file for HCL, got error: %s", err),
 		)
 		return
 	}
 	defer func() {
 		if err := cleanup(); err != nil {
-			tflog.Debug(ctx, "failed to remove HCL file", map[string]interface{}{
+			tflog.Debug(ctx, "Failed to remove HCL file", map[string]interface{}{
 				"error": err,
 			})
 		}
@@ -369,8 +373,8 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 		URL:     data.URL.Value,
 	})
 	if err != nil {
-		diags.AddError("HCL Error",
-			fmt.Sprintf("Unable to parse HCL, got error: %s", err),
+		diags.AddError("Atlas Plan Error",
+			fmt.Sprintf("Unable to generate migration plan, got error: %s", err),
 		)
 		return
 	}
