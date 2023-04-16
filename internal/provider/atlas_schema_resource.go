@@ -380,7 +380,7 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 	}
 	var causes []string
 	for _, c := range result.Changes.Pending {
-		if strings.HasPrefix(c, "DROP ") {
+		if strings.Contains(c, "DROP ") {
 			causes = append(causes, c)
 		}
 	}
@@ -392,7 +392,6 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 To learn how to add an existing database to a project, read:
 https://atlasgo.io/terraform-provider#working-with-an-existing-database`, strings.Join(causes, "\n- ")))
 	}
-
 	return
 }
 
