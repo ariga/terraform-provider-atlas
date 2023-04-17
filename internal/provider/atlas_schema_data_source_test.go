@@ -9,7 +9,7 @@ import (
 const (
 	testAccData = `
 data "atlas_schema" "market" {
-  dev_db_url = "mysql://root:pass@localhost:3307"
+  dev_db_url = "mysql://root:pass@localhost:3307/test"
   src = <<-EOT
 	schema "test" {
 		charset = "utf8mb4"
@@ -60,8 +60,7 @@ schema "test" {
 )
 
 func TestAccSchemaDataSource(t *testing.T) {
-	// tempSchemas(t, mysqlDevURL, "test")
-
+	tempSchemas(t, mysqlDevURL, "test")
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -83,7 +82,7 @@ func TestAccSchemaDataSource(t *testing.T) {
 			// Read testing
 			{
 				Config: `data "atlas_schema" "market" {
-					dev_db_url = "mysql://root:pass@localhost:3307"
+					dev_db_url = "mysql://root:pass@localhost:3307/test"
 					src = ""
 				}`,
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -101,7 +100,7 @@ func TestAccSchemaDataSource(t *testing.T) {
 			// Read testing
 			{
 				Config: `data "atlas_schema" "market" {
-					dev_db_url = "mysql://root:pass@localhost:3307"
+					dev_db_url = "mysql://root:pass@localhost:3307/test"
 					src = "file://./sql-files/schema.sql"
 				}`,
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -120,7 +119,7 @@ func TestAccSchemaDataSource(t *testing.T) {
 			{
 				Config: `
 				provider "atlas" {
-					dev_db_url = "mysql://root:pass@localhost:3307"
+					dev_db_url = "mysql://root:pass@localhost:3307/test"
 				}
 				data "atlas_schema" "hello" {
 					src = "file://./sql-files/schema.sql"
