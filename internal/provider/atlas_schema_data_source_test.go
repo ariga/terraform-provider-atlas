@@ -45,18 +45,6 @@ schema "test" {
   collate = "utf8mb4_0900_ai_ci"
 }
 `
-	helloSchema = `table "hello" {
-  schema = schema.test
-  column "c1" {
-    null = true
-    type = int
-  }
-}
-schema "test" {
-  charset = "utf8mb4"
-  collate = "utf8mb4_0900_ai_ci"
-}
-`
 )
 
 func TestAccSchemaDataSource(t *testing.T) {
@@ -104,8 +92,8 @@ func TestAccSchemaDataSource(t *testing.T) {
 					src = "file://./sql-files/schema.sql"
 				}`,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.atlas_schema.market", "hcl", helloSchema),
-					resource.TestCheckResourceAttr("data.atlas_schema.market", "id", "gvwVorlKca2eRP5hpAg5BQ"),
+					resource.TestCheckResourceAttr("data.atlas_schema.market", "hcl", normalHCL),
+					resource.TestCheckResourceAttr("data.atlas_schema.market", "id", "/WWD4tjYzwMDMHxlNwuhrg"),
 				),
 			},
 		},
@@ -125,8 +113,8 @@ func TestAccSchemaDataSource(t *testing.T) {
 					src = "file://./sql-files/schema.sql"
 				}`,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.atlas_schema.hello", "hcl", helloSchema),
-					resource.TestCheckResourceAttr("data.atlas_schema.hello", "id", "gvwVorlKca2eRP5hpAg5BQ"),
+					resource.TestCheckResourceAttr("data.atlas_schema.hello", "hcl", normalHCL),
+					resource.TestCheckResourceAttr("data.atlas_schema.hello", "id", "/WWD4tjYzwMDMHxlNwuhrg"),
 				),
 			},
 		},
