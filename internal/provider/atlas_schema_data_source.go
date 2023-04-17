@@ -60,7 +60,7 @@ func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, di
 				Sensitive:   true,
 			},
 			"src": {
-				Description: "The schema definition of the database",
+				Description: "The schema definition of the database. This attribute can be HCL schema or an URL to HCL/SQL file.",
 				Type:        types.StringType,
 				Required:    true,
 			},
