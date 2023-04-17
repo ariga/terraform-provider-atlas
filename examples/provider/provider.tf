@@ -1,8 +1,8 @@
 provider "atlas" {}
 
 data "atlas_schema" "market" {
-  dev_db_url = "mysql://root:pass@localhost:3307/market"
-  src        = file("${path.module}/schema.hcl")
+  dev_url = "mysql://root:pass@localhost:3307/market"
+  src     = file("${path.module}/schema.hcl")
 }
 
 resource "atlas_schema" "market" {

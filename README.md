@@ -62,14 +62,14 @@ provider "atlas" {}
 3\. Finally, configure the terraform resource to apply the state to your database:
  ```terraform
  data "atlas_schema" "my_schema" {
-  src = file("${path.module}/schema.hcl")
-  dev_db_url = "mysql://root:pass@localhost:3307/example"
+  src     = "file://${abspath("./schema.hcl")}"
+  dev_url = "mysql://root:pass@localhost:3307/example"
  }
 
  resource "atlas_schema" "example_db" {
-  hcl = data.atlas_schema.my_schema.hcl
-  url = "mysql://root:pass@localhost:3306/example"
-  dev_db_url = "mysql://root:pass@localhost:3307/example"
+  hcl     = data.atlas_schema.my_schema.hcl
+  url     = "mysql://root:pass@localhost:3306/example"
+  dev_url = "mysql://root:pass@localhost:3307/example"
  }
  ```
 

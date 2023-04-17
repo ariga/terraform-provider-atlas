@@ -23,10 +23,12 @@ type (
 	}
 	// AtlasSchemaDataSourceModel describes the data source data model.
 	AtlasSchemaDataSourceModel struct {
-		DevURL types.String `tfsdk:"dev_db_url"`
+		DevURL types.String `tfsdk:"dev_url"`
 		Src    types.String `tfsdk:"src"`
 		HCL    types.String `tfsdk:"hcl"`
 		ID     types.String `tfsdk:"id"`
+
+		DeprecatedDevURL types.String `tfsdk:"dev_db_url"`
 	}
 )
 
@@ -54,7 +56,7 @@ func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, di
 		Description: "atlas_schema data source uses dev-db to normalize the HCL schema " +
 			"in order to create better terraform diffs",
 		Attributes: map[string]tfsdk.Attribute{
-			"dev_db_url": {
+			"dev_url": {
 				Description: "The url of the dev-db see https://atlasgo.io/cli/url",
 				Type:        types.StringType,
 				Optional:    true,
@@ -76,6 +78,14 @@ func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, di
 				Type:        types.StringType,
 				Computed:    true,
 			},
+			"dev_db_url": {
+				Description: "Use `dev_url` instead.",
+				Type:        types.StringType,
+				Optional:    true,
+				Sensitive:   true,
+				DeprecationMessage: "This attribute is deprecated and will be removed in the next major version. " +
+					"Please use the `dev_url` attribute instead.",
+			},
 		},
 	}, nil
 }
@@ -93,13 +103,10 @@ func (d *AtlasSchemaDataSource) ValidateConfig(ctx context.Context, req datasour
 // Read implements datasource.DataSource.
 func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data AtlasSchemaDataSourceModel
-
-	// Read Terraform configuration data into the model
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
 	src := data.Src.Value
 	if src == "" {
 		// We don't have a schema to normalize,
@@ -130,7 +137,7 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		}()
 	}
 	normalHCL, err := d.client.SchemaInspect(ctx, &atlas.SchemaInspectParams{
-		DevURL: d.getDevURL(data.DevURL),
+		DevURL: d.getDevURL(data.DevURL, data.DeprecatedDevURL),
 		Format: "hcl",
 		URL:    src,
 	})

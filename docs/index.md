@@ -18,8 +18,8 @@ For documentation about Atlas, visit: https://atlasgo.io
 provider "atlas" {}
 
 data "atlas_schema" "market" {
-  dev_db_url = "mysql://root:pass@localhost:3307/market"
-  src        = file("${path.module}/schema.hcl")
+  dev_url = "mysql://root:pass@localhost:3307/market"
+  src     = file("${path.module}/schema.hcl")
 }
 
 resource "atlas_schema" "market" {
@@ -33,4 +33,4 @@ resource "atlas_schema" "market" {
 
 ### Optional
 
-- `dev_db_url` (String) The URL of the dev database. This configuration is shared for all resources if there is no config on the resource.
+- `dev_url` (String, Sensitive) The URL of the dev database. This configuration is shared for all resources if there is no config on the resource.

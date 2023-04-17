@@ -45,7 +45,7 @@ type (
 	// AtlasProviderModel describes the provider data model.
 	AtlasProviderModel struct {
 		// DevURL is the URL of the dev-db.
-		DevURL types.String `tfsdk:"dev_db_url"`
+		DevURL types.String `tfsdk:"dev_url"`
 	}
 	providerData struct {
 		// client is the client used to interact with the Atlas CLI.
@@ -97,10 +97,11 @@ func (p *AtlasProvider) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagn
 		Description: "The Atlas provider is used to manage your database migrations, using the DDL of Atlas.\n" +
 			"For documentation about Atlas, visit: https://atlasgo.io",
 		Attributes: map[string]tfsdk.Attribute{
-			"dev_db_url": {
+			"dev_url": {
 				Description: "The URL of the dev database. This configuration is shared for all resources if there is no config on the resource.",
 				Type:        types.StringType,
 				Optional:    true,
+				Sensitive:   true,
 			},
 		},
 	}, nil
@@ -164,9 +165,11 @@ func (p *AtlasProvider) ValidateConfig(ctx context.Context, req provider.Validat
 	}
 }
 
-func (d *providerData) getDevURL(u types.String) string {
-	if u.Value != "" {
-		return u.Value
+func (d *providerData) getDevURL(urls ...types.String) string {
+	for _, u := range urls {
+		if u.Value != "" {
+			return u.Value
+		}
 	}
 	return d.devURL
 }
@@ -189,13 +192,13 @@ func (d *providerData) childrenConfigure(data any) (diags diag.Diagnostics) {
 
 func (d *providerData) validateConfig(ctx context.Context, cfg tfsdk.Config) (diags diag.Diagnostics) {
 	var devURL types.String
-	diags.Append(cfg.GetAttribute(ctx, tfpath.Root("dev_db_url"), &devURL)...)
+	diags.Append(cfg.GetAttribute(ctx, tfpath.Root("dev_url"), &devURL)...)
 	if diags.HasError() {
 		return diags
 	}
 	if !devURL.IsUnknown() && devURL.Value == "" && d.devURL == "" {
-		diags.AddAttributeWarning(tfpath.Root("dev_db_url"), "dev_db_url is unset",
-			"It is highly recommended that you use 'dev_db_url' to specify a dev database.\n"+
+		diags.AddAttributeWarning(tfpath.Root("dev_url"), "dev_url is unset",
+			"It is highly recommended that you use 'dev_url' to specify a dev database.\n"+
 				"to learn more about it, visit: https://atlasgo.io/dev-database")
 	}
 	return diags

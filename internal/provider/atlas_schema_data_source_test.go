@@ -1,17 +1,14 @@
 package provider_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 )
 
 const (
-	testAccData = `
-data "atlas_schema" "market" {
-  dev_db_url = "mysql://root:pass@localhost:3307/test"
-  src = <<-EOT
-	schema "test" {
+	testAccData = `schema "test" {
 		charset = "utf8mb4"
 		collate = "utf8mb4_0900_ai_ci"
 	}
@@ -25,10 +22,7 @@ data "atlas_schema" "market" {
 		primary_key {
 			columns = [column.id]
 		}
-	}
-	EOT
-}
-`
+	}`
 	normalHCL = `table "foo" {
   schema = schema.test
   column "id" {
@@ -55,7 +49,12 @@ func TestAccSchemaDataSource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Read testing
 			{
-				Config: testAccData,
+				Config: fmt.Sprintf(`data "atlas_schema" "market" {
+					dev_db_url = "mysql://root:pass@localhost:3307/test"
+					src        = <<-EOT
+					%s
+					EOT
+				}`, testAccData),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.atlas_schema.market", "hcl", normalHCL),
 					resource.TestCheckResourceAttr("data.atlas_schema.market", "id", "/WWD4tjYzwMDMHxlNwuhrg"),
@@ -88,8 +87,8 @@ func TestAccSchemaDataSource(t *testing.T) {
 			// Read testing
 			{
 				Config: `data "atlas_schema" "market" {
-					dev_db_url = "mysql://root:pass@localhost:3307/test"
-					src = "file://./sql-files/schema.sql"
+					dev_url = "mysql://root:pass@localhost:3307/test"
+					src     = "file://./sql-files/schema.sql"
 				}`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.atlas_schema.market", "hcl", normalHCL),
@@ -107,7 +106,7 @@ func TestAccSchemaDataSource(t *testing.T) {
 			{
 				Config: `
 				provider "atlas" {
-					dev_db_url = "mysql://root:pass@localhost:3307/test"
+					dev_url = "mysql://root:pass@localhost:3307/test"
 				}
 				data "atlas_schema" "hello" {
 					src = "file://./sql-files/schema.sql"

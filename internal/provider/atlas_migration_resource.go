@@ -186,14 +186,7 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	devURL := r.getDevURL(data.DevURL)
-	if devURL == "" && !data.DevURL.IsUnknown() {
-		resp.Diagnostics.AddAttributeWarning(
-			path.Root("dev_url"),
-			"dev_url is unset",
-			"It is highly recommended that you use 'dev_url' to specify a dev database.\n"+
-				"to learn more about it, visit: https://atlasgo.io/dev-database")
-	}
+	resp.Diagnostics.Append(r.validateConfig(ctx, req.Config)...)
 	if !data.Version.IsUnknown() && data.Version.Value == "" {
 		resp.Diagnostics.AddAttributeWarning(
 			path.Root("version"),

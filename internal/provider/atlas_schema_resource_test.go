@@ -55,8 +55,9 @@ data "atlas_schema" "market" {
 resource "atlas_schema" "testdb" {
   hcl = data.atlas_schema.market.hcl
   url = foo_mirror.url.result
+  dev_db_url = "%s"
 }
-`, mysqlURL, mysqlDevURL)
+`, mysqlURL, mysqlDevURL, mysqlDevURL)
 
 	var testAccActionConfigUpdate = fmt.Sprintf(`
 data "atlas_schema" "market" {
