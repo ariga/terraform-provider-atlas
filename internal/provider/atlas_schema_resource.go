@@ -20,7 +20,7 @@ import (
 type (
 	// AtlasSchemaResource defines the resource implementation.
 	AtlasSchemaResource struct {
-		client *atlas.Client
+		providerData
 	}
 	// AtlasSchemaResourceModel describes the resource data model.
 	AtlasSchemaResourceModel struct {
@@ -55,19 +55,7 @@ func (r *AtlasSchemaResource) Metadata(ctx context.Context, req resource.Metadat
 }
 
 func (r *AtlasSchemaResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
-	if req.ProviderData == nil {
-		return
-	}
-	c, ok := req.ProviderData.(*atlas.Client)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *atlas.MigrateClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-		return
-	}
-	r.client = c
+	resp.Diagnostics.Append(r.providerData.childrenConfigure(req.ProviderData)...)
 }
 
 // GetSchema implements resource.Resource.
@@ -208,21 +196,9 @@ func (r *AtlasSchemaResource) Delete(ctx context.Context, req resource.DeleteReq
 	}
 }
 
-// Validate implements resource.ResourceWithValidateConfig.
+// ValidateConfig implements resource.ResourceWithValidateConfig.
 func (r AtlasSchemaResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
-	var data AtlasSchemaResourceModel
-
-	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	if !data.DevURL.IsUnknown() && data.DevURL.Value == "" {
-		resp.Diagnostics.AddAttributeWarning(
-			path.Root("dev_db_url"),
-			"dev_db_url is unset",
-			"It is highly recommended that you use 'dev_db_url' to specify a dev database.\n"+
-				"to learn more about it, visit: https://atlasgo.io/dev-database")
-	}
+	resp.Diagnostics.Append(r.providerData.validateConfig(ctx, req.Config)...)
 }
 
 // ModifyPlan implements resource.ResourceWithModifyPlan.
@@ -262,10 +238,10 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		// the HCL to an empty string.
 		plan.HCL = types.String{Null: true}
 	}
-	resp.Diagnostics.Append(PrintPlanSQL(ctx, r.client, plan)...)
+	resp.Diagnostics.Append(PrintPlanSQL(ctx, r.client, r.getDevURL(plan.DevURL), plan)...)
 }
 
-func PrintPlanSQL(ctx context.Context, c *atlas.Client, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
 	to, cleanup, err := data.handleHCL()
 	if err != nil {
 		diags.AddError("HCL Error",
@@ -286,7 +262,7 @@ func PrintPlanSQL(ctx context.Context, c *atlas.Client, data *AtlasSchemaResourc
 		return
 	}
 	result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
-		DevURL:  data.DevURL.Value,
+		DevURL:  devURL,
 		DryRun:  true,
 		Exclude: exclude,
 		To:      to,
@@ -331,7 +307,7 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 		}
 	}()
 	_, err = r.client.SchemaApply(ctx, &atlas.SchemaApplyParams{
-		DevURL:  data.DevURL.Value,
+		DevURL:  r.getDevURL(data.DevURL),
 		Exclude: exclude,
 		To:      to,
 		URL:     data.URL.Value,
@@ -366,7 +342,7 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 		return
 	}
 	result, err := r.client.SchemaApply(ctx, &atlas.SchemaApplyParams{
-		DevURL:  data.DevURL.Value,
+		DevURL:  r.getDevURL(data.DevURL),
 		DryRun:  true,
 		Exclude: exclude,
 		To:      to,

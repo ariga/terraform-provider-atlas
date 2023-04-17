@@ -18,7 +18,7 @@ import (
 type (
 	// MigrationResource defines the resource implementation.
 	MigrationResource struct {
-		client *atlas.Client
+		providerData
 	}
 	// MigrationResourceModel describes the resource data model.
 	MigrationResourceModel struct {
@@ -61,19 +61,7 @@ func (r *MigrationResource) Metadata(ctx context.Context, req resource.MetadataR
 }
 
 func (r *MigrationResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
-	if req.ProviderData == nil {
-		return
-	}
-	c, ok := req.ProviderData.(*atlas.Client)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *atlas.MigrateClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-		return
-	}
-	r.client = c
+	resp.Diagnostics.Append(r.providerData.childrenConfigure(req.ProviderData)...)
 }
 
 // GetSchema implements resource.Resource.
@@ -198,7 +186,8 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if !data.DevURL.IsUnknown() && data.DevURL.Value == "" {
+	devURL := r.getDevURL(data.DevURL)
+	if devURL == "" && !data.DevURL.IsUnknown() {
 		resp.Diagnostics.AddAttributeWarning(
 			path.Root("dev_url"),
 			"dev_url is unset",
@@ -246,7 +235,8 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			v := report.LatestVersion()
 			plan.Version = types.String{Value: v, Null: v == ""}
 		}
-		if plan.DevURL.Value == "" {
+		devURL := r.getDevURL(plan.DevURL)
+		if devURL == "" {
 			return
 		}
 		pendingCount, _ := report.Amount(plan.Version.Value)
@@ -255,7 +245,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		}
 		lint, err := r.client.Lint(ctx, &atlas.LintParams{
 			DirURL: plan.DirURL.Value,
-			DevURL: plan.DevURL.Value,
+			DevURL: devURL,
 			Latest: pendingCount,
 		})
 		if err != nil {

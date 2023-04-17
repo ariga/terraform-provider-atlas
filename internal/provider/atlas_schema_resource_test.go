@@ -613,7 +613,7 @@ table "orders" {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotDiags := provider.PrintPlanSQL(tt.args.ctx, c, tt.args.data)
+			gotDiags := provider.PrintPlanSQL(tt.args.ctx, c, mysqlDevURL, tt.args.data)
 			require.Equal(t, tt.wantDiags, gotDiags)
 		})
 	}

@@ -19,7 +19,7 @@ import (
 type (
 	// AtlasSchemaDataSource defines the data source implementation.
 	AtlasSchemaDataSource struct {
-		client *atlas.Client
+		providerData
 	}
 	// AtlasSchemaDataSourceModel describes the data source data model.
 	AtlasSchemaDataSourceModel struct {
@@ -32,8 +32,9 @@ type (
 
 // Ensure provider defined types fully satisfy framework interfaces
 var (
-	_ datasource.DataSource              = &AtlasSchemaDataSource{}
-	_ datasource.DataSourceWithConfigure = &AtlasSchemaDataSource{}
+	_ datasource.DataSourceWithValidateConfig = &AtlasSchemaDataSource{}
+	_ datasource.DataSource                   = &AtlasSchemaDataSource{}
+	_ datasource.DataSourceWithConfigure      = &AtlasSchemaDataSource{}
 )
 
 // NewAtlasSchemaDataSource returns a new AtlasSchemaDataSource.
@@ -56,7 +57,7 @@ func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, di
 			"dev_db_url": {
 				Description: "The url of the dev-db see https://atlasgo.io/cli/url",
 				Type:        types.StringType,
-				Required:    true,
+				Optional:    true,
 				Sensitive:   true,
 			},
 			"src": {
@@ -81,19 +82,12 @@ func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, di
 
 // Configure implements datasource.DataSourceWithConfigure.
 func (d *AtlasSchemaDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
-	if req.ProviderData == nil {
-		return
-	}
-	c, ok := req.ProviderData.(*atlas.Client)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *atlas.MigrateClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-		return
-	}
-	d.client = c
+	resp.Diagnostics.Append(d.providerData.childrenConfigure(req.ProviderData)...)
+}
+
+// ValidateConfig implements datasource.DataSourceWithValidateConfig.
+func (d *AtlasSchemaDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	resp.Diagnostics.Append(d.providerData.validateConfig(ctx, req.Config)...)
 }
 
 // Read implements datasource.DataSource.
@@ -136,7 +130,7 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		}()
 	}
 	normalHCL, err := d.client.SchemaInspect(ctx, &atlas.SchemaInspectParams{
-		DevURL: data.DevURL.Value,
+		DevURL: d.getDevURL(data.DevURL),
 		Format: "hcl",
 		URL:    src,
 	})

@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 
 	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -14,7 +13,7 @@ import (
 type (
 	// MigrationDataSource defines the data source implementation.
 	MigrationDataSource struct {
-		client *atlas.Client
+		providerData
 	}
 	// MigrationDataSourceModel describes the data source data model.
 	MigrationDataSourceModel struct {
@@ -52,19 +51,7 @@ func (d *MigrationDataSource) Metadata(ctx context.Context, req datasource.Metad
 
 // Configure implements datasource.DataSourceWithConfigure.
 func (d *MigrationDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
-	if req.ProviderData == nil {
-		return
-	}
-	c, ok := req.ProviderData.(*atlas.Client)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *atlas.MigrateClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-		return
-	}
-	d.client = c
+	resp.Diagnostics.Append(d.providerData.childrenConfigure(req.ProviderData)...)
 }
 
 // GetSchema implements datasource.DataSource.
