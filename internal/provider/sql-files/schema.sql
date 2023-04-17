@@ -1,1 +1,1 @@
-create table hello(c1 int);
+create table foo(id int not null auto_increment primary key);

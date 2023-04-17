@@ -19,21 +19,24 @@ import (
 type (
 	// AtlasSchemaDataSource defines the data source implementation.
 	AtlasSchemaDataSource struct {
-		client *atlas.Client
+		providerData
 	}
 	// AtlasSchemaDataSourceModel describes the data source data model.
 	AtlasSchemaDataSourceModel struct {
-		DevURL types.String `tfsdk:"dev_db_url"`
+		DevURL types.String `tfsdk:"dev_url"`
 		Src    types.String `tfsdk:"src"`
 		HCL    types.String `tfsdk:"hcl"`
 		ID     types.String `tfsdk:"id"`
+
+		DeprecatedDevURL types.String `tfsdk:"dev_db_url"`
 	}
 )
 
 // Ensure provider defined types fully satisfy framework interfaces
 var (
-	_ datasource.DataSource              = &AtlasSchemaDataSource{}
-	_ datasource.DataSourceWithConfigure = &AtlasSchemaDataSource{}
+	_ datasource.DataSourceWithValidateConfig = &AtlasSchemaDataSource{}
+	_ datasource.DataSource                   = &AtlasSchemaDataSource{}
+	_ datasource.DataSourceWithConfigure      = &AtlasSchemaDataSource{}
 )
 
 // NewAtlasSchemaDataSource returns a new AtlasSchemaDataSource.
@@ -53,10 +56,10 @@ func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, di
 		Description: "atlas_schema data source uses dev-db to normalize the HCL schema " +
 			"in order to create better terraform diffs",
 		Attributes: map[string]tfsdk.Attribute{
-			"dev_db_url": {
+			"dev_url": {
 				Description: "The url of the dev-db see https://atlasgo.io/cli/url",
 				Type:        types.StringType,
-				Required:    true,
+				Optional:    true,
 				Sensitive:   true,
 			},
 			"src": {
@@ -75,37 +78,35 @@ func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, di
 				Type:        types.StringType,
 				Computed:    true,
 			},
+			"dev_db_url": {
+				Description: "Use `dev_url` instead.",
+				Type:        types.StringType,
+				Optional:    true,
+				Sensitive:   true,
+				DeprecationMessage: "This attribute is deprecated and will be removed in the next major version. " +
+					"Please use the `dev_url` attribute instead.",
+			},
 		},
 	}, nil
 }
 
 // Configure implements datasource.DataSourceWithConfigure.
 func (d *AtlasSchemaDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
-	if req.ProviderData == nil {
-		return
-	}
-	c, ok := req.ProviderData.(*atlas.Client)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *atlas.MigrateClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-		return
-	}
-	d.client = c
+	resp.Diagnostics.Append(d.providerData.childrenConfigure(req.ProviderData)...)
+}
+
+// ValidateConfig implements datasource.DataSourceWithValidateConfig.
+func (d *AtlasSchemaDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	resp.Diagnostics.Append(d.providerData.validateConfig(ctx, req.Config)...)
 }
 
 // Read implements datasource.DataSource.
 func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data AtlasSchemaDataSourceModel
-
-	// Read Terraform configuration data into the model
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
 	src := data.Src.Value
 	if src == "" {
 		// We don't have a schema to normalize,
@@ -136,7 +137,7 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		}()
 	}
 	normalHCL, err := d.client.SchemaInspect(ctx, &atlas.SchemaInspectParams{
-		DevURL: data.DevURL.Value,
+		DevURL: d.getDevURL(data.DevURL, data.DeprecatedDevURL),
 		Format: "hcl",
 		URL:    src,
 	})

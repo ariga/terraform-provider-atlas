@@ -18,9 +18,11 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	tfpath "github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"golang.org/x/mod/semver"
 
@@ -41,7 +43,16 @@ type (
 		version string
 	}
 	// AtlasProviderModel describes the provider data model.
-	AtlasProviderModel struct{}
+	AtlasProviderModel struct {
+		// DevURL is the URL of the dev-db.
+		DevURL types.String `tfsdk:"dev_url"`
+	}
+	providerData struct {
+		// client is the client used to interact with the Atlas CLI.
+		client *atlas.Client
+		// devURL is the URL of the dev-db.
+		devURL string
+	}
 )
 
 // Ensure AtlasProvider satisfies various provider interfaces.
@@ -85,7 +96,14 @@ func (p *AtlasProvider) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagn
 	return tfsdk.Schema{
 		Description: "The Atlas provider is used to manage your database migrations, using the DDL of Atlas.\n" +
 			"For documentation about Atlas, visit: https://atlasgo.io",
-		Attributes: map[string]tfsdk.Attribute{},
+		Attributes: map[string]tfsdk.Attribute{
+			"dev_url": {
+				Description: "The URL of the dev database. This configuration is shared for all resources if there is no config on the resource.",
+				Type:        types.StringType,
+				Optional:    true,
+				Sensitive:   true,
+			},
+		},
 	}, nil
 }
 
@@ -97,8 +115,18 @@ func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureReq
 		return
 	}
 	p.client = c
-	resp.DataSourceData = c
-	resp.ResourceData = c
+
+	var model *AtlasProviderModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &model)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	data := providerData{client: c}
+	if model != nil {
+		data.devURL = model.DevURL.Value
+	}
+	resp.DataSourceData = data
+	resp.ResourceData = data
 }
 
 // DataSources implements provider.Provider.
@@ -135,6 +163,45 @@ func (p *AtlasProvider) ValidateConfig(ctx context.Context, req provider.Validat
 			msg,
 		)
 	}
+}
+
+func (d *providerData) getDevURL(urls ...types.String) string {
+	for _, u := range urls {
+		if u.Value != "" {
+			return u.Value
+		}
+	}
+	return d.devURL
+}
+
+func (d *providerData) childrenConfigure(data any) (diags diag.Diagnostics) {
+	// Prevent panic if the provider has not been configured.
+	if data == nil {
+		return
+	}
+	c, ok := data.(providerData)
+	if !ok {
+		diags.AddError("Unexpected Configure Type",
+			fmt.Sprintf("Expected ProviderData, got: %T. Please report this issue to the provider developers.", data),
+		)
+		return
+	}
+	*d = c
+	return diags
+}
+
+func (d *providerData) validateConfig(ctx context.Context, cfg tfsdk.Config) (diags diag.Diagnostics) {
+	var devURL types.String
+	diags.Append(cfg.GetAttribute(ctx, tfpath.Root("dev_url"), &devURL)...)
+	if diags.HasError() {
+		return diags
+	}
+	if !devURL.IsUnknown() && devURL.Value == "" && d.devURL == "" {
+		diags.AddAttributeWarning(tfpath.Root("dev_url"), "dev_url is unset",
+			"It is highly recommended that you use 'dev_url' to specify a dev database.\n"+
+				"to learn more about it, visit: https://atlasgo.io/dev-database")
+	}
+	return diags
 }
 
 // checkForUpdate checks for version updates and security advisories for Atlas.

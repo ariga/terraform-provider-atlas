@@ -1,16 +1,14 @@
 package provider_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 )
 
-const testAccData = `
-data "atlas_schema" "market" {
-  dev_db_url = "mysql://root:pass@localhost:3307/test"
-  src = <<-EOT
-	schema "test" {
+const (
+	testAccData = `schema "test" {
 		charset = "utf8mb4"
 		collate = "utf8mb4_0900_ai_ci"
 	}
@@ -24,12 +22,8 @@ data "atlas_schema" "market" {
 		primary_key {
 			columns = [column.id]
 		}
-	}
-	EOT
-}
-`
-
-const normalHCL = `table "foo" {
+	}`
+	normalHCL = `table "foo" {
   schema = schema.test
   column "id" {
     null           = false
@@ -45,6 +39,7 @@ schema "test" {
   collate = "utf8mb4_0900_ai_ci"
 }
 `
+)
 
 func TestAccSchemaDataSource(t *testing.T) {
 	tempSchemas(t, mysqlDevURL, "test")
@@ -54,7 +49,12 @@ func TestAccSchemaDataSource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Read testing
 			{
-				Config: testAccData,
+				Config: fmt.Sprintf(`data "atlas_schema" "market" {
+					dev_db_url = "mysql://root:pass@localhost:3307/test"
+					src        = <<-EOT
+					%s
+					EOT
+				}`, testAccData),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.atlas_schema.market", "hcl", normalHCL),
 					resource.TestCheckResourceAttr("data.atlas_schema.market", "id", "/WWD4tjYzwMDMHxlNwuhrg"),
@@ -69,9 +69,9 @@ func TestAccSchemaDataSource(t *testing.T) {
 			// Read testing
 			{
 				Config: `data "atlas_schema" "market" {
-	dev_db_url = "mysql://root:pass@localhost:3307/test"
-	src = ""
-}`,
+					dev_db_url = "mysql://root:pass@localhost:3307/test"
+					src = ""
+				}`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckNoResourceAttr("data.atlas_schema.market", "hcl"),
 					resource.TestCheckResourceAttr("data.atlas_schema.market", "id", "bGInLge7AUJiuCF1YpXFjQ"),
@@ -87,23 +87,33 @@ func TestAccSchemaDataSource(t *testing.T) {
 			// Read testing
 			{
 				Config: `data "atlas_schema" "market" {
-	dev_db_url = "mysql://root:pass@localhost:3307/test"
-	src = "file://./sql-files/schema.sql"
-}`,
+					dev_url = "mysql://root:pass@localhost:3307/test"
+					src     = "file://./sql-files/schema.sql"
+				}`,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.atlas_schema.market", "hcl", `table "hello" {
-  schema = schema.test
-  column "c1" {
-    null = true
-    type = int
-  }
-}
-schema "test" {
-  charset = "utf8mb4"
-  collate = "utf8mb4_0900_ai_ci"
-}
-`),
-					resource.TestCheckResourceAttr("data.atlas_schema.market", "id", "gvwVorlKca2eRP5hpAg5BQ"),
+					resource.TestCheckResourceAttr("data.atlas_schema.market", "hcl", normalHCL),
+					resource.TestCheckResourceAttr("data.atlas_schema.market", "id", "/WWD4tjYzwMDMHxlNwuhrg"),
+				),
+			},
+		},
+	})
+	// Use DevDB from provider config
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Read testing
+			{
+				Config: `
+				provider "atlas" {
+					dev_url = "mysql://root:pass@localhost:3307/test"
+				}
+				data "atlas_schema" "hello" {
+					src = "file://./sql-files/schema.sql"
+				}`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.atlas_schema.hello", "hcl", normalHCL),
+					resource.TestCheckResourceAttr("data.atlas_schema.hello", "id", "/WWD4tjYzwMDMHxlNwuhrg"),
 				),
 			},
 		},

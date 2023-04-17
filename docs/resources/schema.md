@@ -14,8 +14,8 @@ Atlas database resource manages the data schema of the database, using an HCL fi
 
 ```terraform
 data "atlas_schema" "market" {
-  dev_db_url = "mysql://root:pass@localhost:3307/test"
-  src        = file("${path.module}/schema.hcl")
+  dev_url = "mysql://root:pass@localhost:3307/test"
+  src     = file("${path.module}/schema.hcl")
 }
 
 resource "atlas_schema" "market" {
@@ -34,7 +34,8 @@ resource "atlas_schema" "market" {
 
 ### Optional
 
-- `dev_db_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
+- `dev_db_url` (String, Sensitive, Deprecated) Use `dev_url` instead.
+- `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `exclude` (List of String) Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude-schemas
 
 ### Read-Only
