@@ -174,7 +174,7 @@ func (d *providerData) getDevURL(urls ...types.String) string {
 	return d.devURL
 }
 
-func (d *providerData) childrenConfigure(data any) (diags diag.Diagnostics) {
+func (d *providerData) configure(data any) (diags diag.Diagnostics) {
 	// Prevent panic if the provider has not been configured.
 	if data == nil {
 		return
@@ -191,6 +191,12 @@ func (d *providerData) childrenConfigure(data any) (diags diag.Diagnostics) {
 }
 
 func (d *providerData) validateConfig(ctx context.Context, cfg tfsdk.Config) (diags diag.Diagnostics) {
+	if d.client == nil {
+		// TF run validation on resource/data-source before configure,
+		// so we can't validate the config at this point.
+		// If the client is nil, it means that the provider has not been configured.
+		return
+	}
 	var devURL types.String
 	diags.Append(cfg.GetAttribute(ctx, tfpath.Root("dev_url"), &devURL)...)
 	if diags.HasError() {

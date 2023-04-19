@@ -51,7 +51,7 @@ func (d *MigrationDataSource) Metadata(ctx context.Context, req datasource.Metad
 
 // Configure implements datasource.DataSourceWithConfigure.
 func (d *MigrationDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	resp.Diagnostics.Append(d.providerData.childrenConfigure(req.ProviderData)...)
+	resp.Diagnostics.Append(d.configure(req.ProviderData)...)
 }
 
 // GetSchema implements datasource.DataSource.
