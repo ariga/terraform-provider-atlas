@@ -61,7 +61,7 @@ func (r *MigrationResource) Metadata(ctx context.Context, req resource.MetadataR
 }
 
 func (r *MigrationResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	resp.Diagnostics.Append(r.providerData.childrenConfigure(req.ProviderData)...)
+	resp.Diagnostics.Append(r.configure(req.ProviderData)...)
 }
 
 // GetSchema implements resource.Resource.

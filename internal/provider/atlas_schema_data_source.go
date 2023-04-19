@@ -92,12 +92,12 @@ func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, di
 
 // Configure implements datasource.DataSourceWithConfigure.
 func (d *AtlasSchemaDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	resp.Diagnostics.Append(d.providerData.childrenConfigure(req.ProviderData)...)
+	resp.Diagnostics.Append(d.configure(req.ProviderData)...)
 }
 
 // ValidateConfig implements datasource.DataSourceWithValidateConfig.
 func (d *AtlasSchemaDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
-	resp.Diagnostics.Append(d.providerData.validateConfig(ctx, req.Config)...)
+	resp.Diagnostics.Append(d.validateConfig(ctx, req.Config)...)
 }
 
 // Read implements datasource.DataSource.

@@ -57,7 +57,7 @@ func (r *AtlasSchemaResource) Metadata(ctx context.Context, req resource.Metadat
 }
 
 func (r *AtlasSchemaResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	resp.Diagnostics.Append(r.providerData.childrenConfigure(req.ProviderData)...)
+	resp.Diagnostics.Append(r.configure(req.ProviderData)...)
 }
 
 // GetSchema implements resource.Resource.
@@ -190,7 +190,7 @@ func (r *AtlasSchemaResource) Delete(ctx context.Context, req resource.DeleteReq
 
 // ValidateConfig implements resource.ResourceWithValidateConfig.
 func (r AtlasSchemaResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
-	resp.Diagnostics.Append(r.providerData.validateConfig(ctx, req.Config)...)
+	resp.Diagnostics.Append(r.validateConfig(ctx, req.Config)...)
 }
 
 // ModifyPlan implements resource.ResourceWithModifyPlan.
