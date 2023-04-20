@@ -25,7 +25,7 @@ func TestAccMigrationDataSource(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "id", "migrations?format=atlas"),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "PENDING"),
-					resource.TestCheckNoResourceAttr("data.atlas_migration.hello", "current"),
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "current", ""),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "next", "20221101163823"),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "latest", "20221101165415"),
 				),
