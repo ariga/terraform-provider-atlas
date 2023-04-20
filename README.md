@@ -32,7 +32,10 @@ terraform {
     }
   }
 }
-provider "atlas" {}
+provider "atlas" {
+  # User MySQL 8 docker image as the dev database.
+  dev_url = "docker://mysql/8"
+}
 ```
 
 ## Quick Start
