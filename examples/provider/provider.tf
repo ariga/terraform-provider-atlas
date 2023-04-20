@@ -1,8 +1,10 @@
-provider "atlas" {}
+provider "atlas" {
+  # Use MySQL 8 docker image as the dev database.
+  dev_url = "docker://mysql/8/market"
+}
 
 data "atlas_schema" "market" {
-  dev_url = "mysql://root:pass@localhost:3307/market"
-  src     = file("${path.module}/schema.hcl")
+  src = file("${path.module}/schema.hcl")
 }
 
 resource "atlas_schema" "market" {
