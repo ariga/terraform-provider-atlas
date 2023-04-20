@@ -187,7 +187,7 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 		return
 	}
 	resp.Diagnostics.Append(r.validateConfig(ctx, req.Config)...)
-	if !data.Version.IsUnknown() && data.Version.Value == "" {
+	if data.Version.IsNull() {
 		resp.Diagnostics.AddAttributeWarning(
 			path.Root("version"),
 			"version is unset",
@@ -224,7 +224,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			resp.Diagnostics.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
 			return
 		}
-		if plan.Version.IsNull() {
+		if plan.Version.Value == "" {
 			v := report.LatestVersion()
 			plan.Version = types.String{Value: v, Null: v == ""}
 		}

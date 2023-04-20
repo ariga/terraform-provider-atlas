@@ -123,12 +123,12 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 	}
 	data.Status = types.String{Value: r.Status}
 	if r.Status == "PENDING" && r.Current == noMigration {
-		data.Current = types.String{Null: true}
+		data.Current = types.String{Value: ""}
 	} else {
 		data.Current = types.String{Value: r.Current}
 	}
 	if r.Status == "OK" && r.Next == latestVersion {
-		data.Next = types.String{Null: true}
+		data.Next = types.String{Value: ""}
 	} else {
 		data.Next = types.String{Value: r.Next}
 	}
