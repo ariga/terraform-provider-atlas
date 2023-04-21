@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"ariga.io/atlas/sql/sqlclient"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -181,7 +182,10 @@ func (r *AtlasSchemaResource) Delete(ctx context.Context, req resource.DeleteReq
 	}
 	// Delete the resource by setting
 	// the HCL to an empty string
-	data.HCL = types.String{Null: true}
+	resp.Diagnostics.Append(emptySchema(ctx, data.URL.Value, &data.HCL)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	resp.Diagnostics.Append(r.applySchema(ctx, data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -228,7 +232,10 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		plan = state.Clone()
 		// Delete the resource by setting
 		// the HCL to an empty string.
-		plan.HCL = types.String{Null: true}
+		resp.Diagnostics.Append(emptySchema(ctx, plan.URL.Value, &plan.HCL)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 	}
 	resp.Diagnostics.Append(PrintPlanSQL(ctx, r.client, r.getDevURL(plan.DevURL, plan.DeprecatedDevURL), plan)...)
 }
@@ -361,6 +368,24 @@ To learn how to add an existing database to a project, read:
 https://atlasgo.io/terraform-provider#working-with-an-existing-database`, strings.Join(causes, "\n- ")))
 	}
 	return
+}
+
+func emptySchema(ctx context.Context, url string, hcl *types.String) (diags diag.Diagnostics) {
+	s, err := sqlclient.Open(ctx, url)
+	if err != nil {
+		diags.AddError("Atlas Plan Error",
+			fmt.Sprintf("Unable to connect to database, got error: %s", err),
+		)
+		return
+	}
+	defer s.Close()
+	name := s.URL.Schema
+	if name != "" {
+		*hcl = types.String{Value: fmt.Sprintf("schema %q {}", name)}
+		return
+	}
+	*hcl = types.String{Null: true}
+	return diags
 }
 
 func nonEmptyStringSlice(in []string) []string {
