@@ -409,8 +409,7 @@ func TestAccDestroySchemas(t *testing.T) {
 		EOT
 		url = "%s"
 	}`, mysqlURL)
-	// When the following destroys, it only deletes schema "test4".
-	tfSchema := fmt.Sprintf(`resource "atlas_schema" "testdb" {
+	schema := `resource "atlas_schema" "testdb" {
 		hcl = <<-EOT
 		table "orders" {
 			schema = schema.test4
@@ -422,8 +421,8 @@ func TestAccDestroySchemas(t *testing.T) {
 		schema "test4" {
 		}
 		EOT
-		url = "%s/test4"
-	}`, mysqlURL)
+		url = "%s"
+	}`
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -435,7 +434,9 @@ func TestAccDestroySchemas(t *testing.T) {
 				ExpectNonEmptyPlan: true,
 			},
 			{
-				Config: tfSchema,
+				// When the following destroys, it doesn't delete any schemas.
+				// It only deletes the tables in the schemas.
+				Config: fmt.Sprintf(schema, mysqlURL+"/test4"),
 				// ignore non-normalized schema
 				ExpectNonEmptyPlan: true,
 			},
@@ -452,8 +453,43 @@ func TestAccDestroySchemas(t *testing.T) {
 			if _, ok := realm.Schema("do-not-delete"); !ok {
 				return fmt.Errorf("schema 'do-not-delete' does not exist, but expected to not be destroyed.")
 			}
+			if _, ok := realm.Schema("test4"); !ok {
+				return fmt.Errorf("schema 'test4' does not exist.")
+			}
+			return nil
+		},
+	})
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:  preExistingSchema,
+				Destroy: false,
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				// When the following destroys, it deletes all schemas.
+				Config: fmt.Sprintf(schema, mysqlURL),
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+			},
+		},
+		CheckDestroy: func(s *terraform.State) error {
+			cli, err := sqlclient.Open(context.Background(), mysqlURL)
+			if err != nil {
+				return err
+			}
+			realm, err := cli.InspectRealm(context.Background(), nil)
+			if err != nil {
+				return err
+			}
+			if _, ok := realm.Schema("do-not-delete"); ok {
+				return fmt.Errorf("schema 'do-not-delete' exist, but expected to be destroyed.")
+			}
 			if _, ok := realm.Schema("test4"); ok {
-				return fmt.Errorf("schema 'test4' wasn't deleted.")
+				return fmt.Errorf("schema 'test4' exist, but expected to be destroyed.")
 			}
 			return nil
 		},
