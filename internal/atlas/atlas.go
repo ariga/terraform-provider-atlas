@@ -57,7 +57,9 @@ type (
 		Format  string
 		Schema  []string
 		URL     string
+		Vars    Vars
 	}
+	Vars map[string][]string
 )
 
 // NewClient returns a new Atlas client.
@@ -151,6 +153,7 @@ func (c *Client) SchemaInspect(ctx context.Context, data *SchemaInspectParams) (
 	if len(data.Exclude) > 0 {
 		args = append(args, "--exclude", strings.Join(data.Exclude, ","))
 	}
+	args = append(args, data.Vars.AsArgs()...)
 	return c.runCommand(ctx, args, nil)
 }
 
@@ -346,4 +349,14 @@ func TempFile(content, ext string) (string, func() error, error) {
 	return fmt.Sprintf("file://%s", f.Name()), func() error {
 		return os.Remove(f.Name())
 	}, nil
+}
+
+func (v Vars) AsArgs() []string {
+	var args []string
+	for k, items := range v {
+		for _, i := range items {
+			args = append(args, "--var", fmt.Sprintf("%s=%s", k, i))
+		}
+	}
+	return args
 }

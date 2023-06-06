@@ -45,6 +45,7 @@ resource "atlas_schema" "hello" {
 
 - `dev_db_url` (String, Sensitive, Deprecated) Use `dev_url` instead.
 - `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
+- `variables` (List of String) The variables used in the HCL. Format: `key=value`
 
 ### Read-Only
 

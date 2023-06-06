@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net/url"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -23,10 +24,11 @@ type (
 	}
 	// AtlasSchemaDataSourceModel describes the data source data model.
 	AtlasSchemaDataSourceModel struct {
-		DevURL types.String `tfsdk:"dev_url"`
-		Src    types.String `tfsdk:"src"`
-		HCL    types.String `tfsdk:"hcl"`
-		ID     types.String `tfsdk:"id"`
+		DevURL    types.String `tfsdk:"dev_url"`
+		Src       types.String `tfsdk:"src"`
+		HCL       types.String `tfsdk:"hcl"`
+		ID        types.String `tfsdk:"id"`
+		Variables types.List   `tfsdk:"variables"`
 
 		DeprecatedDevURL types.String `tfsdk:"dev_db_url"`
 	}
@@ -78,6 +80,14 @@ func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, di
 				Type:        types.StringType,
 				Computed:    true,
 			},
+			"variables": {
+				Description: "The variables used in the HCL. Format: `key=value`",
+				Optional:    true,
+				Type: types.ListType{
+					ElemType: types.StringType,
+				},
+			},
+
 			"dev_db_url": {
 				Description: "Use `dev_url` instead.",
 				Type:        types.StringType,
@@ -136,10 +146,19 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 			}
 		}()
 	}
+	var vars atlas.Vars
+	if !data.Variables.IsNull() {
+		vars = make(atlas.Vars)
+		resp.Diagnostics.Append(ParseVariablesToVars(ctx, data.Variables, vars)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
 	normalHCL, err := d.client.SchemaInspect(ctx, &atlas.SchemaInspectParams{
 		DevURL: d.getDevURL(data.DevURL, data.DeprecatedDevURL),
 		Format: "hcl",
 		URL:    src,
+		Vars:   vars,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Inspect Error",
@@ -161,4 +180,23 @@ func hclID(hcl []byte) string {
 	h := fnv.New128()
 	h.Write(hcl)
 	return base64.RawStdEncoding.EncodeToString(h.Sum(nil))
+}
+
+func ParseVariablesToVars(ctx context.Context, data types.List, vars atlas.Vars) (diags diag.Diagnostics) {
+	var kvs []string
+	diags = data.ElementsAs(ctx, &kvs, false)
+	if diags.HasError() {
+		return
+	}
+	for i := range kvs {
+		kv := strings.SplitN(kvs[i], "=", 2)
+		if len(kv) != 2 {
+			diags = append(diags, diag.NewErrorDiagnostic("Variables Error",
+				fmt.Sprintf("Unable to parse variables, got error: variables must be format as key=value, got: %q", kvs[i]),
+			))
+			return
+		}
+		vars[kv[0]] = append(vars[kv[0]], kv[1])
+	}
+	return
 }
