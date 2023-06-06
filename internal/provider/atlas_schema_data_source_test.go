@@ -166,6 +166,20 @@ func TestParseVariablesToHCL(t *testing.T) {
 			},
 			wantDiags: nil,
 		},
+		{
+			name: "invalid",
+			args: args{
+				ctx: context.Background(),
+				data: listStrings(
+					"errr",
+				),
+			},
+			wantVars: atlas.Vars{},
+			wantDiags: diag.Diagnostics{
+				diag.NewErrorDiagnostic("Variables Error",
+					"Unable to parse variables, got error: variables must be format as key=value, got: \"errr\""),
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
