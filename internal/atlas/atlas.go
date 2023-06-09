@@ -59,7 +59,7 @@ type (
 		URL     string
 		Vars    Vars
 	}
-	Vars map[string][]string
+	Vars map[string]string
 )
 
 // NewClient returns a new Atlas client.
@@ -353,10 +353,8 @@ func TempFile(content, ext string) (string, func() error, error) {
 
 func (v Vars) AsArgs() []string {
 	var args []string
-	for k, items := range v {
-		for _, i := range items {
-			args = append(args, "--var", fmt.Sprintf("%s=%s", k, i))
-		}
+	for k, v := range v {
+		args = append(args, "--var", fmt.Sprintf("%s=%s", k, v))
 	}
 	return args
 }
