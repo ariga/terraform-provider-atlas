@@ -51,5 +51,3 @@ resource "atlas_schema" "hello" {
 
 - `hcl` (String) The normalized form of the HCL
 - `id` (String) The ID of this resource
-
-
