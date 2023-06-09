@@ -20,6 +20,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	tfpath "github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
+	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -58,7 +59,6 @@ type (
 // Ensure AtlasProvider satisfies various provider interfaces.
 var (
 	_ provider.Provider                   = &AtlasProvider{}
-	_ provider.ProviderWithMetadata       = &AtlasProvider{}
 	_ provider.ProviderWithValidateConfig = &AtlasProvider{}
 )
 
@@ -92,19 +92,18 @@ func (p *AtlasProvider) Metadata(ctx context.Context, req provider.MetadataReque
 }
 
 // GetSchema implements provider.Provider.
-func (p *AtlasProvider) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
-	return tfsdk.Schema{
+func (p *AtlasProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
+	resp.Schema = schema.Schema{
 		Description: "The Atlas provider is used to manage your database migrations, using the DDL of Atlas.\n" +
 			"For documentation about Atlas, visit: https://atlasgo.io",
-		Attributes: map[string]tfsdk.Attribute{
-			"dev_url": {
+		Attributes: map[string]schema.Attribute{
+			"dev_url": schema.StringAttribute{
 				Description: "The URL of the dev database. This configuration is shared for all resources if there is no config on the resource.",
-				Type:        types.StringType,
 				Optional:    true,
 				Sensitive:   true,
 			},
 		},
-	}, nil
+	}
 }
 
 // Configure implements provider.Provider.
@@ -123,7 +122,7 @@ func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureReq
 	}
 	data := providerData{client: c}
 	if model != nil {
-		data.devURL = model.DevURL.Value
+		data.devURL = model.DevURL.ValueString()
 	}
 	resp.DataSourceData = data
 	resp.ResourceData = data
@@ -167,8 +166,8 @@ func (p *AtlasProvider) ValidateConfig(ctx context.Context, req provider.Validat
 
 func (d *providerData) getDevURL(urls ...types.String) string {
 	for _, u := range urls {
-		if u.Value != "" {
-			return u.Value
+		if s := u.ValueString(); s != "" {
+			return s
 		}
 	}
 	return d.devURL
@@ -202,7 +201,7 @@ func (d *providerData) validateConfig(ctx context.Context, cfg tfsdk.Config) (di
 	if diags.HasError() {
 		return diags
 	}
-	if !devURL.IsUnknown() && devURL.Value == "" && d.devURL == "" {
+	if !devURL.IsUnknown() && devURL.ValueString() == "" && d.devURL == "" {
 		diags.AddAttributeWarning(tfpath.Root("dev_url"), "dev_url is unset",
 			"It is highly recommended that you use 'dev_url' to specify a dev database.\n"+
 				"to learn more about it, visit: https://atlasgo.io/dev-database")

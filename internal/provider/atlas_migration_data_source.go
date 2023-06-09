@@ -5,8 +5,7 @@ import (
 
 	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
-	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -55,53 +54,45 @@ func (d *MigrationDataSource) Configure(ctx context.Context, req datasource.Conf
 }
 
 // GetSchema implements datasource.DataSource.
-func (d *MigrationDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
-	return tfsdk.Schema{
+func (d *MigrationDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+	resp.Schema = schema.Schema{
 		Description: "Data source returns the information about the current migration.",
-		Attributes: map[string]tfsdk.Attribute{
-			"url": {
+		Attributes: map[string]schema.Attribute{
+			"url": schema.StringAttribute{
 				Description: "[driver://username:password@address/dbname?param=value] select a resource using the URL format",
-				Type:        types.StringType,
 				Required:    true,
 				Sensitive:   true,
 			},
-			"dir": {
+			"dir": schema.StringAttribute{
 				Description: "Select migration directory using URL format",
-				Type:        types.StringType,
 				Required:    true,
 			},
-			"revisions_schema": {
+			"revisions_schema": schema.StringAttribute{
 				Description: "The name of the schema the revisions table resides in",
-				Type:        types.StringType,
 				Optional:    true,
 			},
-			"status": {
+			"status": schema.StringAttribute{
 				Description: "The Status of migration (OK, PENDING)",
-				Type:        types.StringType,
 				Computed:    true,
 			},
-			"current": {
+			"current": schema.StringAttribute{
 				Description: "Current migration version",
-				Type:        types.StringType,
 				Computed:    true,
 			},
-			"next": {
+			"next": schema.StringAttribute{
 				Description: "Next migration version",
-				Type:        types.StringType,
 				Computed:    true,
 			},
-			"latest": {
+			"latest": schema.StringAttribute{
 				Description: "The latest version of the migration is in the migration directory",
-				Type:        types.StringType,
 				Computed:    true,
 			},
-			"id": {
+			"id": schema.StringAttribute{
 				Description: "The ID of the migration",
-				Type:        types.StringType,
 				Computed:    true,
 			},
 		},
-	}, nil
+	}
 }
 
 // Read implements datasource.DataSource.
@@ -113,27 +104,31 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 		return
 	}
 	r, err := d.client.Status(ctx, &atlas.StatusParams{
-		DirURL:          data.DirURL.Value,
-		URL:             data.URL.Value,
-		RevisionsSchema: data.RevisionsSchema.Value,
+		DirURL:          data.DirURL.ValueString(),
+		URL:             data.URL.ValueString(),
+		RevisionsSchema: data.RevisionsSchema.ValueString(),
 	})
 	if err != nil {
 		resp.Diagnostics.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
 		return
 	}
-	data.Status = types.String{Value: r.Status}
+	data.Status = types.StringValue(r.Status)
 	if r.Status == "PENDING" && r.Current == noMigration {
-		data.Current = types.String{Value: ""}
+		data.Current = types.StringValue("")
 	} else {
-		data.Current = types.String{Value: r.Current}
+		data.Current = types.StringValue(r.Current)
 	}
 	if r.Status == "OK" && r.Next == latestVersion {
-		data.Next = types.String{Value: ""}
+		data.Next = types.StringValue("")
 	} else {
-		data.Next = types.String{Value: r.Next}
+		data.Next = types.StringValue(r.Next)
 	}
 	v := r.LatestVersion()
 	data.ID = data.DirURL
-	data.Latest = types.String{Value: v, Null: v == ""}
+	if v == "" {
+		data.Latest = types.StringNull()
+	} else {
+		data.Latest = types.StringValue(v)
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

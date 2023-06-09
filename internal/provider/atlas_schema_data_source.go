@@ -8,8 +8,7 @@ import (
 	"net/url"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
-	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
@@ -51,52 +50,45 @@ func (d *AtlasSchemaDataSource) Metadata(ctx context.Context, req datasource.Met
 }
 
 // GetSchema implements datasource.DataSource.
-func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
-	return tfsdk.Schema{
+func (d *AtlasSchemaDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
 		Description: "atlas_schema data source uses dev-db to normalize the HCL schema " +
 			"in order to create better terraform diffs",
-		Attributes: map[string]tfsdk.Attribute{
-			"dev_url": {
+		Attributes: map[string]schema.Attribute{
+			"dev_url": schema.StringAttribute{
 				Description: "The url of the dev-db see https://atlasgo.io/cli/url",
-				Type:        types.StringType,
 				Optional:    true,
 				Sensitive:   true,
 			},
-			"src": {
+			"src": schema.StringAttribute{
 				Description: "The schema definition of the database. This attribute can be HCL schema or an URL to HCL/SQL file.",
-				Type:        types.StringType,
 				Required:    true,
 			},
 			// the HCL in a predicted, and ordered format see https://atlasgo.io/cli/dev-database
-			"hcl": {
+			"hcl": schema.StringAttribute{
 				Description: "The normalized form of the HCL",
-				Type:        types.StringType,
 				Computed:    true,
 			},
-			"id": {
+			"id": schema.StringAttribute{
 				Description: "The ID of this resource",
-				Type:        types.StringType,
 				Computed:    true,
 			},
-			"variables": {
+			"variables": schema.MapAttribute{
 				Description: "The map of variables used in the HCL.",
 				Optional:    true,
-				Type: types.MapType{
-					ElemType: types.StringType,
-				},
+				ElementType: types.StringType,
 			},
 
-			"dev_db_url": {
+			"dev_db_url": schema.StringAttribute{
 				Description: "Use `dev_url` instead.",
-				Type:        types.StringType,
 				Optional:    true,
 				Sensitive:   true,
 				DeprecationMessage: "This attribute is deprecated and will be removed in the next major version. " +
 					"Please use the `dev_url` attribute instead.",
 			},
 		},
-	}, nil
+	}
 }
 
 // Configure implements datasource.DataSourceWithConfigure.
@@ -116,12 +108,12 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	src := data.Src.Value
+	src := data.Src.ValueString()
 	if src == "" {
 		// We don't have a schema to normalize,
 		// so we don't do anything.
-		data.ID = types.String{Value: hclID(nil)}
-		data.HCL = types.String{Null: true}
+		data.ID = types.StringValue(hclID(nil))
+		data.HCL = types.StringNull()
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 		return
 	}
@@ -165,8 +157,8 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		)
 		return
 	}
-	data.ID = types.String{Value: hclID([]byte(normalHCL))}
-	data.HCL = types.String{Value: normalHCL}
+	data.ID = types.StringValue(hclID([]byte(normalHCL)))
+	data.HCL = types.StringValue(normalHCL)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 

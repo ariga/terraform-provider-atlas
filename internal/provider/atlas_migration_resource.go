@@ -5,14 +5,19 @@ import (
 	"fmt"
 	"strings"
 
-	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+
+	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
 )
 
 type (
@@ -30,6 +35,12 @@ type (
 
 		Status types.Object `tfsdk:"status"`
 		ID     types.String `tfsdk:"id"`
+	}
+	MigrationStatus struct {
+		Status  types.String `tfsdk:"status"`
+		Current types.String `tfsdk:"current"`
+		Next    types.String `tfsdk:"next"`
+		Latest  types.String `tfsdk:"latest"`
 	}
 )
 
@@ -65,60 +76,52 @@ func (r *MigrationResource) Configure(ctx context.Context, req resource.Configur
 }
 
 // GetSchema implements resource.Resource.
-func (r *MigrationResource) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
-	return tfsdk.Schema{
+func (r *MigrationResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
 		Description: "The resource applies pending migration files on the connected database." +
 			"See https://atlasgo.io/",
-		Attributes: map[string]tfsdk.Attribute{
-			"dir": {
+		Attributes: map[string]schema.Attribute{
+			"dir": schema.StringAttribute{
 				Description: "the URL of the migration directory, by default it is file://migrations, " +
 					"e.g a directory named migrations in the current working directory.",
-				Type:     types.StringType,
 				Required: true,
-				Validators: []tfsdk.AttributeValidator{
+				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
 				},
 			},
-			"url": {
+			"url": schema.StringAttribute{
 				Description: "The url of the database see https://atlasgo.io/cli/url",
-				Type:        types.StringType,
 				Required:    true,
 				Sensitive:   true,
 			},
-			"dev_url": {
+			"dev_url": schema.StringAttribute{
 				Description: "The url of the dev-db see https://atlasgo.io/cli/url",
-				Type:        types.StringType,
 				Optional:    true,
 				Sensitive:   true,
 			},
-			"revisions_schema": {
+			"revisions_schema": schema.StringAttribute{
 				Description: "The name of the schema the revisions table resides in",
-				Type:        types.StringType,
 				Optional:    true,
 			},
-			"version": {
+			"version": schema.StringAttribute{
 				Description: "The version of the migration to apply, if not specified the latest version will be applied",
-				Type:        types.StringType,
 				Optional:    true,
 				Computed:    true,
 			},
-			"status": {
-				Description: "The status of the migration",
-				Type: types.ObjectType{
-					AttrTypes: statusObjectAttrs,
-				},
-				Computed: true,
+			"status": schema.ObjectAttribute{
+				Description:    "The status of the migration",
+				AttributeTypes: statusObjectAttrs,
+				Computed:       true,
 			},
-			"id": {
+			"id": schema.StringAttribute{
 				Description: "The ID of this resource",
 				Computed:    true,
-				PlanModifiers: tfsdk.AttributePlanModifiers{
-					resource.UseStateForUnknown(),
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
-				Type: types.StringType,
 			},
 		},
-	}, nil
+	}
 }
 
 // Create implements resource.Resource.
@@ -133,7 +136,7 @@ func (r *MigrationResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 	// Only set ID when creating a new resource
-	data.ID = dirToID(data.DirURL.Value)
+	data.ID = dirToID(data.DirURL)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -144,19 +147,28 @@ func (r *MigrationResource) Read(ctx context.Context, req resource.ReadRequest, 
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	status, err := r.buildStatus(ctx, data)
-	if err != nil {
-		resp.Diagnostics.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
+	var status MigrationStatus
+	resp.Diagnostics.Append(data.Status.As(ctx, &status, basetypes.ObjectAsOptions{})...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-	null := types.String{Null: true}
-	if !data.Status.Attrs["current"].Equal(null) && status.Attrs["current"].Equal(null) {
+	nextStatus, diags := r.buildStatus(ctx, data)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+	var nextStatusObj MigrationStatus
+	resp.Diagnostics.Append(nextStatus.As(ctx, &nextStatusObj, basetypes.ObjectAsOptions{})...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !status.Current.IsNull() && nextStatusObj.Current.IsNull() {
 		// The resource has been deleted
 		resp.State.RemoveResource(ctx)
 		return
 	}
-	data.ID = dirToID(data.DirURL.Value)
-	data.Status = status
+	data.ID = dirToID(data.DirURL)
+	data.Status = nextStatus
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -216,28 +228,32 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			return
 		}
 		report, err := r.client.Status(ctx, &atlas.StatusParams{
-			DirURL:          plan.DirURL.Value,
-			URL:             plan.URL.Value,
-			RevisionsSchema: plan.RevisionsSchema.Value,
+			DirURL:          plan.DirURL.ValueString(),
+			URL:             plan.URL.ValueString(),
+			RevisionsSchema: plan.RevisionsSchema.ValueString(),
 		})
 		if err != nil {
 			resp.Diagnostics.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
 			return
 		}
-		if plan.Version.Value == "" {
+		if plan.Version.ValueString() == "" {
 			v := report.LatestVersion()
-			plan.Version = types.String{Value: v, Null: v == ""}
+			if v == "" {
+				plan.Version = types.StringNull()
+			} else {
+				plan.Version = types.StringValue(v)
+			}
 		}
 		devURL := r.getDevURL(plan.DevURL)
 		if devURL == "" {
 			return
 		}
-		pendingCount, _ := report.Amount(plan.Version.Value)
+		pendingCount, _ := report.Amount(plan.Version.ValueString())
 		if pendingCount == 0 {
 			return
 		}
 		lint, err := r.client.Lint(ctx, &atlas.LintParams{
-			DirURL: plan.DirURL.Value,
+			DirURL: plan.DirURL.ValueString(),
 			DevURL: devURL,
 			Latest: pendingCount,
 		})
@@ -267,15 +283,15 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 
 func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResourceModel) (diags diag.Diagnostics) {
 	statusReport, err := r.client.Status(ctx, &atlas.StatusParams{
-		DirURL:          data.DirURL.Value,
-		URL:             data.URL.Value,
-		RevisionsSchema: data.RevisionsSchema.Value,
+		DirURL:          data.DirURL.ValueString(),
+		URL:             data.URL.ValueString(),
+		RevisionsSchema: data.RevisionsSchema.ValueString(),
 	})
 	if err != nil {
 		diags.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
 		return
 	}
-	amount, synced := statusReport.Amount(data.Version.Value)
+	amount, synced := statusReport.Amount(data.Version.ValueString())
 	if !synced {
 		if amount == 0 {
 			diags.AddAttributeError(
@@ -286,9 +302,9 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			return
 		}
 		report, err := r.client.Apply(ctx, &atlas.ApplyParams{
-			DirURL:          data.DirURL.Value,
-			URL:             data.URL.Value,
-			RevisionsSchema: data.RevisionsSchema.Value,
+			DirURL:          data.DirURL.ValueString(),
+			URL:             data.URL.ValueString(),
+			RevisionsSchema: data.RevisionsSchema.ValueString(),
 			Amount:          amount,
 		})
 		if err != nil {
@@ -300,48 +316,41 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			return
 		}
 	}
-	if data.Status, err = r.buildStatus(ctx, data); err != nil {
-		diags.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
-		return
-	}
+	data.Status, diags = r.buildStatus(ctx, data)
 	return
 }
 
-func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationResourceModel) (types.Object, error) {
+func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationResourceModel) (types.Object, diag.Diagnostics) {
 	report, err := r.client.Status(ctx, &atlas.StatusParams{
-		DirURL:          data.DirURL.Value,
-		URL:             data.URL.Value,
-		RevisionsSchema: data.RevisionsSchema.Value,
+		DirURL:          data.DirURL.ValueString(),
+		URL:             data.URL.ValueString(),
+		RevisionsSchema: data.RevisionsSchema.ValueString(),
 	})
 	if err != nil {
-		return types.Object{}, err
+		return types.ObjectNull(statusObjectAttrs), diag.Diagnostics{
+			atlas.ErrorDiagnostic(err, "Failed to read migration status"),
+		}
 	}
-	var (
-		current types.String
-		next    types.String
-	)
-	if report.Status == "PENDING" && report.Current == noMigration {
-		current = types.String{Null: true}
-	} else {
-		current = types.String{Value: report.Current}
+	current := types.StringNull()
+	if !(report.Status == "PENDING" && report.Current == noMigration) {
+		current = types.StringValue(report.Current)
 	}
-	if report.Status == "OK" && report.Next == latestVersion {
-		next = types.String{Null: true}
-	} else {
-		next = types.String{Value: report.Next}
+	next := types.StringNull()
+	if !(report.Status == "OK" && report.Next == latestVersion) {
+		next = types.StringValue(report.Next)
 	}
-	latestVersion := report.LatestVersion()
-	return types.Object{
-		Attrs: map[string]attr.Value{
-			"status":  types.String{Value: report.Status},
-			"current": current,
-			"next":    next,
-			"latest":  types.String{Value: latestVersion, Null: latestVersion == ""},
-		},
-		AttrTypes: statusObjectAttrs,
-	}, nil
+	latest := types.StringNull()
+	if v := report.LatestVersion(); v != "" {
+		latest = types.StringValue(v)
+	}
+	return types.ObjectValue(statusObjectAttrs, map[string]attr.Value{
+		"status":  types.StringValue(report.Status),
+		"current": current,
+		"next":    next,
+		"latest":  latest,
+	})
 }
 
-func dirToID(dir string) types.String {
-	return types.String{Value: fmt.Sprintf("file://%s", dir)}
+func dirToID(dir types.String) types.String {
+	return types.StringValue(fmt.Sprintf("file://%s", dir.ValueString()))
 }
