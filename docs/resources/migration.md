@@ -53,5 +53,3 @@ Read-Only:
 - `latest` (String)
 - `next` (String)
 - `status` (String)
-
-

@@ -38,5 +38,3 @@ data "atlas_migration" "hello" {
 - `latest` (String) The latest version of the migration is in the migration directory
 - `next` (String) Next migration version
 - `status` (String) The Status of migration (OK, PENDING)
-
-

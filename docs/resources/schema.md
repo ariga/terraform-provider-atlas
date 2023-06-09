@@ -41,5 +41,3 @@ resource "atlas_schema" "market" {
 ### Read-Only
 
 - `id` (String) The ID of this resource
-
-

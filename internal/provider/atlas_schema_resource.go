@@ -11,7 +11,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
@@ -62,58 +65,51 @@ func (r *AtlasSchemaResource) Configure(ctx context.Context, req resource.Config
 }
 
 // GetSchema implements resource.Resource.
-func (r *AtlasSchemaResource) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
-	return tfsdk.Schema{
+func (r *AtlasSchemaResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
 		Description: "Atlas database resource manages the data schema of the database, " +
 			"using an HCL file describing the wanted state of the database. " +
 			"See https://atlasgo.io/",
-		Attributes: map[string]tfsdk.Attribute{
-			"hcl": {
+		Attributes: map[string]schema.Attribute{
+			"hcl": schema.StringAttribute{
 				Description: "The schema definition for the database " +
 					"(preferably normalized - see `atlas_schema` data source)",
-				Type:     types.StringType,
 				Required: true,
-				Validators: []tfsdk.AttributeValidator{
+				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
 				},
 			},
-			"url": {
+			"url": schema.StringAttribute{
 				Description: "The url of the database see https://atlasgo.io/cli/url",
-				Type:        types.StringType,
 				Required:    true,
 				Sensitive:   true,
 			},
-			"dev_url": {
+			"dev_url": schema.StringAttribute{
 				Description: "The url of the dev-db see https://atlasgo.io/cli/url",
-				Type:        types.StringType,
 				Optional:    true,
 				Sensitive:   true,
 			},
-			"exclude": {
+			"exclude": schema.ListAttribute{
 				Description: "Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude-schemas",
-				Type: types.ListType{
-					ElemType: types.StringType,
-				},
-				Optional: true,
+				ElementType: types.StringType,
+				Optional:    true,
 			},
-			"id": {
+			"id": schema.StringAttribute{
 				Description: "The ID of this resource",
 				Computed:    true,
-				PlanModifiers: tfsdk.AttributePlanModifiers{
-					resource.UseStateForUnknown(),
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
-				Type: types.StringType,
 			},
-			"dev_db_url": {
+			"dev_db_url": schema.StringAttribute{
 				Description: "Use `dev_url` instead.",
-				Type:        types.StringType,
 				Optional:    true,
 				Sensitive:   true,
 				DeprecationMessage: "This attribute is deprecated and will be removed in the next major version. " +
 					"Please use the `dev_url` attribute instead.",
 			},
 		},
-	}, nil
+	}
 }
 
 // Create implements resource.Resource.
@@ -127,7 +123,7 @@ func (r *AtlasSchemaResource) Create(ctx context.Context, req resource.CreateReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	data.ID = types.String{Value: urlToID(data.URL.Value)}
+	data.ID = types.StringValue(urlToID(data.URL))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -144,7 +140,7 @@ func (r *AtlasSchemaResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 	hcl, err := r.client.SchemaInspect(ctx, &atlas.SchemaInspectParams{
-		URL:     data.URL.Value,
+		URL:     data.URL.ValueString(),
 		Exclude: exclude,
 		Format:  "hcl",
 	})
@@ -154,8 +150,8 @@ func (r *AtlasSchemaResource) Read(ctx context.Context, req resource.ReadRequest
 		)
 		return
 	}
-	data.HCL = types.String{Value: hcl}
-	data.ID = types.String{Value: urlToID(data.URL.Value)}
+	data.HCL = types.StringValue(hcl)
+	data.ID = types.StringValue(urlToID(data.URL))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -182,7 +178,7 @@ func (r *AtlasSchemaResource) Delete(ctx context.Context, req resource.DeleteReq
 	}
 	// Delete the resource by setting
 	// the HCL to an empty string
-	resp.Diagnostics.Append(emptySchema(ctx, data.URL.Value, &data.HCL)...)
+	resp.Diagnostics.Append(emptySchema(ctx, data.URL.ValueString(), &data.HCL)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -209,7 +205,7 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if state == nil || state.HCL.Value == "" {
+	if state == nil || state.HCL.ValueString() == "" {
 		if plan == nil {
 			return
 		}
@@ -232,7 +228,7 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		plan = state.Clone()
 		// Delete the resource by setting
 		// the HCL to an empty string.
-		resp.Diagnostics.Append(emptySchema(ctx, plan.URL.Value, &plan.HCL)...)
+		resp.Diagnostics.Append(emptySchema(ctx, plan.URL.ValueString(), &plan.HCL)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -265,7 +261,7 @@ func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *Atl
 		DryRun:  true,
 		Exclude: exclude,
 		To:      to,
-		URL:     data.URL.Value,
+		URL:     data.URL.ValueString(),
 	})
 	if err != nil {
 		diags.AddError("Atlas Plan Error",
@@ -309,7 +305,7 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 		DevURL:  r.getDevURL(data.DevURL, data.DeprecatedDevURL),
 		Exclude: exclude,
 		To:      to,
-		URL:     data.URL.Value,
+		URL:     data.URL.ValueString(),
 	})
 	if err != nil {
 		diags.AddError("Apply Error",
@@ -345,7 +341,7 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 		DryRun:  true,
 		Exclude: exclude,
 		To:      to,
-		URL:     data.URL.Value,
+		URL:     data.URL.ValueString(),
 	})
 	if err != nil {
 		diags.AddError("Atlas Plan Error",
@@ -381,10 +377,10 @@ func emptySchema(ctx context.Context, url string, hcl *types.String) (diags diag
 	defer s.Close()
 	name := s.URL.Schema
 	if name != "" {
-		*hcl = types.String{Value: fmt.Sprintf("schema %q {}", name)}
+		*hcl = types.StringValue(fmt.Sprintf("schema %q {}", name))
 		return
 	}
-	*hcl = types.String{Null: true}
+	*hcl = types.StringNull()
 	return diags
 }
 
@@ -398,17 +394,17 @@ func nonEmptyStringSlice(in []string) []string {
 	return out
 }
 
-func urlToID(u string) string {
-	uu, err := url.Parse(u)
+func urlToID(u types.String) string {
+	uu, err := url.Parse(u.ValueString())
 	if err != nil {
-		return u
+		return u.ValueString()
 	}
 	uu.User = nil
 	return uu.String()
 }
 
 func (data *AtlasSchemaResourceModel) handleHCL() (string, func() error, error) {
-	return atlas.TempFile(data.HCL.Value, "hcl")
+	return atlas.TempFile(data.HCL.ValueString(), "hcl")
 }
 
 func (data *AtlasSchemaResourceModel) GetExclude(ctx context.Context, exclude *[]string) (diags diag.Diagnostics) {

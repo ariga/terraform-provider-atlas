@@ -613,10 +613,10 @@ func TestPrintPlanSQL(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				data: &provider.AtlasSchemaResourceModel{
-					URL:     types.String{Value: mysqlURL},
-					DevURL:  types.String{Value: mysqlDevURL},
-					Exclude: types.List{ElemType: types.StringType},
-					HCL: types.String{Value: `schema "test" {
+					URL:     types.StringValue(mysqlURL),
+					DevURL:  types.StringValue(mysqlDevURL),
+					Exclude: types.ListNull(types.StringType),
+					HCL: types.StringValue(`schema "test" {
   charset = "utf8mb4"
   collate = "utf8mb4_0900_ai_ci"
 }
@@ -631,8 +631,7 @@ table "orders" {
     columns = [column.id]
   }
 }
-`,
-					},
+`),
 				},
 			},
 			wantDiags: []diag.Diagnostic{
