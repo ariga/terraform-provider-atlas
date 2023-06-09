@@ -23,10 +23,11 @@ type (
 	}
 	// AtlasSchemaDataSourceModel describes the data source data model.
 	AtlasSchemaDataSourceModel struct {
-		DevURL types.String `tfsdk:"dev_url"`
-		Src    types.String `tfsdk:"src"`
-		HCL    types.String `tfsdk:"hcl"`
-		ID     types.String `tfsdk:"id"`
+		DevURL    types.String `tfsdk:"dev_url"`
+		Src       types.String `tfsdk:"src"`
+		HCL       types.String `tfsdk:"hcl"`
+		ID        types.String `tfsdk:"id"`
+		Variables types.Map    `tfsdk:"variables"`
 
 		DeprecatedDevURL types.String `tfsdk:"dev_db_url"`
 	}
@@ -78,6 +79,14 @@ func (d *AtlasSchemaDataSource) GetSchema(ctx context.Context) (tfsdk.Schema, di
 				Type:        types.StringType,
 				Computed:    true,
 			},
+			"variables": {
+				Description: "The map of variables used in the HCL.",
+				Optional:    true,
+				Type: types.MapType{
+					ElemType: types.StringType,
+				},
+			},
+
 			"dev_db_url": {
 				Description: "Use `dev_url` instead.",
 				Type:        types.StringType,
@@ -136,10 +145,19 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 			}
 		}()
 	}
+	var vars atlas.Vars
+	if !data.Variables.IsNull() {
+		vars = make(atlas.Vars)
+		resp.Diagnostics.Append(data.Variables.ElementsAs(ctx, &vars, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
 	normalHCL, err := d.client.SchemaInspect(ctx, &atlas.SchemaInspectParams{
 		DevURL: d.getDevURL(data.DevURL, data.DeprecatedDevURL),
 		Format: "hcl",
 		URL:    src,
+		Vars:   vars,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Inspect Error",

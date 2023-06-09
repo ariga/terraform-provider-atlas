@@ -8,7 +8,11 @@ import (
 )
 
 const (
-	testAccData = `schema "test" {
+	testAccData = `variable "tenant" {
+		type = string
+	}
+	schema "test" {
+		name    = var.tenant
 		charset = "utf8mb4"
 		collate = "utf8mb4_0900_ai_ci"
 	}
@@ -51,6 +55,9 @@ func TestAccSchemaDataSource(t *testing.T) {
 			{
 				Config: fmt.Sprintf(`data "atlas_schema" "market" {
 					dev_db_url = "mysql://root:pass@localhost:3307/test"
+					variables = {
+						tenant = "test",
+					}
 					src        = <<-EOT
 					%s
 					EOT
