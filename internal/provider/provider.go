@@ -108,7 +108,7 @@ func (p *AtlasProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp
 
 // Configure implements provider.Provider.
 func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	c, err := atlas.NewClient(ctx, p.dir, "atlas")
+	c, err := atlas.NewClient(p.dir, "atlas")
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create client", err.Error())
 		return

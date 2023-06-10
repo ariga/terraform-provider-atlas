@@ -2,11 +2,15 @@ package provider
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 
-	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
 )
 
 type (
@@ -103,10 +107,22 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	dir, err := os.MkdirTemp(os.TempDir(), "tf-atlas-*")
+	if err != nil {
+		resp.Diagnostics.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
+		return
+	}
+	defer os.RemoveAll(dir)
+	cfgPath := filepath.Join(dir, "atlas.hcl")
+	if err := data.AtlasHCL(cfgPath); err != nil {
+		resp.Diagnostics.AddError("Generate config failure",
+			fmt.Sprintf("Failed to write configuration file: %s", err.Error()))
+		return
+	}
 	r, err := d.client.Status(ctx, &atlas.StatusParams{
-		DirURL:          data.DirURL.ValueString(),
-		URL:             data.URL.ValueString(),
-		RevisionsSchema: data.RevisionsSchema.ValueString(),
+		ConfigURL: fmt.Sprintf("file://%s", cfgPath),
+		Env:       "tf",
 	})
 	if err != nil {
 		resp.Diagnostics.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
@@ -131,4 +147,13 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 		data.Latest = types.StringValue(v)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (d *MigrationDataSourceModel) AtlasHCL(path string) error {
+	cfg := templateData{
+		URL:             d.URL.ValueString(),
+		DirURL:          d.DirURL.ValueStringPointer(),
+		RevisionsSchema: d.RevisionsSchema.ValueString(),
+	}
+	return cfg.CreateFile(path)
 }

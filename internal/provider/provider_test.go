@@ -3,9 +3,10 @@ package provider_test
 import (
 	"testing"
 
-	"ariga.io/ariga/terraform-provider-atlas/internal/provider"
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
+
+	"ariga.io/ariga/terraform-provider-atlas/internal/provider"
 )
 
 // testAccProtoV6ProviderFactories are used to instantiate a provider during
