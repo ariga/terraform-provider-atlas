@@ -23,7 +23,7 @@ func TestAccMigrationDataSource(t *testing.T) {
 				}
 				`, mysqlURL, schema),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.atlas_migration.hello", "id", "migrations?format=atlas"),
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "id", "file://migrations?format=atlas"),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "PENDING"),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "current", ""),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "next", "20221101163823"),

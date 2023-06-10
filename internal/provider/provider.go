@@ -42,17 +42,43 @@ type (
 		// provider is built and ran locally, and "test" when running acceptance
 		// testing.
 		version string
+		data    providerData
 	}
 	// AtlasProviderModel describes the provider data model.
 	AtlasProviderModel struct {
 		// DevURL is the URL of the dev-db.
 		DevURL types.String `tfsdk:"dev_url"`
+		// Cloud is the Atlas Cloud configuration.
+		Cloud *AtlasCloudBlock `tfsdk:"cloud"`
+	}
+	AtlasCloudBlock struct {
+		Token   types.String `tfsdk:"token"`
+		URL     types.String `tfsdk:"url"`
+		Project types.String `tfsdk:"project"`
 	}
 	providerData struct {
 		// client is the client used to interact with the Atlas CLI.
 		client *atlas.Client
 		// devURL is the URL of the dev-db.
 		devURL string
+		// cloud is the Atlas Cloud configuration.
+		cloud *AtlasCloudBlock
+	}
+)
+
+var (
+	cloudBlock = schema.SingleNestedBlock{
+		Attributes: map[string]schema.Attribute{
+			"token": schema.StringAttribute{
+				Optional: true,
+			},
+			"url": schema.StringAttribute{
+				Optional: true,
+			},
+			"project": schema.StringAttribute{
+				Optional: true,
+			},
+		},
 	}
 )
 
@@ -96,6 +122,9 @@ func (p *AtlasProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp
 	resp.Schema = schema.Schema{
 		Description: "The Atlas provider is used to manage your database migrations, using the DDL of Atlas.\n" +
 			"For documentation about Atlas, visit: https://atlasgo.io",
+		Blocks: map[string]schema.Block{
+			"cloud": cloudBlock,
+		},
 		Attributes: map[string]schema.Attribute{
 			"dev_url": schema.StringAttribute{
 				Description: "The URL of the dev database. This configuration is shared for all resources if there is no config on the resource.",
@@ -120,12 +149,12 @@ func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	data := providerData{client: c}
+	p.data = providerData{client: c, cloud: model.Cloud}
 	if model != nil {
-		data.devURL = model.DevURL.ValueString()
+		p.data.devURL = model.DevURL.ValueString()
 	}
-	resp.DataSourceData = data
-	resp.ResourceData = data
+	resp.DataSourceData = p.data
+	resp.ResourceData = p.data
 }
 
 // DataSources implements provider.Provider.

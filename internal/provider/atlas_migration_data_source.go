@@ -20,15 +20,22 @@ type (
 	}
 	// MigrationDataSourceModel describes the data source data model.
 	MigrationDataSourceModel struct {
-		DirURL          types.String `tfsdk:"dir"`
 		URL             types.String `tfsdk:"url"`
 		RevisionsSchema types.String `tfsdk:"revisions_schema"`
+
+		DirURL    types.String     `tfsdk:"dir"`
+		Cloud     *AtlasCloudBlock `tfsdk:"cloud"`
+		RemoteDir *RemoteDirBlock  `tfsdk:"remote_dir"`
 
 		Status  types.String `tfsdk:"status"`
 		Current types.String `tfsdk:"current"`
 		Next    types.String `tfsdk:"next"`
 		Latest  types.String `tfsdk:"latest"`
 		ID      types.String `tfsdk:"id"`
+	}
+	RemoteDirBlock struct {
+		Name types.String `tfsdk:"name"`
+		Tag  types.String `tfsdk:"tag"`
 	}
 )
 
@@ -38,8 +45,20 @@ var (
 	_ datasource.DataSourceWithConfigure = &MigrationDataSource{}
 )
 var (
-	latestVersion = "Already at latest version"
-	noMigration   = "No migration applied yet"
+	latestVersion  = "Already at latest version"
+	noMigration    = "No migration applied yet"
+	remoteDirBlock = schema.SingleNestedBlock{
+		Attributes: map[string]schema.Attribute{
+			"name": schema.StringAttribute{
+				Description: "The name of the remote directory. This attribute is required when remote_dir is set",
+				Optional:    true,
+			},
+			"tag": schema.StringAttribute{
+				Description: "The tag of the remote directory",
+				Optional:    true,
+			},
+		},
+	}
 )
 
 // NewMigrationDataSource returns a new AtlasSchemaDataSource.
@@ -61,6 +80,10 @@ func (d *MigrationDataSource) Configure(ctx context.Context, req datasource.Conf
 func (d *MigrationDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Data source returns the information about the current migration.",
+		Blocks: map[string]schema.Block{
+			"cloud":      cloudBlock,
+			"remote_dir": remoteDirBlock,
+		},
 		Attributes: map[string]schema.Attribute{
 			"url": schema.StringAttribute{
 				Description: "[driver://username:password@address/dbname?param=value] select a resource using the URL format",
@@ -69,7 +92,7 @@ func (d *MigrationDataSource) Schema(_ context.Context, _ datasource.SchemaReque
 			},
 			"dir": schema.StringAttribute{
 				Description: "Select migration directory using URL format",
-				Required:    true,
+				Optional:    true,
 			},
 			"revisions_schema": schema.StringAttribute{
 				Description: "The name of the schema the revisions table resides in",
@@ -115,7 +138,7 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 	}
 	defer os.RemoveAll(dir)
 	cfgPath := filepath.Join(dir, "atlas.hcl")
-	if err := data.AtlasHCL(cfgPath); err != nil {
+	if err := data.AtlasHCL(cfgPath, d.cloud); err != nil {
 		resp.Diagnostics.AddError("Generate config failure",
 			fmt.Sprintf("Failed to write configuration file: %s", err.Error()))
 		return
@@ -140,7 +163,7 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 		data.Next = types.StringValue(r.Next)
 	}
 	v := r.LatestVersion()
-	data.ID = data.DirURL
+	data.ID = dirToID(data.RemoteDir, data.DirURL)
 	if v == "" {
 		data.Latest = types.StringNull()
 	} else {
@@ -149,11 +172,28 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (d *MigrationDataSourceModel) AtlasHCL(path string) error {
+func (d *MigrationDataSourceModel) AtlasHCL(path string, cloud *AtlasCloudBlock) error {
 	cfg := templateData{
 		URL:             d.URL.ValueString(),
 		DirURL:          d.DirURL.ValueStringPointer(),
 		RevisionsSchema: d.RevisionsSchema.ValueString(),
+	}
+	if d.Cloud != nil && d.Cloud.Token.ValueString() != "" {
+		// Use the data source cloud block if it is set
+		cloud = d.Cloud
+	}
+	if cloud != nil {
+		cfg.Cloud = &cloudConfig{
+			Token:   cloud.Token.ValueString(),
+			Project: cloud.Project.ValueStringPointer(),
+			URL:     cloud.URL.ValueStringPointer(),
+		}
+	}
+	if d := d.RemoteDir; d != nil {
+		cfg.RemoteDir = &remoteDir{
+			Name: d.Name.ValueString(),
+			Tag:  d.Tag.ValueStringPointer(),
+		}
 	}
 	return cfg.CreateFile(path)
 }

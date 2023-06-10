@@ -24,11 +24,13 @@ data "atlas_migration" "hello" {
 
 ### Required
 
-- `dir` (String) Select migration directory using URL format
 - `url` (String, Sensitive) [driver://username:password@address/dbname?param=value] select a resource using the URL format
 
 ### Optional
 
+- `cloud` (Block, Optional) (see [below for nested schema](#nestedblock--cloud))
+- `dir` (String) Select migration directory using URL format
+- `remote_dir` (Block, Optional) (see [below for nested schema](#nestedblock--remote_dir))
 - `revisions_schema` (String) The name of the schema the revisions table resides in
 
 ### Read-Only
@@ -38,3 +40,21 @@ data "atlas_migration" "hello" {
 - `latest` (String) The latest version of the migration is in the migration directory
 - `next` (String) Next migration version
 - `status` (String) The Status of migration (OK, PENDING)
+
+<a id="nestedblock--cloud"></a>
+### Nested Schema for `cloud`
+
+Optional:
+
+- `project` (String)
+- `token` (String)
+- `url` (String)
+
+
+<a id="nestedblock--remote_dir"></a>
+### Nested Schema for `remote_dir`
+
+Optional:
+
+- `name` (String) The name of the remote directory. This attribute is required when remote_dir is set
+- `tag` (String) The tag of the remote directory
