@@ -2,10 +2,15 @@ package provider_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"regexp"
+	"strings"
 	"testing"
 
+	"ariga.io/atlas/sql/migrate"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
@@ -302,6 +307,66 @@ func TestAccMigrationResource_Dirty(t *testing.T) {
 				ExpectError: regexp.MustCompile("We couldn't find a revision table in the connected schema but found one in"),
 			},
 		},
+	})
+}
+
+func TestAccMigrationResource_RemoteDir(t *testing.T) {
+	var (
+		dir migrate.MemDir
+		srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var m struct {
+				Query     string `json:"query"`
+				Variables struct {
+					Input json.RawMessage `json:"input"`
+				} `json:"variables"`
+			}
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&m))
+			switch {
+			case strings.Contains(m.Query, "query"):
+				writeDir(t, &dir, w)
+			default:
+				t.Fatalf("unexpected query: %s", m.Query)
+			}
+		}))
+		config = fmt.Sprintf(`
+		provider "atlas" {
+			cloud {
+				token   = "aci_bearer_token"
+				url     = "%[1]s"
+				project = "test"
+			}
+		}
+		data "atlas_migration" "hello" {
+			url = "%[2]s"
+			remote_dir {
+				name = "test"
+			}
+		}
+		resource "atlas_migration" "testdb" {
+			url = "%[2]s"
+			version = data.atlas_migration.hello.next
+			remote_dir {
+				name = data.atlas_migration.hello.remote_dir.name
+				tag  = data.atlas_migration.hello.remote_dir.tag
+			}
+		}
+		`, srv.URL, mysqlURL)
+	)
+	t.Cleanup(srv.Close)
+	t.Run("NoPendingFiles", func(t *testing.T) {
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: config,
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "No migration applied yet"),
+						resource.TestCheckNoResourceAttr("atlas_migration.testdb", "status.next"),
+					),
+				},
+			},
+		})
 	})
 }
 
