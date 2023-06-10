@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -33,8 +35,9 @@ type (
 		RevisionsSchema types.String `tfsdk:"revisions_schema"`
 		Version         types.String `tfsdk:"version"`
 
-		Status types.Object `tfsdk:"status"`
-		ID     types.String `tfsdk:"id"`
+		EnvName types.String `tfsdk:"env_name"`
+		Status  types.Object `tfsdk:"status"`
+		ID      types.String `tfsdk:"id"`
 	}
 	MigrationStatus struct {
 		Status  types.String `tfsdk:"status"`
@@ -101,6 +104,10 @@ func (r *MigrationResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"revisions_schema": schema.StringAttribute{
 				Description: "The name of the schema the revisions table resides in",
+				Optional:    true,
+			},
+			"env_name": schema.StringAttribute{
+				Description: "The name of the environment used for reporting runs to Atlas Cloud. Default: tf",
 				Optional:    true,
 			},
 			"version": schema.StringAttribute{
@@ -227,10 +234,23 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		if plan.DirURL.IsUnknown() || plan.URL.IsUnknown() {
 			return
 		}
+		dir, err := os.MkdirTemp(os.TempDir(), "tf-atlas-*")
+		if err != nil {
+			resp.Diagnostics.AddError("Generate config failure",
+				fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
+			return
+		}
+		defer os.RemoveAll(dir)
+		cfgPath := filepath.Join(dir, "atlas.hcl")
+		err = plan.AtlasHCL(cfgPath, r.devURL)
+		if err != nil {
+			resp.Diagnostics.AddError("Generate config failure",
+				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
+			return
+		}
 		report, err := r.client.Status(ctx, &atlas.StatusParams{
-			DirURL:          plan.DirURL.ValueString(),
-			URL:             plan.URL.ValueString(),
-			RevisionsSchema: plan.RevisionsSchema.ValueString(),
+			ConfigURL: fmt.Sprintf("file://%s", cfgPath),
+			Env:       defaultString(plan.EnvName, "tf"),
 		})
 		if err != nil {
 			resp.Diagnostics.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
@@ -244,18 +264,18 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 				plan.Version = types.StringValue(v)
 			}
 		}
-		devURL := r.getDevURL(plan.DevURL)
-		if devURL == "" {
-			return
-		}
 		pendingCount, _ := report.Amount(plan.Version.ValueString())
 		if pendingCount == 0 {
 			return
 		}
+		devURL := r.getDevURL(plan.DevURL)
+		if devURL == "" {
+			return
+		}
 		lint, err := r.client.Lint(ctx, &atlas.LintParams{
-			DirURL: plan.DirURL.ValueString(),
-			DevURL: devURL,
-			Latest: pendingCount,
+			ConfigURL: fmt.Sprintf("file://%s", cfgPath),
+			Env:       defaultString(plan.EnvName, "tf"),
+			Latest:    pendingCount,
 		})
 		if err != nil {
 			resp.Diagnostics.Append(atlas.ErrorDiagnostic(err, "Failed to lint migration"))
@@ -282,10 +302,25 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 }
 
 func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResourceModel) (diags diag.Diagnostics) {
+	dir, err := os.MkdirTemp(os.TempDir(), "tf-atlas-*")
+	if err != nil {
+		return diag.Diagnostics{
+			diag.NewErrorDiagnostic("Generate config failure",
+				fmt.Sprintf("Failed to create temporary directory: %s", err.Error())),
+		}
+	}
+	defer os.RemoveAll(dir)
+	cfgPath := filepath.Join(dir, "atlas.hcl")
+	err = data.AtlasHCL(cfgPath, r.devURL)
+	if err != nil {
+		return diag.Diagnostics{
+			diag.NewErrorDiagnostic("Generate config failure",
+				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error())),
+		}
+	}
 	statusReport, err := r.client.Status(ctx, &atlas.StatusParams{
-		DirURL:          data.DirURL.ValueString(),
-		URL:             data.URL.ValueString(),
-		RevisionsSchema: data.RevisionsSchema.ValueString(),
+		ConfigURL: fmt.Sprintf("file://%s", cfgPath),
+		Env:       defaultString(data.EnvName, "tf"),
 	})
 	if err != nil {
 		diags.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
@@ -302,10 +337,9 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			return
 		}
 		report, err := r.client.Apply(ctx, &atlas.ApplyParams{
-			DirURL:          data.DirURL.ValueString(),
-			URL:             data.URL.ValueString(),
-			RevisionsSchema: data.RevisionsSchema.ValueString(),
-			Amount:          amount,
+			ConfigURL: fmt.Sprintf("file://%s", cfgPath),
+			Env:       defaultString(data.EnvName, "tf"),
+			Amount:    amount,
 		})
 		if err != nil {
 			diags.Append(atlas.ErrorDiagnostic(err, "Failed to apply migrations"))
@@ -321,10 +355,25 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 }
 
 func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationResourceModel) (types.Object, diag.Diagnostics) {
+	dir, err := os.MkdirTemp(os.TempDir(), "tf-atlas-*")
+	if err != nil {
+		return types.ObjectNull(statusObjectAttrs), diag.Diagnostics{
+			diag.NewErrorDiagnostic("Generate config failure",
+				fmt.Sprintf("Failed to create temporary directory: %s", err.Error())),
+		}
+	}
+	defer os.RemoveAll(dir)
+	cfgPath := filepath.Join(dir, "atlas.hcl")
+	err = data.AtlasHCL(cfgPath, r.devURL)
+	if err != nil {
+		return types.ObjectNull(statusObjectAttrs), diag.Diagnostics{
+			diag.NewErrorDiagnostic("Generate config failure",
+				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error())),
+		}
+	}
 	report, err := r.client.Status(ctx, &atlas.StatusParams{
-		DirURL:          data.DirURL.ValueString(),
-		URL:             data.URL.ValueString(),
-		RevisionsSchema: data.RevisionsSchema.ValueString(),
+		ConfigURL: fmt.Sprintf("file://%s", cfgPath),
+		Env:       defaultString(data.EnvName, "tf"),
 	})
 	if err != nil {
 		return types.ObjectNull(statusObjectAttrs), diag.Diagnostics{
@@ -353,4 +402,21 @@ func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationReso
 
 func dirToID(dir types.String) types.String {
 	return types.StringValue(fmt.Sprintf("file://%s", dir.ValueString()))
+}
+
+func defaultString(s types.String, def string) string {
+	if s.IsNull() || s.IsUnknown() {
+		return def
+	}
+	return s.ValueString()
+}
+
+func (d *MigrationResourceModel) AtlasHCL(name string, devURL string) error {
+	cfg := templateData{
+		URL:             d.URL.ValueString(),
+		DevURL:          defaultString(d.DevURL, devURL),
+		DirURL:          d.DirURL.ValueStringPointer(),
+		RevisionsSchema: d.RevisionsSchema.ValueString(),
+	}
+	return cfg.CreateFile(name)
 }

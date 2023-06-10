@@ -36,8 +36,9 @@ func Test_MigrateApply(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				data: &atlas.ApplyParams{
-					DirURL: "../provider/migrations",
+					DirURL: "file://../provider/migrations",
 					URL:    fmt.Sprintf("%s/%s", mysqlURL, schema),
+					Format: "{{ json . }}",
 				},
 			},
 			wantTarget: "20221101165415",
@@ -45,7 +46,7 @@ func Test_MigrateApply(t *testing.T) {
 	}
 	wd, err := os.Getwd()
 	r.NoError(err)
-	c, err := atlas.NewClient(context.Background(), wd, "atlas")
+	c, err := atlas.NewClient(wd, "atlas")
 	r.NoError(err)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -78,8 +79,9 @@ func Test_MigrateStatus(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				data: &atlas.StatusParams{
-					DirURL: "../provider/migrations",
+					DirURL: "file://../provider/migrations",
 					URL:    fmt.Sprintf("%s/%s", mysqlURL, schema),
+					Format: "{{ json . }}",
 				},
 			},
 			wantCurrent: "No migration applied yet",
@@ -88,7 +90,7 @@ func Test_MigrateStatus(t *testing.T) {
 	}
 	wd, err := os.Getwd()
 	r.NoError(err)
-	c, err := atlas.NewClient(context.Background(), wd, "atlas")
+	c, err := atlas.NewClient(wd, "atlas")
 	r.NoError(err)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -110,7 +112,7 @@ func Test_SchemaApply(t *testing.T) {
 	u := fmt.Sprintf("sqlite://%s?_fk=1", f.Name())
 	wd, err := os.Getwd()
 	require.NoError(t, err)
-	c, err := atlas.NewClient(context.Background(), wd, "atlas")
+	c, err := atlas.NewClient(wd, "atlas")
 	require.NoError(t, err)
 
 	s1 := `

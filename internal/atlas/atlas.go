@@ -10,9 +10,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-
-	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 type (
@@ -22,42 +19,56 @@ type (
 	}
 	// ApplyParams are the parameters for the `migrate apply` command.
 	ApplyParams struct {
+		ConfigURL       string
+		Env             string
 		DirURL          string
 		URL             string
 		RevisionsSchema string
 		BaselineVersion string
 		TxMode          string
 		Amount          uint64
+		Format          string
 	}
 	// StatusParams are the parameters for the `migrate status` command.
 	StatusParams struct {
+		ConfigURL       string
+		Env             string
 		DirURL          string
 		URL             string
 		RevisionsSchema string
+		Format          string
 	}
 	// LintParams are the parameters for the `migrate lint` command.
 	LintParams struct {
-		DevURL string
-		DirURL string
-		Latest uint64
+		ConfigURL string
+		Env       string
+		DevURL    string
+		DirURL    string
+		Latest    uint64
+		Vars      Vars
 	}
 	// SchemaApplyParams are the parameters for the `schema apply` command.
 	SchemaApplyParams struct {
-		DevURL  string
-		DryRun  bool
-		Exclude []string
-		Schema  []string
-		To      string
-		URL     string
+		ConfigURL string
+		Env       string
+		DevURL    string
+		DryRun    bool
+		Exclude   []string
+		Schema    []string
+		To        string
+		URL       string
+		Vars      Vars
 	}
 	// SchemaInspectParams are the parameters for the `schema inspect` command.
 	SchemaInspectParams struct {
-		DevURL  string
-		Exclude []string
-		Format  string
-		Schema  []string
-		URL     string
-		Vars    Vars
+		ConfigURL string
+		Env       string
+		DevURL    string
+		Exclude   []string
+		Format    string
+		Schema    []string
+		URL       string
+		Vars      Vars
 	}
 	Vars map[string]string
 )
@@ -65,8 +76,8 @@ type (
 // NewClient returns a new Atlas client.
 // The client will try to find the Atlas CLI in the current directory,
 // and in the PATH.
-func NewClient(ctx context.Context, dir, name string) (*Client, error) {
-	path, err := execPath(ctx, dir, name)
+func NewClient(dir, name string) (*Client, error) {
+	path, err := execPath(dir, name)
 	if err != nil {
 		return nil, err
 	}
@@ -78,16 +89,23 @@ func NewClientWithPath(path string) *Client {
 	return &Client{path: path}
 }
 
-// Apply runs the `migrate apply` command.
+// Apply runs the 'migrate apply' command.
 func (c *Client) Apply(ctx context.Context, data *ApplyParams) (*ApplyReport, error) {
-	dir, err := filepath.Abs(data.DirURL)
-	if err != nil {
-		return nil, err
+	args := []string{"migrate", "apply"}
+	if data.ConfigURL != "" {
+		args = append(args, "-c", data.ConfigURL)
 	}
-	args := []string{
-		"migrate", "apply", "--log", "{{ json . }}",
-		"--url", data.URL,
-		"--dir", fmt.Sprintf("file://%s", dir),
+	if data.Env != "" {
+		args = append(args, "--env", data.Env)
+	}
+	if data.Format != "" {
+		args = append(args, "--format", data.Format)
+	}
+	if data.URL != "" {
+		args = append(args, "--url", data.URL)
+	}
+	if data.DirURL != "" {
+		args = append(args, "--dir", data.DirURL)
 	}
 	if data.RevisionsSchema != "" {
 		args = append(args, "--revisions-schema", data.RevisionsSchema)
@@ -108,12 +126,20 @@ func (c *Client) Apply(ctx context.Context, data *ApplyParams) (*ApplyReport, er
 	return &report, nil
 }
 
+// SchemaApply runs the 'schema apply' command.
 func (c *Client) SchemaApply(ctx context.Context, data *SchemaApplyParams) (*SchemaApply, error) {
-	args := []string{
-		"schema", "apply",
-		"--format", "{{ json . }}",
-		"--url", data.URL,
-		"--to", data.To,
+	args := []string{"schema", "apply", "--format", "{{ json . }}"}
+	if data.URL != "" {
+		args = append(args, "--url", data.URL)
+	}
+	if data.To != "" {
+		args = append(args, "--to", data.To)
+	}
+	if data.ConfigURL != "" {
+		args = append(args, "-c", data.ConfigURL)
+	}
+	if data.Env != "" {
+		args = append(args, "--env", data.Env)
 	}
 	if data.DryRun {
 		args = append(args, "--dry-run")
@@ -129,6 +155,7 @@ func (c *Client) SchemaApply(ctx context.Context, data *SchemaApplyParams) (*Sch
 	if len(data.Exclude) > 0 {
 		args = append(args, "--exclude", strings.Join(data.Exclude, ","))
 	}
+	args = append(args, data.Vars.AsArgs()...)
 	var result SchemaApply
 	if _, err := c.runCommand(ctx, args, &result); err != nil {
 		return nil, err
@@ -136,10 +163,17 @@ func (c *Client) SchemaApply(ctx context.Context, data *SchemaApplyParams) (*Sch
 	return &result, nil
 }
 
+// SchemaInspect runs the 'schema inspect' command.
 func (c *Client) SchemaInspect(ctx context.Context, data *SchemaInspectParams) (string, error) {
-	args := []string{
-		"schema", "inspect",
-		"--url", data.URL,
+	args := []string{"schema", "inspect"}
+	if data.ConfigURL != "" {
+		args = append(args, "-c", data.ConfigURL)
+	}
+	if data.Env != "" {
+		args = append(args, "--env", data.Env)
+	}
+	if data.URL != "" {
+		args = append(args, "--url", data.URL)
 	}
 	if data.DevURL != "" {
 		args = append(args, "--dev-url", data.DevURL)
@@ -157,16 +191,25 @@ func (c *Client) SchemaInspect(ctx context.Context, data *SchemaInspectParams) (
 	return c.runCommand(ctx, args, nil)
 }
 
-// Lint runs the `migrate lint` command.
+// Lint runs the 'migrate lint' command.
 func (c *Client) Lint(ctx context.Context, data *LintParams) (*SummaryReport, error) {
-	args := []string{
-		"migrate", "lint", "--log", "{{ json . }}",
-		"--dev-url", data.DevURL,
-		"--dir", fmt.Sprintf("file://%s", data.DirURL),
-	}
+	args := []string{"migrate", "lint"}
 	if data.Latest > 0 {
 		args = append(args, "--latest", strconv.FormatUint(data.Latest, 10))
 	}
+	if data.ConfigURL != "" {
+		args = append(args, "-c", data.ConfigURL)
+	}
+	if data.Env != "" {
+		args = append(args, "--env", data.Env)
+	}
+	if data.DirURL != "" {
+		args = append(args, "--dir", data.DirURL)
+	}
+	if data.DevURL != "" {
+		args = append(args, "--dev-url", data.DevURL)
+	}
+	args = append(args, data.Vars.AsArgs()...)
 	var report SummaryReport
 	if _, err := c.runCommand(ctx, args, &report); err != nil {
 		return nil, err
@@ -174,16 +217,23 @@ func (c *Client) Lint(ctx context.Context, data *LintParams) (*SummaryReport, er
 	return &report, nil
 }
 
-// Status runs the `migrate status` command.
+// Status runs the 'migrate status' command.
 func (c *Client) Status(ctx context.Context, data *StatusParams) (*StatusReport, error) {
-	dir, err := filepath.Abs(data.DirURL)
-	if err != nil {
-		return nil, err
+	args := []string{"migrate", "status"}
+	if data.ConfigURL != "" {
+		args = append(args, "-c", data.ConfigURL)
 	}
-	args := []string{
-		"migrate", "status", "--log", "{{ json . }}",
-		"--url", data.URL,
-		"--dir", fmt.Sprintf("file://%s", dir),
+	if data.Env != "" {
+		args = append(args, "--env", data.Env)
+	}
+	if data.Format != "" {
+		args = append(args, "--format", data.Format)
+	}
+	if data.URL != "" {
+		args = append(args, "--url", data.URL)
+	}
+	if data.DirURL != "" {
+		args = append(args, "--dir", data.DirURL)
 	}
 	if data.RevisionsSchema != "" {
 		args = append(args, "--revisions-schema", data.RevisionsSchema)
@@ -265,7 +315,7 @@ func (r StatusReport) Amount(version string) (amount uint64, ok bool) {
 	return amount, false
 }
 
-func execPath(ctx context.Context, dir, name string) (file string, err error) {
+func execPath(dir, name string) (file string, err error) {
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
@@ -273,15 +323,6 @@ func execPath(ctx context.Context, dir, name string) (file string, err error) {
 	if _, err = os.Stat(file); err == nil {
 		return file, nil
 	}
-	tflog.Debug(ctx, "atlas: looking for the Atlas CLI in the current directory", map[string]interface{}{
-		"dir":  dir,
-		"file": file,
-		"name": name,
-		"err":  err.Error(),
-	})
-	tflog.Debug(ctx, "atlas: looking for the Atlas CLI in the $PATH", map[string]interface{}{
-		"name": name,
-	})
 	// If the binary is not in the current directory,
 	// try to find it in the PATH.
 	return exec.LookPath(name)
@@ -297,11 +338,6 @@ func (e cliError) Error() string {
 	return e.summary
 }
 
-// Severity implements the diag.Diagnostic interface.
-func (e cliError) Severity() diag.Severity {
-	return diag.SeverityError
-}
-
 // Summary implements the diag.Diagnostic interface.
 func (e cliError) Summary() string {
 	if strings.HasPrefix(e.summary, "Error: ") {
@@ -313,27 +349,6 @@ func (e cliError) Summary() string {
 // Detail implements the diag.Diagnostic interface.
 func (e cliError) Detail() string {
 	return strings.TrimSpace(e.detail)
-}
-
-// Equal implements the diag.Diagnostic interface.
-func (e cliError) Equal(other diag.Diagnostic) bool {
-	if other == nil {
-		return false
-	}
-	if o, ok := other.(*cliError); ok && o != nil {
-		return e.summary == o.summary && e.detail == o.detail
-	}
-	return false
-}
-
-// ErrorDiagnostic checks if the given error is a diagnostic.
-// If it is, it returns the diagnostic error.
-// Otherwise, it returns a new diagnostic error with the given error as the detail.
-func ErrorDiagnostic(err error, summary string) diag.Diagnostic {
-	if diag, ok := err.(diag.Diagnostic); ok {
-		return diag
-	}
-	return diag.NewErrorDiagnostic(summary, err.Error())
 }
 
 func TempFile(content, ext string) (string, func() error, error) {

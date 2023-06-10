@@ -598,7 +598,7 @@ func drop(t *testing.T, c *sqlclient.Client, schemas ...string) {
 func TestPrintPlanSQL(t *testing.T) {
 	wd, err := os.Getwd()
 	require.NoError(t, err)
-	c, err := atlas.NewClient(context.Background(), wd, "atlas")
+	c, err := atlas.NewClient(wd, "atlas")
 	require.NoError(t, err)
 	type args struct {
 		ctx  context.Context
