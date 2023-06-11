@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -312,8 +313,9 @@ func TestAccMigrationResource_Dirty(t *testing.T) {
 
 func TestAccMigrationResource_RemoteDir(t *testing.T) {
 	var (
-		dir migrate.MemDir
-		srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		dir   = migrate.MemDir{}
+		dbURL = fmt.Sprintf("sqlite://%s?_fk=true", filepath.Join(t.TempDir(), "sqlite.db"))
+		srv   = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var m struct {
 				Query     string `json:"query"`
 				Variables struct {
@@ -324,6 +326,8 @@ func TestAccMigrationResource_RemoteDir(t *testing.T) {
 			switch {
 			case strings.Contains(m.Query, "query"):
 				writeDir(t, &dir, w)
+			case strings.Contains(m.Query, "reportMigration"):
+				fmt.Fprint(w, `{"data":{"reportMigration":{"success":true}}}`)
 			default:
 				t.Fatalf("unexpected query: %s", m.Query)
 			}
@@ -350,7 +354,7 @@ func TestAccMigrationResource_RemoteDir(t *testing.T) {
 				tag  = data.atlas_migration.hello.remote_dir.tag
 			}
 		}
-		`, srv.URL, mysqlURL)
+		`, srv.URL, dbURL)
 	)
 	t.Cleanup(srv.Close)
 	t.Run("NoPendingFiles", func(t *testing.T) {
@@ -362,6 +366,36 @@ func TestAccMigrationResource_RemoteDir(t *testing.T) {
 					Config: config,
 					Check: resource.ComposeAggregateTestCheckFunc(
 						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "No migration applied yet"),
+						resource.TestCheckNoResourceAttr("atlas_migration.testdb", "status.next"),
+					),
+				},
+			},
+		})
+	})
+	t.Run("WithPendingFiles", func(t *testing.T) {
+		require.NoError(t, dir.WriteFile("1.sql", []byte("create table foo (id int)")))
+		require.NoError(t, dir.WriteFile("2.sql", []byte("create table bar (id int)")))
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config:             config,
+					ExpectNonEmptyPlan: true,
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "id", "remote_dir://test"),
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "1"),
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.latest", "2"),
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.next", "2"),
+					),
+				},
+				{
+					Config:             config,
+					ExpectNonEmptyPlan: true,
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "id", "remote_dir://test"),
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "2"),
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.latest", "2"),
 						resource.TestCheckNoResourceAttr("atlas_migration.testdb", "status.next"),
 					),
 				},

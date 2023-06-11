@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -60,8 +61,9 @@ func TestAccMigrationDataSource(t *testing.T) {
 
 func TestAccMigrationDataSource_RemoteDir(t *testing.T) {
 	var (
-		dir migrate.MemDir
-		srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		dir   = migrate.MemDir{}
+		dbURL = fmt.Sprintf("sqlite://%s?_fk=true", filepath.Join(t.TempDir(), "sqlite.db"))
+		srv   = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var m struct {
 				Query     string `json:"query"`
 				Variables struct {
@@ -78,7 +80,7 @@ func TestAccMigrationDataSource_RemoteDir(t *testing.T) {
 		}))
 		config = fmt.Sprintf(`
 data "atlas_migration" "hello" {
-	url = "%s/test"
+	url = "%s"
 	remote_dir {
 		name = "test"
 	}
@@ -86,12 +88,11 @@ data "atlas_migration" "hello" {
 		token = "aci_bearer_token"
 		url   = "%s"
 	}
-}`, mysqlURL, srv.URL)
+}`, dbURL, srv.URL)
 	)
 	t.Cleanup(srv.Close)
 
 	t.Run("NoPendingFiles", func(t *testing.T) {
-		tempSchemas(t, mysqlURL, "test")
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { testAccPreCheck(t) },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -113,8 +114,6 @@ data "atlas_migration" "hello" {
 	t.Run("WithFiles", func(t *testing.T) {
 		require.NoError(t, dir.WriteFile("1.sql", []byte("create table foo (id int)")))
 		require.NoError(t, dir.WriteFile("2.sql", []byte("create table bar (id int)")))
-
-		tempSchemas(t, mysqlURL, "test")
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { testAccPreCheck(t) },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
