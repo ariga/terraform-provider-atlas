@@ -10,7 +10,7 @@ import (
 )
 
 func TestTemplate(t *testing.T) {
-	var update = true
+	var update = false
 	tests := []struct {
 		name string
 		data templateData
@@ -18,7 +18,7 @@ func TestTemplate(t *testing.T) {
 		{name: "token", data: templateData{
 			URL: "mysql://user:pass@localhost:3306/tf-db",
 			Cloud: &cloudConfig{
-				Token: "token",
+				Token: "token+%=_-",
 			},
 		}},
 		{name: "cloud", data: templateData{

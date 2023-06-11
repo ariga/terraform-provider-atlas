@@ -1,7 +1,7 @@
 
 atlas {
   cloud {
-    token = "token"
+    token = "token+%=_-"
   }
 }
 
