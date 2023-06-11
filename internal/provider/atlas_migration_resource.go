@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -15,7 +14,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 
@@ -34,6 +32,9 @@ type (
 		DevURL          types.String `tfsdk:"dev_url"`
 		RevisionsSchema types.String `tfsdk:"revisions_schema"`
 		Version         types.String `tfsdk:"version"`
+
+		Cloud     *AtlasCloudBlock `tfsdk:"cloud"`
+		RemoteDir *RemoteDirBlock  `tfsdk:"remote_dir"`
 
 		EnvName types.String `tfsdk:"env_name"`
 		Status  types.Object `tfsdk:"status"`
@@ -83,15 +84,11 @@ func (r *MigrationResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 	resp.Schema = schema.Schema{
 		Description: "The resource applies pending migration files on the connected database." +
 			"See https://atlasgo.io/",
+		Blocks: map[string]schema.Block{
+			"cloud":      cloudBlock,
+			"remote_dir": remoteDirBlock,
+		},
 		Attributes: map[string]schema.Attribute{
-			"dir": schema.StringAttribute{
-				Description: "the URL of the migration directory, by default it is file://migrations, " +
-					"e.g a directory named migrations in the current working directory.",
-				Required: true,
-				Validators: []validator.String{
-					stringvalidator.LengthAtLeast(1),
-				},
-			},
 			"url": schema.StringAttribute{
 				Description: "The url of the database see https://atlasgo.io/cli/url",
 				Required:    true,
@@ -105,6 +102,11 @@ func (r *MigrationResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"revisions_schema": schema.StringAttribute{
 				Description: "The name of the schema the revisions table resides in",
 				Optional:    true,
+			},
+			"dir": schema.StringAttribute{
+				Description: "the URL of the migration directory." +
+					" dir or remote_dir block is required",
+				Optional: true,
 			},
 			"env_name": schema.StringAttribute{
 				Description: "The name of the environment used for reporting runs to Atlas Cloud. Default: tf",
@@ -143,7 +145,7 @@ func (r *MigrationResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 	// Only set ID when creating a new resource
-	data.ID = dirToID(data.DirURL)
+	data.ID = dirToID(data.RemoteDir, data.DirURL)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -174,7 +176,6 @@ func (r *MigrationResource) Read(ctx context.Context, req resource.ReadRequest, 
 		resp.State.RemoveResource(ctx)
 		return
 	}
-	data.ID = dirToID(data.DirURL)
 	data.Status = nextStatus
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -206,6 +207,47 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 		return
 	}
 	resp.Diagnostics.Append(r.validateConfig(ctx, req.Config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	// Validate the remote_dir block
+	switch {
+	case data.RemoteDir != nil:
+		if data.RemoteDir.Name.IsNull() {
+			resp.Diagnostics.AddError(
+				"remote_dir.name is unset",
+				"remote_dir.name is required when remote_dir is set",
+			)
+			return
+		}
+		// providerData.client is set when the provider is configured
+		if data.Cloud == nil && (r.cloud == nil && r.providerData.client != nil) {
+			resp.Diagnostics.AddError(
+				"cloud is unset",
+				"cloud is required when remote_dir is set",
+			)
+			return
+		}
+		if !data.DirURL.IsNull() {
+			resp.Diagnostics.AddError(
+				"dir is set",
+				"dir is not allowed when remote_dir is set",
+			)
+			return
+		}
+	case data.DirURL.IsNull():
+		resp.Diagnostics.AddError(
+			"dir is unset",
+			"dir is required when remote_dir is unset",
+		)
+		return
+	case len(data.DirURL.ValueString()) == 0:
+		resp.Diagnostics.AddError(
+			"dir is empty",
+			"dir is required when remote_dir is unset",
+		)
+		return
+	}
 	if data.Version.IsNull() {
 		resp.Diagnostics.AddAttributeWarning(
 			path.Root("version"),
@@ -242,7 +284,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		}
 		defer os.RemoveAll(dir)
 		cfgPath := filepath.Join(dir, "atlas.hcl")
-		err = plan.AtlasHCL(cfgPath, r.devURL)
+		err = plan.AtlasHCL(cfgPath, r.devURL, r.cloud)
 		if err != nil {
 			resp.Diagnostics.AddError("Generate config failure",
 				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
@@ -262,6 +304,11 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 				plan.Version = types.StringNull()
 			} else {
 				plan.Version = types.StringValue(v)
+			}
+			// Update plan if the user didn't specify a version
+			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("version"), v)...)
+			if resp.Diagnostics.HasError() {
+				return
 			}
 		}
 		pendingCount, _ := report.Amount(plan.Version.ValueString())
@@ -311,7 +358,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 	}
 	defer os.RemoveAll(dir)
 	cfgPath := filepath.Join(dir, "atlas.hcl")
-	err = data.AtlasHCL(cfgPath, r.devURL)
+	err = data.AtlasHCL(cfgPath, r.devURL, r.cloud)
 	if err != nil {
 		return diag.Diagnostics{
 			diag.NewErrorDiagnostic("Generate config failure",
@@ -364,7 +411,7 @@ func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationReso
 	}
 	defer os.RemoveAll(dir)
 	cfgPath := filepath.Join(dir, "atlas.hcl")
-	err = data.AtlasHCL(cfgPath, r.devURL)
+	err = data.AtlasHCL(cfgPath, r.devURL, r.cloud)
 	if err != nil {
 		return types.ObjectNull(statusObjectAttrs), diag.Diagnostics{
 			diag.NewErrorDiagnostic("Generate config failure",
@@ -400,7 +447,11 @@ func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationReso
 	})
 }
 
-func dirToID(dir types.String) types.String {
+// dirToID returns the ID of the resource.
+func dirToID(remoteDir *RemoteDirBlock, dir types.String) types.String {
+	if remoteDir != nil {
+		return types.StringValue(fmt.Sprintf("remote_dir://%s", remoteDir.Name.ValueString()))
+	}
 	return types.StringValue(fmt.Sprintf("file://%s", dir.ValueString()))
 }
 
@@ -411,12 +462,29 @@ func defaultString(s types.String, def string) string {
 	return s.ValueString()
 }
 
-func (d *MigrationResourceModel) AtlasHCL(name string, devURL string) error {
+func (d *MigrationResourceModel) AtlasHCL(name string, devURL string, cloud *AtlasCloudBlock) error {
 	cfg := templateData{
 		URL:             d.URL.ValueString(),
 		DevURL:          defaultString(d.DevURL, devURL),
 		DirURL:          d.DirURL.ValueStringPointer(),
 		RevisionsSchema: d.RevisionsSchema.ValueString(),
+	}
+	if d.Cloud != nil && d.Cloud.Token.ValueString() != "" {
+		// Use the data source cloud block if it is set
+		cloud = d.Cloud
+	}
+	if cloud != nil {
+		cfg.Cloud = &cloudConfig{
+			Token:   cloud.Token.ValueString(),
+			Project: cloud.Project.ValueStringPointer(),
+			URL:     cloud.URL.ValueStringPointer(),
+		}
+	}
+	if d := d.RemoteDir; d != nil {
+		cfg.RemoteDir = &remoteDir{
+			Name: d.Name.ValueString(),
+			Tag:  d.Tag.ValueStringPointer(),
+		}
 	}
 	return cfg.CreateFile(name)
 }

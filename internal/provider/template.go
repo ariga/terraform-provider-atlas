@@ -2,8 +2,8 @@ package provider
 
 import (
 	_ "embed"
-	"html/template"
 	"os"
+	"text/template"
 )
 
 type (

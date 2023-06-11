@@ -2,10 +2,16 @@ package provider_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
+	"ariga.io/atlas/sql/migrate"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
@@ -302,6 +308,99 @@ func TestAccMigrationResource_Dirty(t *testing.T) {
 				ExpectError: regexp.MustCompile("We couldn't find a revision table in the connected schema but found one in"),
 			},
 		},
+	})
+}
+
+func TestAccMigrationResource_RemoteDir(t *testing.T) {
+	var (
+		dir   = migrate.MemDir{}
+		dbURL = fmt.Sprintf("sqlite://%s?_fk=true", filepath.Join(t.TempDir(), "sqlite.db"))
+		srv   = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var m struct {
+				Query     string `json:"query"`
+				Variables struct {
+					Input json.RawMessage `json:"input"`
+				} `json:"variables"`
+			}
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&m))
+			switch {
+			case strings.Contains(m.Query, "query"):
+				writeDir(t, &dir, w)
+			case strings.Contains(m.Query, "reportMigration"):
+				fmt.Fprint(w, `{"data":{"reportMigration":{"success":true}}}`)
+			default:
+				t.Fatalf("unexpected query: %s", m.Query)
+			}
+		}))
+		config = fmt.Sprintf(`
+		provider "atlas" {
+			cloud {
+				token   = "aci_bearer_token"
+				url     = "%[1]s"
+				project = "test"
+			}
+		}
+		data "atlas_migration" "hello" {
+			url = "%[2]s"
+			remote_dir {
+				name = "test"
+			}
+		}
+		resource "atlas_migration" "testdb" {
+			url = "%[2]s"
+			version = data.atlas_migration.hello.next
+			remote_dir {
+				name = data.atlas_migration.hello.remote_dir.name
+				tag  = data.atlas_migration.hello.remote_dir.tag
+			}
+		}
+		`, srv.URL, dbURL)
+	)
+	t.Cleanup(srv.Close)
+	t.Run("NoPendingFiles", func(t *testing.T) {
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: config,
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "No migration applied yet"),
+						resource.TestCheckNoResourceAttr("atlas_migration.testdb", "status.next"),
+					),
+				},
+			},
+		})
+	})
+	t.Run("WithPendingFiles", func(t *testing.T) {
+		require.NoError(t, dir.WriteFile("1.sql", []byte("create table foo (id int)")))
+		require.NoError(t, dir.WriteFile("2.sql", []byte("create table bar (id int)")))
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config:             config,
+					ExpectNonEmptyPlan: true,
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "id", "remote_dir://test"),
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "1"),
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.latest", "2"),
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.next", "2"),
+					),
+				},
+				{
+					Config:             config,
+					ExpectNonEmptyPlan: true,
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "id", "remote_dir://test"),
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "2"),
+						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.latest", "2"),
+						resource.TestCheckNoResourceAttr("atlas_migration.testdb", "status.next"),
+					),
+				},
+			},
+		})
 	})
 }
 

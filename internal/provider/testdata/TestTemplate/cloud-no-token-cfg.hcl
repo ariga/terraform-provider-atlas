@@ -2,7 +2,6 @@
 
 data "remote_dir" "this" {
   name = "tf-dir"
-  tag  = "latest"
 }
 env {
   name = atlas.env

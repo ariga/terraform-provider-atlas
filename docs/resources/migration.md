@@ -30,13 +30,15 @@ resource "atlas_migration" "hello" {
 
 ### Required
 
-- `dir` (String) the URL of the migration directory, by default it is file://migrations, e.g a directory named migrations in the current working directory.
 - `url` (String, Sensitive) The url of the database see https://atlasgo.io/cli/url
 
 ### Optional
 
+- `cloud` (Block, Optional) (see [below for nested schema](#nestedblock--cloud))
 - `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
+- `dir` (String) the URL of the migration directory. dir or remote_dir block is required
 - `env_name` (String) The name of the environment used for reporting runs to Atlas Cloud. Default: tf
+- `remote_dir` (Block, Optional) (see [below for nested schema](#nestedblock--remote_dir))
 - `revisions_schema` (String) The name of the schema the revisions table resides in
 - `version` (String) The version of the migration to apply, if not specified the latest version will be applied
 
@@ -44,6 +46,25 @@ resource "atlas_migration" "hello" {
 
 - `id` (String) The ID of this resource
 - `status` (Object) The status of the migration (see [below for nested schema](#nestedatt--status))
+
+<a id="nestedblock--cloud"></a>
+### Nested Schema for `cloud`
+
+Optional:
+
+- `project` (String)
+- `token` (String)
+- `url` (String)
+
+
+<a id="nestedblock--remote_dir"></a>
+### Nested Schema for `remote_dir`
+
+Optional:
+
+- `name` (String) The name of the remote directory. This attribute is required when remote_dir is set
+- `tag` (String) The tag of the remote directory
+
 
 <a id="nestedatt--status"></a>
 ### Nested Schema for `status`

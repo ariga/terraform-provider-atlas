@@ -35,4 +35,14 @@ resource "atlas_schema" "market" {
 
 ### Optional
 
+- `cloud` (Block, Optional) (see [below for nested schema](#nestedblock--cloud))
 - `dev_url` (String, Sensitive) The URL of the dev database. This configuration is shared for all resources if there is no config on the resource.
+
+<a id="nestedblock--cloud"></a>
+### Nested Schema for `cloud`
+
+Optional:
+
+- `project` (String)
+- `token` (String)
+- `url` (String)
