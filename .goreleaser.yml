@@ -5,7 +5,8 @@ before:
     # this is just an example and not a requirement for provider building/publishing
     - go mod tidy -compat=1.17
 builds:
-- env:
+- id: terraform-provider-atlas
+  env:
     # goreleaser does not work with CGO, it could also complicate
     # usage by users in CI/CD systems like Terraform Cloud where
     # they are unable to install libraries.
@@ -16,26 +17,19 @@ builds:
   ldflags:
     - '-s -w -X main.version={{.Version}} -X main.commit={{.Commit}}'
   goos:
-    - windows
-    - linux
     - darwin
+    - linux
+    - windows
   goarch:
     - amd64
-    - arm
     - arm64
   ignore:
-    - goos: darwin
-      goarch: arm
-    - goos: linux
-      goarch: arm
-    - goos: windows
-      goarch: arm
     - goos: windows
       goarch: arm64
   binary: '{{ .ProjectName }}_v{{ .Version }}'
   hooks:
     post:
-      - curl "https://release.ariga.io/atlas/atlas-{{ .Os }}-{{ if eq .Os "darwin" }}amd64{{ else }}{{ .Arch }}{{ end }}-latest{{ .Ext }}"
+      - curl "https://release.ariga.io/atlas/atlas-{{ .Os }}-{{ if eq .Os "darwin" }}amd64{{ else }}{{ .Arch }}{{ end }}{{ if eq .Os "linux" }}-musl{{ end }}-latest{{ .Ext }}"
         -o {{ dir .Path }}/atlas{{ .Ext }}
         -A "Terraform-Provider-CI"
 archives:
