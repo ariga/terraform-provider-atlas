@@ -17,7 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 
-	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
+	atlas "ariga.io/atlas-go-sdk/atlasexec"
 )
 
 type (
@@ -300,7 +300,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			Env:       defaultString(plan.EnvName, "tf"),
 		})
 		if err != nil {
-			resp.Diagnostics.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
+			resp.Diagnostics.Append(errorDiagnostic(err, "Failed to read migration status"))
 			return
 		}
 		if plan.Version.ValueString() == "" {
@@ -330,7 +330,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			Latest:    pendingCount,
 		})
 		if err != nil {
-			resp.Diagnostics.Append(atlas.ErrorDiagnostic(err, "Failed to lint migration"))
+			resp.Diagnostics.Append(errorDiagnostic(err, "Failed to lint migration"))
 			return
 		}
 		for _, f := range lint.Files {
@@ -375,7 +375,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 		Env:       defaultString(data.EnvName, "tf"),
 	})
 	if err != nil {
-		diags.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
+		diags.Append(errorDiagnostic(err, "Failed to read migration status"))
 		return
 	}
 	amount, synced := statusReport.Amount(data.Version.ValueString())
@@ -394,7 +394,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			Amount:    amount,
 		})
 		if err != nil {
-			diags.Append(atlas.ErrorDiagnostic(err, "Failed to apply migrations"))
+			diags.Append(errorDiagnostic(err, "Failed to apply migrations"))
 			return
 		}
 		if report.Error != "" {
@@ -429,7 +429,7 @@ func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationReso
 	})
 	if err != nil {
 		return types.ObjectNull(statusObjectAttrs), diag.Diagnostics{
-			atlas.ErrorDiagnostic(err, "Failed to read migration status"),
+			errorDiagnostic(err, "Failed to read migration status"),
 		}
 	}
 	current := types.StringNull()

@@ -18,7 +18,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
-	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
+	atlas "ariga.io/atlas-go-sdk/atlasexec"
 )
 
 type (

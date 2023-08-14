@@ -21,8 +21,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"golang.org/x/mod/semver"
 
-	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
 	"ariga.io/ariga/terraform-provider-atlas/internal/vercheck"
+	atlas "ariga.io/atlas-go-sdk/atlasexec"
 )
 
 type (

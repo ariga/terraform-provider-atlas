@@ -16,8 +16,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 	"github.com/stretchr/testify/require"
 
-	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
 	"ariga.io/ariga/terraform-provider-atlas/internal/provider"
+	atlas "ariga.io/atlas-go-sdk/atlasexec"
 )
 
 const (
