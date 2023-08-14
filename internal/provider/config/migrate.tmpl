@@ -52,14 +52,4 @@ env {
     revisions_schema = "{{ .RevisionsSchema }}" 
 {{- end }}
   }
-  format {
-    migrate {
-      apply  = "{{"{{ json . }}"}}"
-      lint   = "{{"{{ json . }}"}}"
-      status = "{{"{{ json . }}"}}"
-    }
-  }
-  lint {
-    format = "{{"{{ json . }}"}}"
-  }
 }

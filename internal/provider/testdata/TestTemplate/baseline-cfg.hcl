@@ -7,14 +7,4 @@ env {
     dir = "file://migrations"
     baseline = "100000"
   }
-  format {
-    migrate {
-      apply  = "{{ json . }}"
-      lint   = "{{ json . }}"
-      status = "{{ json . }}"
-    }
-  }
-  lint {
-    format = "{{ json . }}"
-  }
 }

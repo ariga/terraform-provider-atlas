@@ -6,14 +6,4 @@ env {
   migration {
     dir = "file://migrations"
   }
-  format {
-    migrate {
-      apply  = "{{ json . }}"
-      lint   = "{{ json . }}"
-      status = "{{ json . }}"
-    }
-  }
-  lint {
-    format = "{{ json . }}"
-  }
 }
