@@ -34,6 +34,7 @@ resource "atlas_migration" "hello" {
 
 ### Optional
 
+- `baseline` (String) An optional version to start the migration history from. See https://atlasgo.io/versioned/apply#existing-databases
 - `cloud` (Block, Optional) (see [below for nested schema](#nestedblock--cloud))
 - `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `dir` (String) the URL of the migration directory. dir or remote_dir block is required
