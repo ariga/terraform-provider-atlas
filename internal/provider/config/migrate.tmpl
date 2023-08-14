@@ -45,6 +45,9 @@ env {
 {{- else }}
     dir = "file://{{ or .DirURL "migrations" }}"
 {{- end }}
+{{- if .Baseline }}
+    baseline = "{{ .Baseline }}"
+{{- end }}
 {{- if .RevisionsSchema }}
     revisions_schema = "{{ .RevisionsSchema }}" 
 {{- end }}
