@@ -26,6 +26,7 @@ type (
 		DirURL    *string
 		RemoteDir *remoteDir
 
+		Baseline        string
 		RevisionsSchema string
 	}
 )

@@ -32,6 +32,7 @@ type (
 		DevURL          types.String `tfsdk:"dev_url"`
 		RevisionsSchema types.String `tfsdk:"revisions_schema"`
 		Version         types.String `tfsdk:"version"`
+		Baseline        types.String `tfsdk:"baseline"`
 
 		Cloud     *AtlasCloudBlock `tfsdk:"cloud"`
 		RemoteDir *RemoteDirBlock  `tfsdk:"remote_dir"`
@@ -98,6 +99,10 @@ func (r *MigrationResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Description: "The url of the dev-db see https://atlasgo.io/cli/url",
 				Optional:    true,
 				Sensitive:   true,
+			},
+			"baseline": schema.StringAttribute{
+				Description: "An optional version to start the migration history from. See https://atlasgo.io/versioned/apply#existing-databases",
+				Optional:    true,
 			},
 			"revisions_schema": schema.StringAttribute{
 				Description: "The name of the schema the revisions table resides in",
@@ -467,6 +472,7 @@ func (d *MigrationResourceModel) AtlasHCL(name string, devURL string, cloud *Atl
 		URL:             d.URL.ValueString(),
 		DevURL:          defaultString(d.DevURL, devURL),
 		DirURL:          d.DirURL.ValueStringPointer(),
+		Baseline:        d.Baseline.ValueString(),
 		RevisionsSchema: d.RevisionsSchema.ValueString(),
 	}
 	if d.Cloud != nil && d.Cloud.Token.ValueString() != "" {
