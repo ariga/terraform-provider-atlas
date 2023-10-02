@@ -1,5 +1,5 @@
-ariga.io/atlas v0.12.1-0.20230608173545-6f29d65aa89f h1:vkDpiC/qxrM8cGTQ1X0wmsW3LtPeDFVXU7p87NuHGB8=
-ariga.io/atlas v0.12.1-0.20230608173545-6f29d65aa89f/go.mod h1:+TR129FJZ5Lvzms6dvCeGWh1yR6hMvmXBhug4hrNIGk=
+ariga.io/atlas v0.14.2 h1:efxCuSGnDuhx7xm4JaqImR6xd+PqyizgGy5u/XUEI/g=
+ariga.io/atlas v0.14.2/go.mod h1:isZrlzJ5cpoCoKFoY9knZug7Lq4pP1cm8g3XciLZ0Pw=
 github.com/DATA-DOG/go-sqlmock v1.5.0 h1:Shsta01QNfFxHCfpW6YH2STWB0MudeXXEWMr20OEh60=
 github.com/Masterminds/goutils v1.1.1 h1:5nUrii3FMTL5diU80unEVvNevw1nH4+ZV4DSLVJLSYI=
 github.com/Masterminds/goutils v1.1.1/go.mod h1:8cTjp+g8YejhMuvIA5y2vz3BpJxksy863GQaJW2MFNU=
