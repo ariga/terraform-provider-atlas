@@ -150,15 +150,18 @@ func TestAccMigrationResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: fmt.Sprintf(`
+					resource "foo_mirror" "dir" {
+						value = "migrations"
+					}
 					resource "foo_mirror" "schema" {
 						value = "%s"
 					}
 					data "atlas_migration" "hello" {
-						dir = "migrations?format=atlas"
+						dir = "${foo_mirror.dir.result}?format=atlas"
 						url = format("%s/%%s", foo_mirror.schema.result)
 					}
 					resource "atlas_migration" "testdb" {
-						dir     = "migrations?format=atlas"
+						dir     = "${foo_mirror.dir.result}?format=atlas"
 						version = data.atlas_migration.hello.latest
 						url     = data.atlas_migration.hello.url
 					}`, schema3, mysqlURL),

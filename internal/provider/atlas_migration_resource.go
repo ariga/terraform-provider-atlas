@@ -246,7 +246,7 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 			"dir is required when remote_dir is unset",
 		)
 		return
-	case len(data.DirURL.ValueString()) == 0:
+	case !data.DirURL.IsUnknown() && data.DirURL.ValueString() == "":
 		resp.Diagnostics.AddError(
 			"dir is empty",
 			"dir is required when remote_dir is unset",
