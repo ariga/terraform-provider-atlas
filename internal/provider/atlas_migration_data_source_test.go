@@ -143,6 +143,6 @@ func writeDir(t *testing.T, dir migrate.Dir, w io.Writer) {
 	// Archive and send.
 	arc, err := migrate.ArchiveDir(dir)
 	require.NoError(t, err)
-	_, err = fmt.Fprintf(w, `{"data":{"dir":{"content":%q}}}`, base64.StdEncoding.EncodeToString(arc))
+	_, err = fmt.Fprintf(w, `{"data":{"dirState":{"content":%q}}}`, base64.StdEncoding.EncodeToString(arc))
 	require.NoError(t, err)
 }
