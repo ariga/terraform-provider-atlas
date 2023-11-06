@@ -295,7 +295,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
 			return
 		}
-		report, err := r.client.Status(ctx, &atlas.StatusParams{
+		report, err := r.client.Status(ctx, &atlas.MigrateStatusParams{
 			ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 			Env:       defaultString(plan.EnvName, "tf"),
 		})
@@ -370,7 +370,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error())),
 		}
 	}
-	statusReport, err := r.client.Status(ctx, &atlas.StatusParams{
+	statusReport, err := r.client.Status(ctx, &atlas.MigrateStatusParams{
 		ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 		Env:       defaultString(data.EnvName, "tf"),
 	})
@@ -423,7 +423,7 @@ func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationReso
 				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error())),
 		}
 	}
-	report, err := r.client.Status(ctx, &atlas.StatusParams{
+	report, err := r.client.Status(ctx, &atlas.MigrateStatusParams{
 		ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 		Env:       defaultString(data.EnvName, "tf"),
 	})

@@ -143,7 +143,7 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 			fmt.Sprintf("Failed to write configuration file: %s", err.Error()))
 		return
 	}
-	r, err := d.client.Status(ctx, &atlas.StatusParams{
+	r, err := d.client.Status(ctx, &atlas.MigrateStatusParams{
 		ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 		Env:       "tf",
 	})
