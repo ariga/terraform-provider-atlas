@@ -2,8 +2,6 @@ module ariga.io/ariga/terraform-provider-atlas
 
 go 1.21
 
-toolchain go1.21.3
-
 require (
 	ariga.io/atlas v0.15.1-0.20231104142243-962427888bf2
 	ariga.io/atlas-go-sdk v0.1.1-0.20231102105853-9ab4fb4ddd54
