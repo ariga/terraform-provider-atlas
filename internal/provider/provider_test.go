@@ -3,6 +3,9 @@ package provider_test
 import (
 	"testing"
 
+	_ "ariga.io/atlas/sql/mysql"
+	_ "github.com/go-sql-driver/mysql"
+
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 

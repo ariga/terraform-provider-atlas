@@ -8,12 +8,6 @@ import (
 	"path"
 	"runtime"
 
-	_ "ariga.io/atlas/sql/mysql"
-	_ "ariga.io/atlas/sql/postgres"
-	_ "ariga.io/atlas/sql/sqlite"
-	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/mitchellh/go-homedir"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
