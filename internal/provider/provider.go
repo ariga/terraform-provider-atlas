@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
+	"path/filepath"
 	"runtime"
 
 	"github.com/mitchellh/go-homedir"
@@ -131,7 +133,12 @@ func (p *AtlasProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp
 
 // Configure implements provider.Provider.
 func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	c, err := atlas.NewClient(p.dir, "atlas")
+	atlasPath, err := execPath(p.dir, "atlas")
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to find atlas-cli", err.Error())
+		return
+	}
+	c, err := atlas.NewClient("", atlasPath)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create client", err.Error())
 		return
@@ -256,4 +263,17 @@ func checkForUpdate(ctx context.Context, version string) (string, error) {
 		return "", err
 	}
 	return b.String(), nil
+}
+
+func execPath(dir, name string) (file string, err error) {
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	file = filepath.Join(dir, name)
+	if _, err = os.Stat(file); err == nil {
+		return file, nil
+	}
+	// If the binary is not in the current directory,
+	// try to find it in the PATH.
+	return exec.LookPath(name)
 }
