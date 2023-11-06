@@ -324,7 +324,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		if devURL == "" {
 			return
 		}
-		lint, err := r.client.Lint(ctx, &atlas.LintParams{
+		lint, err := r.client.Lint(ctx, &atlas.MigrateLintParams{
 			ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 			Env:       defaultString(plan.EnvName, "tf"),
 			Latest:    pendingCount,
@@ -388,7 +388,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			)
 			return
 		}
-		report, err := r.client.Apply(ctx, &atlas.ApplyParams{
+		report, err := r.client.Apply(ctx, &atlas.MigrateApplyParams{
 			ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 			Env:       defaultString(data.EnvName, "tf"),
 			Amount:    amount,
