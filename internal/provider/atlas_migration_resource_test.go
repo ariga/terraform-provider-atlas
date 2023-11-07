@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"ariga.io/atlas-go-sdk/atlasexec"
 	"ariga.io/atlas/sql/migrate"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -319,17 +320,28 @@ func TestAccMigrationResource_RemoteDir(t *testing.T) {
 		dir   = migrate.MemDir{}
 		dbURL = fmt.Sprintf("sqlite://%s?_fk=true", filepath.Join(t.TempDir(), "sqlite.db"))
 		srv   = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var m struct {
-				Query     string `json:"query"`
-				Variables struct {
-					Input json.RawMessage `json:"input"`
-				} `json:"variables"`
-			}
+			type (
+				Input struct {
+					Context atlasexec.DeployRunContext `json:"context,omitempty"`
+				}
+				GraphQLQuery struct {
+					Query     string `json:"query"`
+					Variables struct {
+						Input json.RawMessage `json:"input"`
+					} `json:"variables"`
+				}
+			)
+			var m GraphQLQuery
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&m))
 			switch {
 			case strings.Contains(m.Query, "query"):
 				writeDir(t, &dir, w)
 			case strings.Contains(m.Query, "reportMigration"):
+				var i Input
+				err := json.Unmarshal(m.Variables.Input, &i)
+				require.NoError(t, err)
+				require.Equal(t, "test", i.Context.TriggerVersion)
+				require.Equal(t, atlasexec.TriggerTypeTerraform, i.Context.TriggerType)
 				fmt.Fprint(w, `{"data":{"reportMigration":{"success":true}}}`)
 			default:
 				t.Fatalf("unexpected query: %s", m.Query)
