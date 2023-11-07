@@ -53,7 +53,7 @@ func TestAccMigrationDataSource(t *testing.T) {
 					url = "%s/%s"
 				}
 				`, mysqlURL, schema),
-				ExpectError: regexp.MustCompile("You have a checksum error in your migration directory"),
+				ExpectError: regexp.MustCompile("checksum mismatch"),
 			},
 		},
 	})

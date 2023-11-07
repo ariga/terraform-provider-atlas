@@ -17,7 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 
-	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
+	atlas "ariga.io/atlas-go-sdk/atlasexec"
 )
 
 type (
@@ -295,12 +295,12 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
 			return
 		}
-		report, err := r.client.Status(ctx, &atlas.StatusParams{
+		report, err := r.client.Status(ctx, &atlas.MigrateStatusParams{
 			ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 			Env:       defaultString(plan.EnvName, "tf"),
 		})
 		if err != nil {
-			resp.Diagnostics.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
+			resp.Diagnostics.Append(errorDiagnostic(err, "Failed to read migration status"))
 			return
 		}
 		if plan.Version.ValueString() == "" {
@@ -324,13 +324,13 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		if devURL == "" {
 			return
 		}
-		lint, err := r.client.Lint(ctx, &atlas.LintParams{
+		lint, err := r.client.Lint(ctx, &atlas.MigrateLintParams{
 			ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 			Env:       defaultString(plan.EnvName, "tf"),
 			Latest:    pendingCount,
 		})
 		if err != nil {
-			resp.Diagnostics.Append(atlas.ErrorDiagnostic(err, "Failed to lint migration"))
+			resp.Diagnostics.Append(errorDiagnostic(err, "Failed to lint migration"))
 			return
 		}
 		for _, f := range lint.Files {
@@ -370,12 +370,12 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error())),
 		}
 	}
-	statusReport, err := r.client.Status(ctx, &atlas.StatusParams{
+	statusReport, err := r.client.Status(ctx, &atlas.MigrateStatusParams{
 		ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 		Env:       defaultString(data.EnvName, "tf"),
 	})
 	if err != nil {
-		diags.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
+		diags.Append(errorDiagnostic(err, "Failed to read migration status"))
 		return
 	}
 	amount, synced := statusReport.Amount(data.Version.ValueString())
@@ -388,13 +388,13 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			)
 			return
 		}
-		report, err := r.client.Apply(ctx, &atlas.ApplyParams{
+		report, err := r.client.Apply(ctx, &atlas.MigrateApplyParams{
 			ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 			Env:       defaultString(data.EnvName, "tf"),
 			Amount:    amount,
 		})
 		if err != nil {
-			diags.Append(atlas.ErrorDiagnostic(err, "Failed to apply migrations"))
+			diags.Append(errorDiagnostic(err, "Failed to apply migrations"))
 			return
 		}
 		if report.Error != "" {
@@ -423,13 +423,13 @@ func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationReso
 				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error())),
 		}
 	}
-	report, err := r.client.Status(ctx, &atlas.StatusParams{
+	report, err := r.client.Status(ctx, &atlas.MigrateStatusParams{
 		ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 		Env:       defaultString(data.EnvName, "tf"),
 	})
 	if err != nil {
 		return types.ObjectNull(statusObjectAttrs), diag.Diagnostics{
-			atlas.ErrorDiagnostic(err, "Failed to read migration status"),
+			errorDiagnostic(err, "Failed to read migration status"),
 		}
 	}
 	current := types.StringNull()

@@ -15,14 +15,4 @@ env {
   migration {
     dir = data.remote_dir.this.url
   }
-  format {
-    migrate {
-      apply  = "{{ json . }}"
-      lint   = "{{ json . }}"
-      status = "{{ json . }}"
-    }
-  }
-  lint {
-    format = "{{ json . }}"
-  }
 }

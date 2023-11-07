@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"ariga.io/ariga/terraform-provider-atlas/internal/atlas"
+	atlas "ariga.io/atlas-go-sdk/atlasexec"
 )
 
 type (
@@ -143,12 +143,12 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 			fmt.Sprintf("Failed to write configuration file: %s", err.Error()))
 		return
 	}
-	r, err := d.client.Status(ctx, &atlas.StatusParams{
+	r, err := d.client.Status(ctx, &atlas.MigrateStatusParams{
 		ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 		Env:       "tf",
 	})
 	if err != nil {
-		resp.Diagnostics.Append(atlas.ErrorDiagnostic(err, "Failed to read migration status"))
+		resp.Diagnostics.Append(errorDiagnostic(err, "Failed to read migration status"))
 		return
 	}
 	data.Status = types.StringValue(r.Status)

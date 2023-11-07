@@ -9,14 +9,4 @@ env {
   migration {
     dir = "file://dir-url"
   }
-  format {
-    migrate {
-      apply  = "{{ json . }}"
-      lint   = "{{ json . }}"
-      status = "{{ json . }}"
-    }
-  }
-  lint {
-    format = "{{ json . }}"
-  }
 }
