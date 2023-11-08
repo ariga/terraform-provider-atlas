@@ -59,6 +59,8 @@ type (
 		devURL string
 		// cloud is the Atlas Cloud configuration.
 		cloud *AtlasCloudBlock
+		// version is set to the provider version on release
+		version string
 	}
 )
 
@@ -150,7 +152,7 @@ func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	p.data = providerData{client: c, cloud: model.Cloud}
+	p.data = providerData{client: c, cloud: model.Cloud, version: p.version}
 	if model != nil {
 		p.data.devURL = model.DevURL.ValueString()
 	}

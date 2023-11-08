@@ -392,6 +392,10 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 			Env:       defaultString(data.EnvName, "tf"),
 			Amount:    amount,
+			Context: &atlas.DeployRunContext{
+				TriggerType:    atlas.TriggerTypeTerraform,
+				TriggerVersion: r.version,
+			},
 		})
 		if err != nil {
 			diags.Append(errorDiagnostic(err, "Failed to apply migrations"))
