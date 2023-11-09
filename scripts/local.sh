@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 HOSTNAME=registry.terraform.io
 NAMESPACE=ariga
