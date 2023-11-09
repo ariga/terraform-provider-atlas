@@ -32,6 +32,7 @@ builds:
       - curl "https://release.ariga.io/atlas/atlas-{{ .Os }}-{{ if eq .Os "darwin" }}amd64{{ else }}{{ .Arch }}{{ end }}{{ if eq .Os "linux" }}-musl{{ end }}-latest{{ .Ext }}"
         -o {{ dir .Path }}/atlas{{ .Ext }}
         -A "Terraform-Provider-CI"
+      - chmod +x {{ dir .Path }}/atlas{{ .Ext }}
 archives:
 - format: zip
   files:
