@@ -140,14 +140,24 @@ func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureReq
 		resp.Diagnostics.AddError("Unable to find atlas-cli", err.Error())
 		return
 	}
-	tflog.Debug(ctx, "Found atlas-cli", map[string]any{
-		"path": atlasPath,
-	})
 	c, err := atlas.NewClient("", atlasPath)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create client", err.Error())
 		return
 	}
+	v, err := c.Version(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError("Check atlas version failure", err.Error())
+		return
+	}
+	version := fmt.Sprintf("%s-%s", v.Version, v.SHA)
+	if v.Canary {
+		version += "-canary"
+	}
+	tflog.Debug(ctx, "found atlas-cli", map[string]any{
+		"path":    atlasPath,
+		"version": version,
+	})
 	p.client = c
 
 	var model *AtlasProviderModel
