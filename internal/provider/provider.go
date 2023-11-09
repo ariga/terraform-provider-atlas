@@ -140,6 +140,9 @@ func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureReq
 		resp.Diagnostics.AddError("Unable to find atlas-cli", err.Error())
 		return
 	}
+	tflog.Debug(ctx, "Found atlas-cli", map[string]any{
+		"path": atlasPath,
+	})
 	c, err := atlas.NewClient("", atlasPath)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create client", err.Error())
