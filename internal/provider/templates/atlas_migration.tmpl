@@ -48,6 +48,9 @@ env {
 {{- if .Baseline }}
     baseline = "{{ .Baseline }}"
 {{- end }}
+{{- if .ExecOrder }}
+    exec_order = {{ hclValue .ExecOrder }}
+{{- end }}
 {{- if .RevisionsSchema }}
     revisions_schema = "{{ .RevisionsSchema }}" 
 {{- end }}

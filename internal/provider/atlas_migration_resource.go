@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -14,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 
@@ -33,6 +35,7 @@ type (
 		RevisionsSchema types.String `tfsdk:"revisions_schema"`
 		Version         types.String `tfsdk:"version"`
 		Baseline        types.String `tfsdk:"baseline"`
+		ExecOrder       types.String `tfsdk:"exec_order"`
 
 		Cloud     *AtlasCloudBlock `tfsdk:"cloud"`
 		RemoteDir *RemoteDirBlock  `tfsdk:"remote_dir"`
@@ -103,6 +106,13 @@ func (r *MigrationResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"baseline": schema.StringAttribute{
 				Description: "An optional version to start the migration history from. See https://atlasgo.io/versioned/apply#existing-databases",
 				Optional:    true,
+			},
+			"exec_order": schema.StringAttribute{
+				Description: "How Atlas computes and executes pending migration files to the database. One of `linear`,`linear-skip` or `non-linear`. See https://atlasgo.io/versioned/apply#execution-order",
+				Optional:    true,
+				Validators: []validator.String{
+					stringvalidator.OneOf("linear", "linear-skip", "non-linear"),
+				},
 			},
 			"revisions_schema": schema.StringAttribute{
 				Description: "The name of the schema the revisions table resides in",
@@ -482,6 +492,7 @@ func (d *MigrationResourceModel) AtlasHCL(name string, devURL string, cloud *Atl
 		DirURL:          d.DirURL.ValueStringPointer(),
 		Baseline:        d.Baseline.ValueString(),
 		RevisionsSchema: d.RevisionsSchema.ValueString(),
+		ExecOrder:       d.ExecOrder.ValueString(),
 	}
 	if d.Cloud != nil && d.Cloud.Token.ValueString() != "" {
 		// Use the data source cloud block if it is set

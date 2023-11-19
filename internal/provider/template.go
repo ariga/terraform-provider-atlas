@@ -31,6 +31,7 @@ type (
 		RemoteDir *remoteDir
 
 		Baseline        string
+		ExecOrder       string
 		RevisionsSchema string
 	}
 	schemaData struct {
@@ -48,12 +49,7 @@ var (
 	tmpls embed.FS
 	tmpl  = template.Must(template.New("terraform").
 		Funcs(template.FuncMap{
-			"hclValue": func(s string) string {
-				if s == "" {
-					return s
-				}
-				return strings.ReplaceAll(strings.ToUpper(s), "-", "_")
-			},
+			"hclValue": hclValue,
 			"slides": func(s []string) (string, error) {
 				b := &strings.Builder{}
 				b.WriteRune('[')
@@ -91,4 +87,14 @@ func (d *schemaData) render(w io.Writer) error {
 		return errors.New("database url is not set")
 	}
 	return tmpl.ExecuteTemplate(w, "atlas_schema.tmpl", d)
+}
+
+// hclValue returns the given string in
+// HCL format. For example, linear-skip becomes
+// LINEAR_SKIP.
+func hclValue(s string) string {
+	if s == "" {
+		return ""
+	}
+	return strings.ReplaceAll(strings.ToUpper(s), "-", "_")
 }
