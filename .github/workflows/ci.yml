@@ -155,6 +155,11 @@ jobs:
         working-directory: integration-tests/no-dev-url
         run: |
           ../../scripts/local.sh ../../dist 0.0.0-pre.0
-          terraform init
-          terraform plan -no-color > stdout.txt
-          cat no-dev-url.txt | grep "Warning: dev_url is unset"
+          terraform init > /dev/null
+          terraform plan -no-color | grep "Warning: dev_url is unset"
+      - name: Terraform (no-version)
+        working-directory: integration-tests/no-version
+        run: |
+          ../../scripts/local.sh ../../dist 0.0.0-pre.0
+          terraform init > /dev/null
+          terraform plan -no-color | grep "Warning: version is unset"
