@@ -145,13 +145,32 @@ jobs:
         with:
           terraform_version: ${{ matrix.terraform-version }}
           terraform_wrapper: false
-      - name: Create local plugin
+      - name: Terraform (sqlite)
+        working-directory: integration-tests/sqlite
         run: |
-          ./scripts/local.sh ./examples/testcase 0.0.0-pre.0
-      - name: Terraform
-        working-directory: examples/testcase
-        run: |
+          ../../scripts/local.sh ../../dist 0.0.0-pre.0
           terraform init
           terraform apply --auto-approve
+      - name: Terraform (no-dev-url)
+        working-directory: integration-tests/no-dev-url
+        run: |
+          ../../scripts/local.sh ../../dist 0.0.0-pre.0
+          terraform init > /dev/null
+          terraform plan -no-color | grep --silent "Warning: dev_url is unset"
+      - name: Terraform (no-version)
+        working-directory: integration-tests/no-version
+        run: |
+          ../../scripts/local.sh ../../dist 0.0.0-pre.0
+          terraform init > /dev/null
+          terraform plan -no-color | grep --silent "Warning: version is unset"
+      - name: Terraform (remote_dir)
+        working-directory: integration-tests/remote-dir
+        run: |
+          ../../scripts/local.sh ../../dist 0.0.0-pre.0
+          terraform init > /dev/null
+          terraform plan -no-color > stdout.txt
+          cat stdout.txt | grep --silent "Plan: 1 to add, 0 to change, 0 to destroy."
+          ! cat stdout.txt | grep --silent "Warning: dev_url is unset"
+          ! cat stdout.txt | grep --silent "Warning: version is unset"
         env:
-          TF_LOG: DEBUG
+          TF_VAR_atlas_token: ${{ secrets.ATLAS_TOKEN }}

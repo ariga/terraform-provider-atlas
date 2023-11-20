@@ -1,0 +1,6 @@
+CREATE TABLE t2 (
+  c1 INT,
+  c2 TEXT,
+  PRIMARY KEY (c1)
+);
+
