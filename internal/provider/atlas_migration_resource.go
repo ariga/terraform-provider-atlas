@@ -211,9 +211,12 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	resp.Diagnostics.Append(r.validateConfig(ctx, req.Config)...)
-	if resp.Diagnostics.HasError() {
-		return
+	if data.RemoteDir == nil {
+		// Local dir, validate config for dev-url
+		resp.Diagnostics.Append(r.validateConfig(ctx, req.Config)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 	}
 	// Validate the remote_dir block
 	switch {
