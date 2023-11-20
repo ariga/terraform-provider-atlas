@@ -151,5 +151,10 @@ jobs:
           ../../scripts/local.sh ../../dist 0.0.0-pre.0
           terraform init
           terraform apply --auto-approve
-        env:
-          TF_LOG: DEBUG
+      - name: Terraform (no-dev-url)
+        working-directory: integration-tests/no-dev-url
+        run: |
+          ../../scripts/local.sh ../../dist 0.0.0-pre.0
+          terraform init
+          terraform plan -no-color > stdout.txt
+          cat no-dev-url.txt | grep "Warning: dev_url is unset"
