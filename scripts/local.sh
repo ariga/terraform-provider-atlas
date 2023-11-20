@@ -8,6 +8,6 @@ TARGET=$(go env GOOS)_$(go env GOARCH)
 PACKED="terraform-provider-${TYPE}_${VERSION}_${TARGET}.zip"
 
 PLUGIN_ADDR="${HOSTNAME}/${NAMESPACE}/${TYPE}"
-PLUGIN_PATH="${1}/terraform.d/plugins/${PLUGIN_ADDR}"
+PLUGIN_PATH="./terraform.d/plugins/${PLUGIN_ADDR}"
 mkdir -p $PLUGIN_PATH
-cp ./dist/${PACKED} $PLUGIN_PATH
+cp ${1}/${PACKED} $PLUGIN_PATH

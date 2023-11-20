@@ -145,12 +145,10 @@ jobs:
         with:
           terraform_version: ${{ matrix.terraform-version }}
           terraform_wrapper: false
-      - name: Create local plugin
-        run: |
-          ./scripts/local.sh ./examples/testcase 0.0.0-pre.0
       - name: Terraform
-        working-directory: examples/testcase
+        working-directory: integration-tests/sqlite
         run: |
+          ../../scripts/local.sh ../../dist 0.0.0-pre.0
           terraform init
           terraform apply --auto-approve
         env:
