@@ -240,6 +240,7 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 			)
 			return
 		}
+		return
 	case data.DirURL.IsNull():
 		resp.Diagnostics.AddError(
 			"dir is unset",
