@@ -1,7 +1,7 @@
 package provider
 
 import (
-	_ "embed"
+	"embed"
 	"os"
 	"text/template"
 )
@@ -32,10 +32,11 @@ type (
 )
 
 var (
-	//go:embed config/migrate.tmpl
-	cfgMigrate     string
-	cfgMigrateTmpl = template.Must(template.New("migrate").
-			Parse(cfgMigrate))
+	//go:embed templates/*.tmpl
+	tmpls embed.FS
+	tmpl  = template.Must(template.New("terraform").
+		ParseFS(tmpls, "templates/*.tmpl"),
+	)
 )
 
 // CreateFile writes the template data to
@@ -46,5 +47,5 @@ func (d *templateData) CreateFile(name string) error {
 		return err
 	}
 	defer f.Close()
-	return cfgMigrateTmpl.Execute(f, d)
+	return tmpl.ExecuteTemplate(f, "atlas_migration.tmpl", d)
 }
