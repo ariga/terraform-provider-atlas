@@ -1,7 +1,7 @@
-schema "script_cli_migrate_diff_policy" {}
+schema "public" {}
 
 table "users" {
-  schema = schema.script_cli_migrate_diff_policy
+  schema = schema.public
   column "id" {
     null = false
     type = bigint
