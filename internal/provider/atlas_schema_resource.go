@@ -291,31 +291,44 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 }
 
 func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	to, cleanup, err := data.handleHCL()
+	d := &schemaData{
+		Source: "schema.hcl",
+		URL:    data.URL.ValueString(),
+		DevURL: devURL,
+		Diff:   data.Diff,
+	}
+	diags.Append(data.GetExclude(ctx, &d.Exclude)...)
+	if diags.HasError() {
+		return
+	}
+	dir, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(d.render))
 	if err != nil {
 		diags.AddError("HCL Error",
-			fmt.Sprintf("Unable to parse HCL, got error: %s", err),
+			fmt.Sprintf("Unable to create working directory, got error: %s", err),
+		)
+		return
+	}
+	_, err = dir.WriteFile(d.Source, []byte(data.HCL.ValueString()))
+	if err != nil {
+		diags.AddError("HCL Error",
+			fmt.Sprintf("Unable to create temporary file for HCL, got error: %s", err),
 		)
 		return
 	}
 	defer func() {
-		if err := cleanup(); err != nil {
-			tflog.Debug(ctx, "Failed to remove HCL file", map[string]interface{}{
+		if err := dir.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
 				"error": err,
 			})
 		}
 	}()
-	var exclude []string
-	diags.Append(data.GetExclude(ctx, &exclude)...)
-	if diags.HasError() {
-		return
-	}
-	result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
-		DevURL:  devURL,
-		DryRun:  true,
-		Exclude: exclude,
-		To:      to,
-		URL:     data.URL.ValueString(),
+	var result *atlas.SchemaApply
+	err = c.WithWorkDir(dir.Path(), func(c *atlas.Client) (err error) {
+		result, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
+			Env:    "tf",
+			DryRun: true,
+		})
+		return err
 	})
 	if err != nil {
 		diags.AddError("Atlas Plan Error",
