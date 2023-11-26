@@ -32,6 +32,7 @@ type (
 		URL     types.String `tfsdk:"url"`
 		DevURL  types.String `tfsdk:"dev_url"`
 		Exclude types.List   `tfsdk:"exclude"`
+		TxMode  types.String `tfsdk:"tx_mode"`
 		// Policies
 		Diff *Diff `tfsdk:"diff"`
 
@@ -39,7 +40,12 @@ type (
 	}
 	// Diff defines the diff policies to apply when planning schema changes.
 	Diff struct {
-		Skip *SkipChanges `tfsdk:"skip"`
+		ConcurrentIndex *ConcurrentIndex `tfsdk:"concurrent_index"`
+		Skip            *SkipChanges     `tfsdk:"skip"`
+	}
+	ConcurrentIndex struct {
+		Create *bool `tfsdk:"create"`
+		Drop   *bool `tfsdk:"drop"`
 	}
 	// SkipChanges represents the skip changes policy.
 	SkipChanges struct {
@@ -72,6 +78,13 @@ var (
 var (
 	diffBlock = schema.SingleNestedBlock{
 		Blocks: map[string]schema.Block{
+			"concurrent_index": schema.SingleNestedBlock{
+				Description: "The concurrent index policy",
+				Attributes: map[string]schema.Attribute{
+					"create": boolOptional("Whether to create indexes concurrently"),
+					"drop":   boolOptional("Whether to drop indexes concurrently"),
+				},
+			},
 			"skip": schema.SingleNestedBlock{
 				Description: "The skip changes policy",
 				Attributes: map[string]schema.Attribute{
@@ -146,6 +159,13 @@ func (r *AtlasSchemaResource) Schema(ctx context.Context, _ resource.SchemaReque
 				Description: "Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude-schemas",
 				ElementType: types.StringType,
 				Optional:    true,
+			},
+			"tx_mode": schema.StringAttribute{
+				Description: "The transaction mode to use when applying the schema. See https://atlasgo.io/versioned/apply#transaction-configuration",
+				Optional:    true,
+				Validators: []validator.String{
+					stringvalidator.OneOf("file", "all", "none"),
+				},
 			},
 			"id": schema.StringAttribute{
 				Description: "The ID of this resource",
@@ -325,6 +345,7 @@ func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *Atl
 	err = c.WithWorkDir(dir.Path(), func(c *atlas.Client) (err error) {
 		result, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
 			Env:    "tf",
+			TxMode: data.TxMode.ValueString(),
 			DryRun: true,
 		})
 		return err
@@ -381,7 +402,8 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 	}()
 	err = r.client.WithWorkDir(dir.Path(), func(c *atlas.Client) error {
 		_, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
-			Env: "tf",
+			Env:    "tf",
+			TxMode: data.TxMode.ValueString(),
 		})
 		return err
 	})

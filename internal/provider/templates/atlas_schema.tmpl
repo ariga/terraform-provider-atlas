@@ -1,6 +1,17 @@
 {{- with .Diff }}
-  {{- with .Skip }}
+{{- if or .ConcurrentIndex .Skip }}
 diff {
+  {{- with .ConcurrentIndex }}
+  concurrent_index {
+    {{- if .Create }}
+    create = {{ .Create }}
+    {{- end }}
+    {{- if .Drop }}
+    drop   = {{ .Drop }}
+    {{- end }}
+  }
+  {{- end }}
+  {{- with .Skip }}
   skip {
     {{- if .AddSchema }}
     add_schema = {{ .AddSchema }}
@@ -48,8 +59,9 @@ diff {
     modify_foreign_key = {{ .ModifyForeignKey }}
     {{- end }}
   }
-}
   {{- end }}
+}
+{{- end }}
 {{- end }}
 env {
   name = atlas.env

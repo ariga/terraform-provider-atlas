@@ -78,6 +78,9 @@ func Test_SchemaTemplate(t *testing.T) {
 		URL:    "mysql://user:pass@localhost:3306/tf-db",
 		DevURL: "mysql://user:pass@localhost:3307/tf-db",
 		Diff: &Diff{
+			ConcurrentIndex: &ConcurrentIndex{
+				Create: ptr(true),
+			},
 			Skip: &SkipChanges{
 				AddIndex:  ptr(true),
 				DropTable: ptr(false),
@@ -89,6 +92,9 @@ func Test_SchemaTemplate(t *testing.T) {
 	require.NoError(t, data.render(out))
 	require.Equal(t, `
 diff {
+  concurrent_index {
+    create = true
+  }
   skip {
     drop_table = false
     add_index = true

@@ -38,6 +38,7 @@ resource "atlas_schema" "market" {
 - `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `diff` (Block, Optional) (see [below for nested schema](#nestedblock--diff))
 - `exclude` (List of String) Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude-schemas
+- `tx_mode` (String) The transaction mode to use when applying the schema. See https://atlasgo.io/versioned/apply#transaction-configuration
 
 ### Read-Only
 
@@ -48,7 +49,17 @@ resource "atlas_schema" "market" {
 
 Optional:
 
+- `concurrent_index` (Block, Optional) The concurrent index policy (see [below for nested schema](#nestedblock--diff--concurrent_index))
 - `skip` (Block, Optional) The skip changes policy (see [below for nested schema](#nestedblock--diff--skip))
+
+<a id="nestedblock--diff--concurrent_index"></a>
+### Nested Schema for `diff.concurrent_index`
+
+Optional:
+
+- `create` (Boolean) Whether to create indexes concurrently
+- `drop` (Boolean) Whether to drop indexes concurrently
+
 
 <a id="nestedblock--diff--skip"></a>
 ### Nested Schema for `diff.skip`
