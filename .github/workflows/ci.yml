@@ -129,7 +129,6 @@ jobs:
       mysql8prod:
         image: mysql:8
         env:
-          MYSQL_DATABASE: test
           MYSQL_ROOT_PASSWORD: pass
         ports:
           - 3306:3306
@@ -142,7 +141,6 @@ jobs:
       mysql8dev:
         image: mysql:8
         env:
-          MYSQL_DATABASE: test
           MYSQL_ROOT_PASSWORD: pass
         ports:
           - 3307:3306
