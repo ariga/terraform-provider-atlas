@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"strings"
 
-	"ariga.io/atlas/sql/sqlclient"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -33,8 +32,32 @@ type (
 		URL     types.String `tfsdk:"url"`
 		DevURL  types.String `tfsdk:"dev_url"`
 		Exclude types.List   `tfsdk:"exclude"`
+		// Policies
+		Diff *Diff `tfsdk:"diff"`
 
 		DeprecatedDevURL types.String `tfsdk:"dev_db_url"`
+	}
+	// Diff defines the diff policies to apply when planning schema changes.
+	Diff struct {
+		Skip *SkipChanges `tfsdk:"skip"`
+	}
+	// SkipChanges represents the skip changes policy.
+	SkipChanges struct {
+		AddSchema        *bool `tfsdk:"add_schema"`
+		DropSchema       *bool `tfsdk:"drop_schema"`
+		ModifySchema     *bool `tfsdk:"modify_schema"`
+		AddTable         *bool `tfsdk:"add_table"`
+		DropTable        *bool `tfsdk:"drop_table"`
+		ModifyTable      *bool `tfsdk:"modify_table"`
+		AddColumn        *bool `tfsdk:"add_column"`
+		DropColumn       *bool `tfsdk:"drop_column"`
+		ModifyColumn     *bool `tfsdk:"modify_column"`
+		AddIndex         *bool `tfsdk:"add_index"`
+		DropIndex        *bool `tfsdk:"drop_index"`
+		ModifyIndex      *bool `tfsdk:"modify_index"`
+		AddForeignKey    *bool `tfsdk:"add_foreign_key"`
+		DropForeignKey   *bool `tfsdk:"drop_foreign_key"`
+		ModifyForeignKey *bool `tfsdk:"modify_foreign_key"`
 	}
 )
 
@@ -44,6 +67,33 @@ var (
 	_ resource.ResourceWithModifyPlan     = &AtlasSchemaResource{}
 	_ resource.ResourceWithConfigure      = &AtlasSchemaResource{}
 	_ resource.ResourceWithValidateConfig = &AtlasSchemaResource{}
+)
+
+var (
+	diffBlock = schema.SingleNestedBlock{
+		Blocks: map[string]schema.Block{
+			"skip": schema.SingleNestedBlock{
+				Description: "The skip changes policy",
+				Attributes: map[string]schema.Attribute{
+					"add_schema":         boolOptional("Whether to skip adding schemas"),
+					"drop_schema":        boolOptional("Whether to skip dropping schemas"),
+					"modify_schema":      boolOptional("Whether to skip modifying schemas"),
+					"add_table":          boolOptional("Whether to skip adding tables"),
+					"drop_table":         boolOptional("Whether to skip dropping tables"),
+					"modify_table":       boolOptional("Whether to skip modifying tables"),
+					"add_column":         boolOptional("Whether to skip adding columns"),
+					"drop_column":        boolOptional("Whether to skip dropping columns"),
+					"modify_column":      boolOptional("Whether to skip modifying columns"),
+					"add_index":          boolOptional("Whether to skip adding indexes"),
+					"drop_index":         boolOptional("Whether to skip dropping indexes"),
+					"modify_index":       boolOptional("Whether to skip modifying indexes"),
+					"add_foreign_key":    boolOptional("Whether to skip adding foreign keys"),
+					"drop_foreign_key":   boolOptional("Whether to skip dropping foreign keys"),
+					"modify_foreign_key": boolOptional("Whether to skip modifying foreign keys"),
+				},
+			},
+		},
+	}
 )
 
 func (m AtlasSchemaResourceModel) Clone() *AtlasSchemaResourceModel {
@@ -70,6 +120,9 @@ func (r *AtlasSchemaResource) Schema(ctx context.Context, _ resource.SchemaReque
 		Description: "Atlas database resource manages the data schema of the database, " +
 			"using an HCL file describing the wanted state of the database. " +
 			"See https://atlasgo.io/",
+		Blocks: map[string]schema.Block{
+			"diff": diffBlock,
+		},
 		Attributes: map[string]schema.Attribute{
 			"hcl": schema.StringAttribute{
 				Description: "The schema definition for the database " +
@@ -237,31 +290,44 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 }
 
 func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	to, cleanup, err := data.handleHCL()
+	d := &schemaData{
+		Source: "schema.hcl",
+		URL:    data.URL.ValueString(),
+		DevURL: devURL,
+		Diff:   data.Diff,
+	}
+	diags.Append(data.GetExclude(ctx, &d.Exclude)...)
+	if diags.HasError() {
+		return
+	}
+	dir, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(d.render))
 	if err != nil {
 		diags.AddError("HCL Error",
-			fmt.Sprintf("Unable to parse HCL, got error: %s", err),
+			fmt.Sprintf("Unable to create working directory, got error: %s", err),
+		)
+		return
+	}
+	_, err = dir.WriteFile(d.Source, []byte(data.HCL.ValueString()))
+	if err != nil {
+		diags.AddError("HCL Error",
+			fmt.Sprintf("Unable to create temporary file for HCL, got error: %s", err),
 		)
 		return
 	}
 	defer func() {
-		if err := cleanup(); err != nil {
-			tflog.Debug(ctx, "Failed to remove HCL file", map[string]interface{}{
+		if err := dir.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
 				"error": err,
 			})
 		}
 	}()
-	var exclude []string
-	diags.Append(data.GetExclude(ctx, &exclude)...)
-	if diags.HasError() {
-		return
-	}
-	result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
-		DevURL:  devURL,
-		DryRun:  true,
-		Exclude: exclude,
-		To:      to,
-		URL:     data.URL.ValueString(),
+	var result *atlas.SchemaApply
+	err = c.WithWorkDir(dir.Path(), func(c *atlas.Client) (err error) {
+		result, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
+			Env:    "tf",
+			DryRun: true,
+		})
+		return err
 	})
 	if err != nil {
 		diags.AddError("Atlas Plan Error",
@@ -282,12 +348,24 @@ func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *Atl
 }
 
 func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	var exclude []string
-	diags.Append(data.GetExclude(ctx, &exclude)...)
+	d := &schemaData{
+		Source: "schema.hcl",
+		URL:    data.URL.ValueString(),
+		DevURL: r.getDevURL(data.DevURL, data.DeprecatedDevURL),
+		Diff:   data.Diff,
+	}
+	diags.Append(data.GetExclude(ctx, &d.Exclude)...)
 	if diags.HasError() {
 		return
 	}
-	to, cleanup, err := data.handleHCL()
+	dir, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(d.render))
+	if err != nil {
+		diags.AddError("HCL Error",
+			fmt.Sprintf("Unable to create working directory, got error: %s", err),
+		)
+		return
+	}
+	_, err = dir.WriteFile(d.Source, []byte(data.HCL.ValueString()))
 	if err != nil {
 		diags.AddError("HCL Error",
 			fmt.Sprintf("Unable to create temporary file for HCL, got error: %s", err),
@@ -295,17 +373,17 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 		return
 	}
 	defer func() {
-		if err := cleanup(); err != nil {
-			tflog.Debug(ctx, "Failed to remove HCL file", map[string]interface{}{
+		if err := dir.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
 				"error": err,
 			})
 		}
 	}()
-	_, err = r.client.SchemaApply(ctx, &atlas.SchemaApplyParams{
-		DevURL:  r.getDevURL(data.DevURL, data.DeprecatedDevURL),
-		Exclude: exclude,
-		To:      to,
-		URL:     data.URL.ValueString(),
+	err = r.client.WithWorkDir(dir.Path(), func(c *atlas.Client) error {
+		_, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
+			Env: "tf",
+		})
+		return err
 	})
 	if err != nil {
 		diags.AddError("Apply Error",
@@ -366,24 +444,6 @@ https://atlasgo.io/terraform-provider#working-with-an-existing-database`, string
 	return
 }
 
-func emptySchema(ctx context.Context, url string, hcl *types.String) (diags diag.Diagnostics) {
-	s, err := sqlclient.Open(ctx, url)
-	if err != nil {
-		diags.AddError("Atlas Plan Error",
-			fmt.Sprintf("Unable to connect to database, got error: %s", err),
-		)
-		return
-	}
-	defer s.Close()
-	name := s.URL.Schema
-	if name != "" {
-		*hcl = types.StringValue(fmt.Sprintf("schema %q {}", name))
-		return
-	}
-	*hcl = types.StringNull()
-	return diags
-}
-
 func nonEmptyStringSlice(in []string) []string {
 	out := make([]string, 0, len(in))
 	for _, s := range in {
@@ -414,4 +474,11 @@ func (data *AtlasSchemaResourceModel) GetExclude(ctx context.Context, exclude *[
 	}
 	*exclude = nonEmptyStringSlice(*exclude)
 	return
+}
+
+func boolOptional(desc string) schema.Attribute {
+	return schema.BoolAttribute{
+		Description: desc,
+		Optional:    true,
+	}
 }

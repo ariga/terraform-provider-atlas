@@ -3,3 +3,4 @@
 **/terraform.d
 **/*.db
 **/stdout.txt
+**/actual.hcl

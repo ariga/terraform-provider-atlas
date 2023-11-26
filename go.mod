@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	ariga.io/atlas v0.15.1-0.20231104142243-962427888bf2
-	ariga.io/atlas-go-sdk v0.1.1-0.20231102105853-9ab4fb4ddd54
+	ariga.io/atlas-go-sdk v0.2.2-0.20231126120643-dda5b31d605a
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/hashicorp/terraform-plugin-docs v0.16.0
 	github.com/hashicorp/terraform-plugin-framework v1.4.2
@@ -12,6 +12,8 @@ require (
 	github.com/hashicorp/terraform-plugin-go v0.19.0
 	github.com/hashicorp/terraform-plugin-log v0.9.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.29.0
+	github.com/lib/pq v1.10.9
+	github.com/mattn/go-sqlite3 v1.14.17
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/stretchr/testify v1.8.4
 	golang.org/x/mod v0.12.0

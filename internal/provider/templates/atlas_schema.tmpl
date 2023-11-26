@@ -1,0 +1,61 @@
+{{- with .Diff }}
+  {{- with .Skip }}
+diff {
+  skip {
+    {{- if .AddSchema }}
+    add_schema = {{ .AddSchema }}
+    {{- end }}
+    {{- if .DropSchema }}
+    drop_schema = {{ .DropSchema }}
+    {{- end }}
+    {{- if .ModifySchema }}
+    modify_schema = {{ .ModifySchema }}
+    {{- end }}
+    {{- if .AddTable }}
+    add_table = {{ .AddTable }}
+    {{- end }}
+    {{- if .DropTable }}
+    drop_table = {{ .DropTable }}
+    {{- end }}
+    {{- if .ModifyTable }}
+    modify_table = {{ .ModifyTable }}
+    {{- end }}
+    {{- if .AddColumn }}
+    add_column = {{ .AddColumn }}
+    {{- end }}
+    {{- if .DropColumn }}
+    drop_column = {{ .DropColumn }}
+    {{- end }}
+    {{- if .ModifyColumn }}
+    modify_column = {{ .ModifyColumn }}
+    {{- end }}
+    {{- if .AddIndex }}
+    add_index = {{ .AddIndex }}
+    {{- end }}
+    {{- if .DropIndex }}
+    drop_index = {{ .DropIndex }}
+    {{- end }}
+    {{- if .ModifyIndex }}
+    modify_index = {{ .ModifyIndex }}
+    {{- end }}
+    {{- if .AddForeignKey }}
+    add_foreign_key = {{ .AddForeignKey }}
+    {{- end }}
+    {{- if .DropForeignKey }}
+    drop_foreign_key = {{ .DropForeignKey }}
+    {{- end }}
+    {{- if .ModifyForeignKey }}
+    modify_foreign_key = {{ .ModifyForeignKey }}
+    {{- end }}
+  }
+}
+  {{- end }}
+{{- end }}
+env {
+  name = atlas.env
+  src  = "{{ .Source }}"
+  url  = "{{ .URL }}"
+  dev  = "{{ .DevURL }}"
+  schemas = {{ slides .Schemas }}
+  exclude = {{ slides .Exclude }}
+}

@@ -36,8 +36,37 @@ resource "atlas_schema" "market" {
 
 - `dev_db_url` (String, Sensitive, Deprecated) Use `dev_url` instead.
 - `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
+- `diff` (Block, Optional) (see [below for nested schema](#nestedblock--diff))
 - `exclude` (List of String) Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude-schemas
 
 ### Read-Only
 
 - `id` (String) The ID of this resource
+
+<a id="nestedblock--diff"></a>
+### Nested Schema for `diff`
+
+Optional:
+
+- `skip` (Block, Optional) The skip changes policy (see [below for nested schema](#nestedblock--diff--skip))
+
+<a id="nestedblock--diff--skip"></a>
+### Nested Schema for `diff.skip`
+
+Optional:
+
+- `add_column` (Boolean) Whether to skip adding columns
+- `add_foreign_key` (Boolean) Whether to skip adding foreign keys
+- `add_index` (Boolean) Whether to skip adding indexes
+- `add_schema` (Boolean) Whether to skip adding schemas
+- `add_table` (Boolean) Whether to skip adding tables
+- `drop_column` (Boolean) Whether to skip dropping columns
+- `drop_foreign_key` (Boolean) Whether to skip dropping foreign keys
+- `drop_index` (Boolean) Whether to skip dropping indexes
+- `drop_schema` (Boolean) Whether to skip dropping schemas
+- `drop_table` (Boolean) Whether to skip dropping tables
+- `modify_column` (Boolean) Whether to skip modifying columns
+- `modify_foreign_key` (Boolean) Whether to skip modifying foreign keys
+- `modify_index` (Boolean) Whether to skip modifying indexes
+- `modify_schema` (Boolean) Whether to skip modifying schemas
+- `modify_table` (Boolean) Whether to skip modifying tables
