@@ -336,12 +336,24 @@ func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *Atl
 }
 
 func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	var exclude []string
-	diags.Append(data.GetExclude(ctx, &exclude)...)
+	d := &schemaData{
+		Source: "schema.hcl",
+		URL:    data.URL.ValueString(),
+		DevURL: r.getDevURL(data.DevURL, data.DeprecatedDevURL),
+		Diff:   data.Diff,
+	}
+	diags.Append(data.GetExclude(ctx, &d.Exclude)...)
 	if diags.HasError() {
 		return
 	}
-	to, cleanup, err := data.handleHCL()
+	dir, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(d.render))
+	if err != nil {
+		diags.AddError("HCL Error",
+			fmt.Sprintf("Unable to create working directory, got error: %s", err),
+		)
+		return
+	}
+	_, err = dir.WriteFile(d.Source, []byte(data.HCL.ValueString()))
 	if err != nil {
 		diags.AddError("HCL Error",
 			fmt.Sprintf("Unable to create temporary file for HCL, got error: %s", err),
@@ -349,17 +361,17 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 		return
 	}
 	defer func() {
-		if err := cleanup(); err != nil {
-			tflog.Debug(ctx, "Failed to remove HCL file", map[string]interface{}{
+		if err := dir.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
 				"error": err,
 			})
 		}
 	}()
-	_, err = r.client.SchemaApply(ctx, &atlas.SchemaApplyParams{
-		DevURL:  r.getDevURL(data.DevURL, data.DeprecatedDevURL),
-		Exclude: exclude,
-		To:      to,
-		URL:     data.URL.ValueString(),
+	err = r.client.WithWorkDir(dir.Path(), func(c *atlas.Client) error {
+		_, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
+			Env: "tf",
+		})
+		return err
 	})
 	if err != nil {
 		diags.AddError("Apply Error",
