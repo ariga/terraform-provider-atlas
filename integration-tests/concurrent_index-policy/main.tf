@@ -21,6 +21,7 @@ resource "atlas_schema" "db" {
   hcl     = data.atlas_schema.db.hcl
   url     = "postgres://postgres:pass@localhost:5432/test?sslmode=disable"
   dev_url = "postgres://postgres:pass@localhost:5433/test?sslmode=disable"
+  tx_mode = "none"
   diff {
     concurrent_index {
       create = true
