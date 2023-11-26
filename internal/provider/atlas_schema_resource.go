@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"strings"
 
-	"ariga.io/atlas/sql/sqlclient"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -443,24 +442,6 @@ To learn how to add an existing database to a project, read:
 https://atlasgo.io/terraform-provider#working-with-an-existing-database`, strings.Join(causes, "\n- ")))
 	}
 	return
-}
-
-func emptySchema(ctx context.Context, url string, hcl *types.String) (diags diag.Diagnostics) {
-	s, err := sqlclient.Open(ctx, url)
-	if err != nil {
-		diags.AddError("Atlas Plan Error",
-			fmt.Sprintf("Unable to connect to database, got error: %s", err),
-		)
-		return
-	}
-	defer s.Close()
-	name := s.URL.Schema
-	if name != "" {
-		*hcl = types.StringValue(fmt.Sprintf("schema %q {}", name))
-		return
-	}
-	*hcl = types.StringNull()
-	return diags
 }
 
 func nonEmptyStringSlice(in []string) []string {
