@@ -19,7 +19,7 @@ import (
 )
 
 // emptySchema returns an empty schema block if the URL is connected to a schema.
-// Otherwise, it returns a null schema block.
+// Otherwise, it returns a null string for schema.
 func emptySchema(ctx context.Context, url string, hcl *types.String) (diags diag.Diagnostics) {
 	s, err := sqlclient.Open(ctx, url)
 	if err != nil {
