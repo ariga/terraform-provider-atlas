@@ -39,7 +39,12 @@ type (
 	}
 	// Diff defines the diff policies to apply when planning schema changes.
 	Diff struct {
-		Skip *SkipChanges `tfsdk:"skip"`
+		ConcurrentIndex *ConcurrentIndex `tfsdk:"concurrent_index"`
+		Skip            *SkipChanges     `tfsdk:"skip"`
+	}
+	ConcurrentIndex struct {
+		Create *bool `tfsdk:"create"`
+		Drop   *bool `tfsdk:"drop"`
 	}
 	// SkipChanges represents the skip changes policy.
 	SkipChanges struct {
@@ -72,6 +77,13 @@ var (
 var (
 	diffBlock = schema.SingleNestedBlock{
 		Blocks: map[string]schema.Block{
+			"concurrent_index": schema.SingleNestedBlock{
+				Description: "The concurrent index policy",
+				Attributes: map[string]schema.Attribute{
+					"create": boolOptional("Whether to create indexes concurrently"),
+					"drop":   boolOptional("Whether to drop indexes concurrently"),
+				},
+			},
 			"skip": schema.SingleNestedBlock{
 				Description: "The skip changes policy",
 				Attributes: map[string]schema.Attribute{

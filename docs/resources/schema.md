@@ -48,7 +48,17 @@ resource "atlas_schema" "market" {
 
 Optional:
 
+- `concurrent_index` (Block, Optional) The concurrent index policy (see [below for nested schema](#nestedblock--diff--concurrent_index))
 - `skip` (Block, Optional) The skip changes policy (see [below for nested schema](#nestedblock--diff--skip))
+
+<a id="nestedblock--diff--concurrent_index"></a>
+### Nested Schema for `diff.concurrent_index`
+
+Optional:
+
+- `create` (Boolean) Whether to create indexes concurrently
+- `drop` (Boolean) Whether to drop indexes concurrently
+
 
 <a id="nestedblock--diff--skip"></a>
 ### Nested Schema for `diff.skip`
