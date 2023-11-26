@@ -87,9 +87,6 @@ func (d *templateData) CreateFile(name string) error {
 // The template is used by the Atlas CLI to apply the schema.
 // It also validates the data before rendering the template.
 func (d *schemaData) render(w io.Writer) error {
-	// if d.EnvName == "" {
-	// 	return errors.New("env name is not set")
-	// }
 	if d.URL == "" {
 		return errors.New("database url is not set")
 	}
