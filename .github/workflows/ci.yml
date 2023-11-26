@@ -70,6 +70,7 @@ jobs:
           - '1.3.*'
           - '1.4.*'
           - '1.5.*'
+          - '1.6.*'
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
@@ -159,6 +160,7 @@ jobs:
           - '1.3.*'
           - '1.4.*'
           - '1.5.*'
+          - '1.6.*'
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
