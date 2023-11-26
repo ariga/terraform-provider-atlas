@@ -72,8 +72,37 @@ func TestTemplate(t *testing.T) {
 	}
 }
 
-func ptr(s string) *string {
-	return &s
+func Test_SchemaTemplate(t *testing.T) {
+	data := &schemaData{
+		Source: "file://schema.hcl",
+		URL:    "mysql://user:pass@localhost:3306/tf-db",
+		DevURL: "mysql://user:pass@localhost:3307/tf-db",
+		Diff: &Diff{
+			Skip: &SkipChanges{
+				AddIndex:  ptr(true),
+				DropTable: ptr(false),
+			},
+		},
+	}
+
+	out := &bytes.Buffer{}
+	require.NoError(t, data.render(out))
+	require.Equal(t, `
+diff {
+  skip {
+    drop_table = false
+    add_index = true
+  }
+}
+env {
+  name = atlas.env
+  src  = "file://schema.hcl"
+  url  = "mysql://user:pass@localhost:3306/tf-db"
+  dev  = "mysql://user:pass@localhost:3307/tf-db"
+  schemas = []
+  exclude = []
+}
+`, out.String())
 }
 
 func checkContent(t *testing.T, actual string, gen func(string) error) {
@@ -89,35 +118,6 @@ func checkContent(t *testing.T, actual string, gen func(string) error) {
 	require.Equal(t, string(e), string(a))
 }
 
-func Test_SchemaTemplate(t *testing.T) {
-	data := &schemaData{
-		Source: "file://schema.hcl",
-		URL:    "mysql://user:pass@localhost:3306/tf-db",
-		DevURL: "mysql://user:pass@localhost:3307/tf-db",
-		Diff: &Diff{
-			Skip: &SkipChanges{
-				AddIndex:  true,
-				DropTable: true,
-			},
-		},
-	}
-
-	out := &bytes.Buffer{}
-	require.NoError(t, data.render(out))
-	require.Equal(t, `
-diff {
-  skip {
-    drop_table = true
-    add_index = true
-  }
-}
-env {
-  name = atlas.env
-  src  = "file://schema.hcl"
-  url  = "mysql://user:pass@localhost:3306/tf-db"
-  dev  = "mysql://user:pass@localhost:3307/tf-db"
-  schemas = []
-  exclude = []
-}
-`, out.String())
+func ptr[T any](s T) *T {
+	return &s
 }
