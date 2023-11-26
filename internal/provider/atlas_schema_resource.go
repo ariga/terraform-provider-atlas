@@ -33,8 +33,32 @@ type (
 		URL     types.String `tfsdk:"url"`
 		DevURL  types.String `tfsdk:"dev_url"`
 		Exclude types.List   `tfsdk:"exclude"`
+		// Policies
+		Diff *Diff `tfsdk:"diff"`
 
 		DeprecatedDevURL types.String `tfsdk:"dev_db_url"`
+	}
+	// Diff defines the diff policies to apply when planning schema changes.
+	Diff struct {
+		Skip *SkipChanges `tfsdk:"skip"`
+	}
+	// SkipChanges represents the skip changes policy.
+	SkipChanges struct {
+		AddSchema        bool `tfsdk:"add_schema"`
+		DropSchema       bool `tfsdk:"drop_schema"`
+		ModifySchema     bool `tfsdk:"modify_schema"`
+		AddTable         bool `tfsdk:"add_table"`
+		DropTable        bool `tfsdk:"drop_table"`
+		ModifyTable      bool `tfsdk:"modify_table"`
+		AddColumn        bool `tfsdk:"add_column"`
+		DropColumn       bool `tfsdk:"drop_column"`
+		ModifyColumn     bool `tfsdk:"modify_column"`
+		AddIndex         bool `tfsdk:"add_index"`
+		DropIndex        bool `tfsdk:"drop_index"`
+		ModifyIndex      bool `tfsdk:"modify_index"`
+		AddForeignKey    bool `tfsdk:"add_foreign_key"`
+		DropForeignKey   bool `tfsdk:"drop_foreign_key"`
+		ModifyForeignKey bool `tfsdk:"modify_foreign_key"`
 	}
 )
 
@@ -44,6 +68,33 @@ var (
 	_ resource.ResourceWithModifyPlan     = &AtlasSchemaResource{}
 	_ resource.ResourceWithConfigure      = &AtlasSchemaResource{}
 	_ resource.ResourceWithValidateConfig = &AtlasSchemaResource{}
+)
+
+var (
+	diffBlock = schema.SingleNestedBlock{
+		Blocks: map[string]schema.Block{
+			"skip": schema.SingleNestedBlock{
+				Description: "The skip changes policy",
+				Attributes: map[string]schema.Attribute{
+					"add_schema":         boolOptional("Whether to skip adding schemas"),
+					"drop_schema":        boolOptional("Whether to skip dropping schemas"),
+					"modify_schema":      boolOptional("Whether to skip modifying schemas"),
+					"add_table":          boolOptional("Whether to skip adding tables"),
+					"drop_table":         boolOptional("Whether to skip dropping tables"),
+					"modify_table":       boolOptional("Whether to skip modifying tables"),
+					"add_column":         boolOptional("Whether to skip adding columns"),
+					"drop_column":        boolOptional("Whether to skip dropping columns"),
+					"modify_column":      boolOptional("Whether to skip modifying columns"),
+					"add_index":          boolOptional("Whether to skip adding indexes"),
+					"drop_index":         boolOptional("Whether to skip dropping indexes"),
+					"modify_index":       boolOptional("Whether to skip modifying indexes"),
+					"add_foreign_key":    boolOptional("Whether to skip adding foreign keys"),
+					"drop_foreign_key":   boolOptional("Whether to skip dropping foreign keys"),
+					"modify_foreign_key": boolOptional("Whether to skip modifying foreign keys"),
+				},
+			},
+		},
+	}
 )
 
 func (m AtlasSchemaResourceModel) Clone() *AtlasSchemaResourceModel {
@@ -70,6 +121,9 @@ func (r *AtlasSchemaResource) Schema(ctx context.Context, _ resource.SchemaReque
 		Description: "Atlas database resource manages the data schema of the database, " +
 			"using an HCL file describing the wanted state of the database. " +
 			"See https://atlasgo.io/",
+		Blocks: map[string]schema.Block{
+			"diff": diffBlock,
+		},
 		Attributes: map[string]schema.Attribute{
 			"hcl": schema.StringAttribute{
 				Description: "The schema definition for the database " +
@@ -414,4 +468,11 @@ func (data *AtlasSchemaResourceModel) GetExclude(ctx context.Context, exclude *[
 	}
 	*exclude = nonEmptyStringSlice(*exclude)
 	return
+}
+
+func boolOptional(desc string) schema.Attribute {
+	return schema.BoolAttribute{
+		Description: desc,
+		Optional:    true,
+	}
 }
