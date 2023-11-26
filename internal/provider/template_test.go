@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -86,4 +87,37 @@ func checkContent(t *testing.T, actual string, gen func(string) error) {
 	a, err := os.ReadFile(actual)
 	require.NoError(t, err)
 	require.Equal(t, string(e), string(a))
+}
+
+func Test_SchemaTemplate(t *testing.T) {
+	data := &schemaData{
+		Source: "file://schema.hcl",
+		URL:    "mysql://user:pass@localhost:3306/tf-db",
+		DevURL: "mysql://user:pass@localhost:3307/tf-db",
+		Diff: &Diff{
+			Skip: &SkipChanges{
+				AddIndex:  true,
+				DropTable: true,
+			},
+		},
+	}
+
+	out := &bytes.Buffer{}
+	require.NoError(t, data.render(out))
+	require.Equal(t, `
+diff {
+  skip {
+    drop_table = true
+    add_index = true
+  }
+}
+env {
+  name = atlas.env
+  src  = "file://schema.hcl"
+  url  = "mysql://user:pass@localhost:3306/tf-db"
+  dev  = "mysql://user:pass@localhost:3307/tf-db"
+  schemas = []
+  exclude = []
+}
+`, out.String())
 }
