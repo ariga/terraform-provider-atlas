@@ -221,3 +221,61 @@ jobs:
           ../../scripts/atlas-cli.sh 0.0.0-pre.0 schema inspect \
             -u "mysql://root:pass@localhost:3306/" > actual.hcl
           cmp -s "expected.hcl" "actual.hcl"
+  integration-postgres:
+    name: Integration PostgreSQL (Terraform ${{ matrix.terraform-version }})
+    runs-on: ubuntu-latest
+    needs: [build-dev]
+    services:
+      postgres15:
+        image: postgres:15
+        env:
+          POSTGRES_DB: test
+          POSTGRES_PASSWORD: pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      postgres15-dev:
+        image: postgres:15
+        env:
+          POSTGRES_DB: test
+          POSTGRES_PASSWORD: pass
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    strategy:
+      fail-fast: false
+      matrix:
+        terraform-version:
+          - '1.2.*'
+          - '1.3.*'
+          - '1.4.*'
+          - '1.5.*'
+          - '1.6.*'
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '1.21'
+      - uses: actions/download-artifact@v3
+        with:
+          name: atlas-provider
+          path: ./dist
+      - uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ matrix.terraform-version }}
+          terraform_wrapper: false
+      - name: Terraform (concurrent_index-policy)
+        working-directory: integration-tests/concurrent_index-policy
+        run: |
+          ../../scripts/local.sh ../../dist 0.0.0-pre.0
+          terraform init > /dev/null
+          terraform apply --auto-approve
+          terraform apply --auto-approve -var="schema=schema-2.hcl"
