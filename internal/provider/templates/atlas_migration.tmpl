@@ -1,4 +1,4 @@
-{{- with .Cloud }}
+{{- with .Cloud -}}
 atlas {
   cloud {
     token = "{{ .Token }}"
@@ -11,7 +11,7 @@ atlas {
   }
 }
 {{- end }}
-{{ with .RemoteDir }}
+{{- with .RemoteDir }}
 data "remote_dir" "this" {
   name = "{{ .Name }}"
 {{- if .Tag }}
