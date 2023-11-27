@@ -36,6 +36,10 @@ func TestTemplate(t *testing.T) {
 		{name: "local", data: templateData{
 			URL: "mysql://user:pass@localhost:3306/tf-db",
 		}},
+		{name: "local-exec-order", data: templateData{
+			URL:       "mysql://user:pass@localhost:3306/tf-db",
+			ExecOrder: "linear-skip",
+		}},
 		{name: "baseline", data: templateData{
 			URL:      "mysql://user:pass@localhost:3306/tf-db",
 			Baseline: "100000",

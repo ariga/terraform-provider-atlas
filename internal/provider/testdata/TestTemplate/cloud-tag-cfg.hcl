@@ -1,10 +1,8 @@
-
 atlas {
   cloud {
     token = "token"
   }
 }
-
 data "remote_dir" "this" {
   name = "tf-dir"
   tag  = "tag"
