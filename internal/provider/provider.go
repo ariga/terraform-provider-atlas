@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/mitchellh/go-homedir"
 
@@ -291,4 +293,22 @@ func execPath(dir, name string) (file string, err error) {
 	// If the binary is not in the current directory,
 	// try to find it in the PATH.
 	return exec.LookPath(name)
+}
+
+// absPath returns the absolute path of a file URL.
+func absPath(path string) (string, error) {
+	u, err := url.Parse(path)
+	if err != nil {
+		return "", err
+	}
+	switch s := u.Scheme; strings.ToLower(s) {
+	case "file", "sqlite":
+		scheme := fmt.Sprintf("%s://", s)
+		p, err := filepath.Abs(strings.TrimPrefix(path, scheme))
+		if err != nil {
+			return "", err
+		}
+		return scheme + p, nil
+	}
+	return path, nil
 }
