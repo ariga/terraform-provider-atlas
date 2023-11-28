@@ -66,9 +66,6 @@ jobs:
       fail-fast: false
       matrix:
         terraform-version:
-          - '1.2.*'
-          - '1.3.*'
-          - '1.4.*'
           - '1.5.*'
           - '1.6.*'
     steps:
@@ -122,7 +119,64 @@ jobs:
           retention-days: 5
           if-no-files-found: error
   integration:
-    name: Integration (Terraform ${{ matrix.terraform-version }})
+    name: Integration SQLite (Terraform ${{ matrix.terraform-version }})
+    runs-on: ubuntu-latest
+    needs: [build-dev]
+    strategy:
+      fail-fast: false
+      matrix:
+        terraform-version:
+          - '1.5.*'
+          - '1.6.*'
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '1.21'
+      - uses: actions/download-artifact@v3
+        with:
+          name: atlas-provider
+          path: ./dist
+      - uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ matrix.terraform-version }}
+          terraform_wrapper: false
+      - name: Terraform (sqlite)
+        working-directory: integration-tests/sqlite
+        run: |
+          ../../scripts/local.sh ../../dist 0.0.0-pre.0
+          terraform init
+          echo "Apply terraform plan"
+          terraform apply -no-color --auto-approve > stdout.txt
+          cat stdout.txt | grep --silent "Apply complete! Resources: 1 added, 0 changed, 0 destroyed."
+          echo "Ensure that there is no diff"
+          terraform plan -no-color > stdout.txt
+          cat stdout.txt | grep --silent "No changes. Your infrastructure matches the configuration."
+      - name: Terraform (no-dev-url)
+        working-directory: integration-tests/no-dev-url
+        run: |
+          ../../scripts/local.sh ../../dist 0.0.0-pre.0
+          terraform init > /dev/null
+          terraform plan -no-color | grep --silent "Warning: dev_url is unset"
+      - name: Terraform (no-version)
+        working-directory: integration-tests/no-version
+        run: |
+          ../../scripts/local.sh ../../dist 0.0.0-pre.0
+          terraform init > /dev/null
+          terraform plan -no-color | grep --silent "Warning: version is unset"
+      - name: Terraform (remote_dir)
+        working-directory: integration-tests/remote-dir
+        run: |
+          ../../scripts/local.sh ../../dist 0.0.0-pre.0
+          terraform init > /dev/null
+          terraform plan -no-color > stdout.txt
+          cat stdout.txt | grep --silent "Plan: 1 to add, 0 to change, 0 to destroy."
+          ! cat stdout.txt | grep --silent "Warning: dev_url is unset"
+          ! cat stdout.txt | grep --silent "Warning: version is unset"
+        env:
+          TF_VAR_atlas_token: ${{ secrets.ATLAS_TOKEN }}
+  integration-mysql:
+    name: Integration MySQL (Terraform ${{ matrix.terraform-version }})
     runs-on: ubuntu-latest
     needs: [build-dev]
     services:
@@ -154,9 +208,6 @@ jobs:
       fail-fast: false
       matrix:
         terraform-version:
-          - '1.2.*'
-          - '1.3.*'
-          - '1.4.*'
           - '1.5.*'
           - '1.6.*'
     steps:
@@ -172,35 +223,6 @@ jobs:
         with:
           terraform_version: ${{ matrix.terraform-version }}
           terraform_wrapper: false
-      - name: Terraform (sqlite)
-        working-directory: integration-tests/sqlite
-        run: |
-          ../../scripts/local.sh ../../dist 0.0.0-pre.0
-          terraform init
-          terraform apply --auto-approve
-      - name: Terraform (no-dev-url)
-        working-directory: integration-tests/no-dev-url
-        run: |
-          ../../scripts/local.sh ../../dist 0.0.0-pre.0
-          terraform init > /dev/null
-          terraform plan -no-color | grep --silent "Warning: dev_url is unset"
-      - name: Terraform (no-version)
-        working-directory: integration-tests/no-version
-        run: |
-          ../../scripts/local.sh ../../dist 0.0.0-pre.0
-          terraform init > /dev/null
-          terraform plan -no-color | grep --silent "Warning: version is unset"
-      - name: Terraform (remote_dir)
-        working-directory: integration-tests/remote-dir
-        run: |
-          ../../scripts/local.sh ../../dist 0.0.0-pre.0
-          terraform init > /dev/null
-          terraform plan -no-color > stdout.txt
-          cat stdout.txt | grep --silent "Plan: 1 to add, 0 to change, 0 to destroy."
-          ! cat stdout.txt | grep --silent "Warning: dev_url is unset"
-          ! cat stdout.txt | grep --silent "Warning: version is unset"
-        env:
-          TF_VAR_atlas_token: ${{ secrets.ATLAS_TOKEN }}
       - name: Terraform (skip-policy)
         working-directory: integration-tests/skip-policy
         run: |
@@ -254,9 +276,6 @@ jobs:
       fail-fast: false
       matrix:
         terraform-version:
-          - '1.2.*'
-          - '1.3.*'
-          - '1.4.*'
           - '1.5.*'
           - '1.6.*'
     steps:

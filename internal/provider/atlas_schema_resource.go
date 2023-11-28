@@ -310,10 +310,17 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 }
 
 func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+	u, err := absPath(data.URL.ValueString())
+	if err != nil {
+		diags.AddError("URL Error",
+			fmt.Sprintf("Unable to get absolute path for URL, got error: %s", err),
+		)
+		return
+	}
 	d := &schemaData{
-		Source: "schema.hcl",
-		URL:    data.URL.ValueString(),
+		URL:    u,
 		DevURL: devURL,
+		Source: "schema.hcl",
 		Diff:   data.Diff,
 	}
 	diags.Append(data.GetExclude(ctx, &d.Exclude)...)
@@ -369,10 +376,17 @@ func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *Atl
 }
 
 func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+	u, err := absPath(data.URL.ValueString())
+	if err != nil {
+		diags.AddError("URL Error",
+			fmt.Sprintf("Unable to get absolute path for URL, got error: %s", err),
+		)
+		return
+	}
 	d := &schemaData{
-		Source: "schema.hcl",
-		URL:    data.URL.ValueString(),
+		URL:    u,
 		DevURL: r.getDevURL(data.DevURL, data.DeprecatedDevURL),
+		Source: "schema.hcl",
 		Diff:   data.Diff,
 	}
 	diags.Append(data.GetExclude(ctx, &d.Exclude)...)

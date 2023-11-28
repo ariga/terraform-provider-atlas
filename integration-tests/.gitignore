@@ -1,6 +1,7 @@
 **/.terraform.lock.hcl
 **/.terraform/*
 **/terraform.d
+**/terraform.tfstate*
 **/*.db
-**/stdout.txt
 **/actual.hcl
+**/stdout.txt
