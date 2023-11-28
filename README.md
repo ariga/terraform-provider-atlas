@@ -28,7 +28,7 @@ terraform {
   required_providers {
     atlas = {
       source  = "ariga/atlas"
-      version = "~> 0.4.0"
+      version = "~> 0.6.1"
     }
   }
 }
@@ -40,40 +40,26 @@ provider "atlas" {
 
 ## Quick Start
 
-1\. To create a schema for your database, first install `atlas`:  
- ### MacOS:
- ```shell
- brew install ariga/tap/atlas
- ```
- ### Linux
- Download:
- ```shell
- curl -LO https://release.ariga.io/atlas/atlas-linux-amd64-latest
- ```
- Install:
- ```shell
- sudo install -o root -g root -m 0755 ./atlas-linux-amd64-latest /usr/local/bin/atlas
- ```
- ### Windows
- Download the [latest release](https://release.ariga.io/atlas/atlas-windows-amd64-latest.exe) and move the atlas binary to a file location on your system PATH.
+1\. To create a schema for your database, [first install `atlas`](https://atlasgo.io/getting-started#installation)
 
 2\. Then, inspect the schema of the database:
- ```shell
- atlas schema inspect -d "mysql://root:pass@localhost:3306/example" > schema.hcl
- ```
- 
+```shell
+atlas schema inspect -d "mysql://root:pass@localhost:3306/example" > schema.hcl
+```
+
 3\. Finally, configure the terraform resource to apply the state to your database:
- ```terraform
- data "atlas_schema" "my_schema" {
+
+```terraform
+data "atlas_schema" "my_schema" {
   src     = "file://${abspath("./schema.hcl")}"
   dev_url = "mysql://root:pass@localhost:3307/example"
- }
+}
 
- resource "atlas_schema" "example_db" {
+resource "atlas_schema" "example_db" {
   hcl     = data.atlas_schema.my_schema.hcl
   url     = "mysql://root:pass@localhost:3306/example"
   dev_url = "mysql://root:pass@localhost:3307/example"
- }
- ```
+}
+```
 
 For more advanced examples, check out the examples folder.
