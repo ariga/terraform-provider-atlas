@@ -1,7 +1,7 @@
 ariga.io/atlas v0.15.1-0.20231104142243-962427888bf2 h1:uw5P4SCzPO3dACfbtt6TuwrWY72B4EKrNck+hKPM6dg=
 ariga.io/atlas v0.15.1-0.20231104142243-962427888bf2/go.mod h1:isZrlzJ5cpoCoKFoY9knZug7Lq4pP1cm8g3XciLZ0Pw=
-ariga.io/atlas-go-sdk v0.2.2 h1:eEOXfxFfWbs8a4+R/i7lSwIchzz6C8Kq4QPBs6YGpdQ=
-ariga.io/atlas-go-sdk v0.2.2/go.mod h1:owkEEXw6jqne5KPVDfKsYB7cwMiMk3jtOiAAeKxS/yU=
+ariga.io/atlas-go-sdk v0.3.0 h1:19hxr3Fm/Jg/pNSLq3mpTQs1k1sPNhQXpLgVtIDQ0J8=
+ariga.io/atlas-go-sdk v0.3.0/go.mod h1:owkEEXw6jqne5KPVDfKsYB7cwMiMk3jtOiAAeKxS/yU=
 dario.cat/mergo v1.0.0 h1:AGCNq9Evsj31mOgNPcLyXc+4PNABt905YmuqPYYpBWk=
 dario.cat/mergo v1.0.0/go.mod h1:uNxQE+84aUszobStD9th8a29P2fMDhsBdgRYvZOxGmk=
 github.com/DATA-DOG/go-sqlmock v1.5.0 h1:Shsta01QNfFxHCfpW6YH2STWB0MudeXXEWMr20OEh60=

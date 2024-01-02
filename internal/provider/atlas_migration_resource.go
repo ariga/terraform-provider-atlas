@@ -314,7 +314,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			Env:       defaultString(plan.EnvName, "tf"),
 		})
 		if err != nil {
-			resp.Diagnostics.Append(errorDiagnostic(err, "Failed to read migration status"))
+			resp.Diagnostics.AddError("Failed to read migration status", err.Error())
 			return
 		}
 		if plan.Version.ValueString() == "" {
@@ -344,7 +344,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			Latest:    pendingCount,
 		})
 		if err != nil {
-			resp.Diagnostics.Append(errorDiagnostic(err, "Failed to lint migration"))
+			resp.Diagnostics.AddError("Failed to lint migration", err.Error())
 			return
 		}
 		for _, f := range lint.Files {
@@ -370,26 +370,24 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResourceModel) (diags diag.Diagnostics) {
 	dir, err := os.MkdirTemp(os.TempDir(), "tf-atlas-*")
 	if err != nil {
-		return diag.Diagnostics{
-			diag.NewErrorDiagnostic("Generate config failure",
-				fmt.Sprintf("Failed to create temporary directory: %s", err.Error())),
-		}
+		diags.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
+		return
 	}
 	defer os.RemoveAll(dir)
 	cfgPath := filepath.Join(dir, "atlas.hcl")
 	err = data.AtlasHCL(cfgPath, r.devURL, r.cloud)
 	if err != nil {
-		return diag.Diagnostics{
-			diag.NewErrorDiagnostic("Generate config failure",
-				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error())),
-		}
+		diags.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
+		return
 	}
 	statusReport, err := r.client.Status(ctx, &atlas.MigrateStatusParams{
 		ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 		Env:       defaultString(data.EnvName, "tf"),
 	})
 	if err != nil {
-		diags.Append(errorDiagnostic(err, "Failed to read migration status"))
+		diags.AddError("Failed to read migration status", err.Error())
 		return
 	}
 	amount, synced := statusReport.Amount(data.Version.ValueString())
@@ -402,7 +400,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			)
 			return
 		}
-		report, err := r.client.Apply(ctx, &atlas.MigrateApplyParams{
+		_, err := r.client.MigrateApply(ctx, &atlas.MigrateApplyParams{
 			ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 			Env:       defaultString(data.EnvName, "tf"),
 			Amount:    amount,
@@ -412,11 +410,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			},
 		})
 		if err != nil {
-			diags.Append(errorDiagnostic(err, "Failed to apply migrations"))
-			return
-		}
-		if report.Error != "" {
-			diags.AddError("Failed to apply migration", report.Error)
+			diags.AddError("Failed to apply migrations", err.Error())
 			return
 		}
 	}
@@ -424,31 +418,28 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 	return
 }
 
-func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationResourceModel) (types.Object, diag.Diagnostics) {
+func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationResourceModel) (obj types.Object, diags diag.Diagnostics) {
+	obj = types.ObjectNull(statusObjectAttrs)
+
 	dir, err := os.MkdirTemp(os.TempDir(), "tf-atlas-*")
 	if err != nil {
-		return types.ObjectNull(statusObjectAttrs), diag.Diagnostics{
-			diag.NewErrorDiagnostic("Generate config failure",
-				fmt.Sprintf("Failed to create temporary directory: %s", err.Error())),
-		}
+		diags.AddError("Generate config failure", fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
+		return
 	}
 	defer os.RemoveAll(dir)
 	cfgPath := filepath.Join(dir, "atlas.hcl")
 	err = data.AtlasHCL(cfgPath, r.devURL, r.cloud)
 	if err != nil {
-		return types.ObjectNull(statusObjectAttrs), diag.Diagnostics{
-			diag.NewErrorDiagnostic("Generate config failure",
-				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error())),
-		}
+		diags.AddError("Generate config failure", fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
+		return
 	}
 	report, err := r.client.Status(ctx, &atlas.MigrateStatusParams{
 		ConfigURL: fmt.Sprintf("file://%s", cfgPath),
 		Env:       defaultString(data.EnvName, "tf"),
 	})
 	if err != nil {
-		return types.ObjectNull(statusObjectAttrs), diag.Diagnostics{
-			errorDiagnostic(err, "Failed to read migration status"),
-		}
+		diags.AddError("Failed to read migration status", err.Error())
+		return
 	}
 	current := types.StringNull()
 	if !(report.Status == "PENDING" && report.Current == noMigration) {

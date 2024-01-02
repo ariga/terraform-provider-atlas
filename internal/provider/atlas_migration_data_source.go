@@ -148,7 +148,7 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 		Env:       "tf",
 	})
 	if err != nil {
-		resp.Diagnostics.Append(errorDiagnostic(err, "Failed to read migration status"))
+		resp.Diagnostics.AddError("Failed to read migration status", err.Error())
 		return
 	}
 	data.Status = types.StringValue(r.Status)
