@@ -241,7 +241,7 @@ jobs:
           ! cat stdout.txt | grep --silent "DROP TABLE \`test\`.\`t2\`"
           terraform apply --auto-approve -no-color -var="schema=schema-t2" -var="skip_drop_table=true"
           # Confirm that the table was not dropped
-          ../../scripts/atlas-cli.sh 0.0.0-pre.0 schema inspect \
+          atlas schema inspect \
             -u "mysql://root:pass@localhost:3306/" > actual.hcl
           cmp -s "expected.hcl" "actual.hcl"
   integration-postgres:
