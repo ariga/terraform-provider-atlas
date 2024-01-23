@@ -6,10 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
-	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/mitchellh/go-homedir"
@@ -34,8 +31,6 @@ type (
 	AtlasProvider struct {
 		// client is the client used to interact with the Atlas CLI.
 		client *atlas.Client
-		// dir is the directory where the provider is installed.
-		dir string
 		// version is set to the provider version on release, "dev" when the
 		// provider is built and ran locally, and "test" when running acceptance
 		// testing.
@@ -44,6 +39,8 @@ type (
 	}
 	// AtlasProviderModel describes the provider data model.
 	AtlasProviderModel struct {
+		// BinaryPath is the path to the atlas-cli binary.
+		BinaryPath types.String `tfsdk:"binary_path"`
 		// DevURL is the URL of the dev-db.
 		DevURL types.String `tfsdk:"dev_url"`
 		// Cloud is the Atlas Cloud configuration.
@@ -97,15 +94,8 @@ const (
 
 // New returns a new provider.
 func New(address, version, commit string) func() provider.Provider {
-	wd, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-	providersDir := path.Join(wd, ".terraform", "providers")
-	platform := fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)
 	return func() provider.Provider {
 		return &AtlasProvider{
-			dir:     path.Join(providersDir, address, version, platform),
 			version: version,
 		}
 	}
@@ -126,6 +116,10 @@ func (p *AtlasProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp
 			"cloud": cloudBlock,
 		},
 		Attributes: map[string]schema.Attribute{
+			"binary_path": schema.StringAttribute{
+				Description: "The path to the atlas-cli binary. If not set, the provider will look for the binary in the PATH.",
+				Optional:    true,
+			},
 			"dev_url": schema.StringAttribute{
 				Description: "The URL of the dev database. This configuration is shared for all resources if there is no config on the resource.",
 				Optional:    true,
@@ -137,12 +131,16 @@ func (p *AtlasProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp
 
 // Configure implements provider.Provider.
 func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	atlasPath, err := execPath(p.dir, "atlas")
-	if err != nil {
-		resp.Diagnostics.AddError("Unable to find atlas-cli", err.Error())
+	var model *AtlasProviderModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &model)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-	c, err := atlas.NewClient("", atlasPath)
+	binPath := "atlas"
+	if s := model.BinaryPath.ValueString(); s != "" {
+		binPath = s
+	}
+	c, err := atlas.NewClient("", binPath)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create client", err.Error())
 		return
@@ -157,16 +155,9 @@ func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureReq
 		version += "-canary"
 	}
 	tflog.Debug(ctx, "found atlas-cli", map[string]any{
-		"path":    atlasPath,
 		"version": version,
 	})
 	p.client = c
-
-	var model *AtlasProviderModel
-	resp.Diagnostics.Append(req.Config.Get(ctx, &model)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
 	p.data = providerData{client: c, cloud: model.Cloud, version: p.version}
 	if model != nil {
 		p.data.devURL = model.DevURL.ValueString()
@@ -280,19 +271,6 @@ func checkForUpdate(ctx context.Context, version string) (string, error) {
 		return "", err
 	}
 	return b.String(), nil
-}
-
-func execPath(dir, name string) (file string, err error) {
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
-	file = filepath.Join(dir, name)
-	if _, err = os.Stat(file); err == nil {
-		return file, nil
-	}
-	// If the binary is not in the current directory,
-	// try to find it in the PATH.
-	return exec.LookPath(name)
 }
 
 // absPath returns the absolute path of a file URL.
