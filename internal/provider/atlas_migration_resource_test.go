@@ -190,7 +190,7 @@ func TestAccMigrationResource(t *testing.T) {
 					fmt.Sprintf("%s/%s", mysqlURL, schema4),
 					fmt.Sprintf("%s/%s", mysqlDevURL, schema4),
 				),
-				ExpectError: regexp.MustCompile("an error in your SQL syntax"),
+				ExpectError: regexp.MustCompile("error in your SQL syntax"),
 			},
 		},
 	})
