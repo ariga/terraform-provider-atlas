@@ -1,5 +1,7 @@
 ariga.io/atlas v0.15.1-0.20231104142243-962427888bf2 h1:uw5P4SCzPO3dACfbtt6TuwrWY72B4EKrNck+hKPM6dg=
 ariga.io/atlas v0.15.1-0.20231104142243-962427888bf2/go.mod h1:isZrlzJ5cpoCoKFoY9knZug7Lq4pP1cm8g3XciLZ0Pw=
+ariga.io/atlas v0.18.1-0.20240122190411-2e16a5b94545 h1:0hswiTUXbOi8SbMQZWRX3Wad6+ZIud/y2PsHYK6KpVA=
+ariga.io/atlas v0.18.1-0.20240122190411-2e16a5b94545/go.mod h1:uj3pm+hUTVN/X5yfdBexHlZv+1Xu5u5ZbZx7+CDavNU=
 ariga.io/atlas-go-sdk v0.3.0 h1:19hxr3Fm/Jg/pNSLq3mpTQs1k1sPNhQXpLgVtIDQ0J8=
 ariga.io/atlas-go-sdk v0.3.0/go.mod h1:owkEEXw6jqne5KPVDfKsYB7cwMiMk3jtOiAAeKxS/yU=
 ariga.io/atlas-go-sdk v0.4.0 h1:JvydYd7zuExxDCrgKQtKFOT6nAqBTsx/3EXkrOco+BA=
