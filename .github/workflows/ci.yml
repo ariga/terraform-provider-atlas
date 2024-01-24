@@ -345,3 +345,5 @@ jobs:
           ../../scripts/local.sh ../../dist 0.0.0-pre.0
           terraform init > /dev/null
           terraform apply --auto-approve
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
