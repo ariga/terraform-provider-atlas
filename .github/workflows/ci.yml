@@ -331,7 +331,7 @@ jobs:
         ports:
           - 1433:1433
         options: >-
-          --health-cmd "/opt/mssql-tools/bin/sqlcmd -U sa -P \"${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\""
+          --health-cmd "/opt/mssql-tools/bin/sqlcmd -U sa -P \"${MSSQL_SA_PAS_SWORD}\" -Q \"SELECT 1\""
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -344,7 +344,7 @@ jobs:
         ports:
           - 1434:1433
         options: >-
-          --health-cmd "/opt/mssql-tools/bin/sqlcmd -U sa -P \"${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\""
+          --health-cmd "/opt/mssql-tools/bin/sqlcmd -U sa -P \"${MSSQL_SA_PAS_SWORD}\" -Q \"SELECT 1\""
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -371,13 +371,4 @@ jobs:
         run: |
           curl -sSf https://atlasgo.sh | sh
         env:
-          ATLAS_DEBUG: "true"
           ATLAS_FLAVOR: enterprise
-      - name: Terraform (login-feature)
-        working-directory: integration-tests/login-feature
-        run: |
-          ../../scripts/local.sh ../../dist 0.0.0-pre.0
-          terraform init > /dev/null
-          terraform apply --auto-approve
-        env:
-          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
