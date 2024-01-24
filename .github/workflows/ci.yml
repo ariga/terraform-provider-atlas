@@ -142,6 +142,12 @@ jobs:
         with:
           terraform_version: ${{ matrix.terraform-version }}
           terraform_wrapper: false
+      - name: Install Atlas CLI
+        run: |
+          curl -sSf https://atlasgo.sh | sh
+        env:
+          ATLAS_DEBUG: "true"
+          ATLAS_FLAVOR: enterprise
       - name: Terraform (sqlite)
         working-directory: integration-tests/sqlite
         run: |
@@ -224,6 +230,12 @@ jobs:
         with:
           terraform_version: ${{ matrix.terraform-version }}
           terraform_wrapper: false
+      - name: Install Atlas CLI
+        run: |
+          curl -sSf https://atlasgo.sh | sh
+        env:
+          ATLAS_DEBUG: "true"
+          ATLAS_FLAVOR: enterprise
       - name: Terraform (skip-policy)
         working-directory: integration-tests/skip-policy
         run: |
@@ -241,7 +253,7 @@ jobs:
           ! cat stdout.txt | grep --silent "DROP TABLE \`test\`.\`t2\`"
           terraform apply --auto-approve -no-color -var="schema=schema-t2" -var="skip_drop_table=true"
           # Confirm that the table was not dropped
-          ../../scripts/atlas-cli.sh 0.0.0-pre.0 schema inspect \
+          atlas schema inspect \
             -u "mysql://root:pass@localhost:3306/" > actual.hcl
           cmp -s "expected.hcl" "actual.hcl"
   integration-postgres:
@@ -292,6 +304,12 @@ jobs:
         with:
           terraform_version: ${{ matrix.terraform-version }}
           terraform_wrapper: false
+      - name: Install Atlas CLI
+        run: |
+          curl -sSf https://atlasgo.sh | sh
+        env:
+          ATLAS_DEBUG: "true"
+          ATLAS_FLAVOR: enterprise
       - name: Terraform (concurrent_index-policy)
         working-directory: integration-tests/concurrent_index-policy
         run: |
@@ -312,6 +330,11 @@ jobs:
           MSSQL_SA_PASSWORD: P@ssw0rd0995
         ports:
           - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools/bin/sqlcmd -U sa -P \"${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\""
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
       sqlserver-dev:
         image: mcr.microsoft.com/mssql/server:2022-latest
         env:
@@ -320,6 +343,11 @@ jobs:
           MSSQL_SA_PASSWORD: P@ssw0rd0995
         ports:
           - 1434:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools/bin/sqlcmd -U sa -P \"${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\""
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     strategy:
       fail-fast: false
       matrix:
@@ -339,6 +367,12 @@ jobs:
         with:
           terraform_version: ${{ matrix.terraform-version }}
           terraform_wrapper: false
+      - name: Install Atlas CLI
+        run: |
+          curl -sSf https://atlasgo.sh | sh
+        env:
+          ATLAS_DEBUG: "true"
+          ATLAS_FLAVOR: enterprise
       - name: Terraform (login-feature)
         working-directory: integration-tests/login-feature
         run: |

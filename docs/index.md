@@ -35,6 +35,7 @@ resource "atlas_schema" "market" {
 
 ### Optional
 
+- `binary_path` (String) The path to the atlas-cli binary. If not set, the provider will look for the binary in the PATH.
 - `cloud` (Block, Optional) (see [below for nested schema](#nestedblock--cloud))
 - `dev_url` (String, Sensitive) The URL of the dev database. This configuration is shared for all resources if there is no config on the resource.
 
