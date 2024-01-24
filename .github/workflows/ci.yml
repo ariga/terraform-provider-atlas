@@ -83,11 +83,12 @@ jobs:
         with:
           terraform_version: ${{ matrix.terraform-version }}
           terraform_wrapper: false
-      - name: Install Atlas-CLI
+      - name: Install Atlas CLI
         run: |
-          curl -s -A "Terraform-Provider-CI" -o /usr/local/bin/atlas \
-            https://release.ariga.io/atlas/atlas-linux-amd64-latest?test=1
-          chmod +x /usr/local/bin/atlas
+          curl -sSf https://atlasgo.sh | sh
+        env:
+          ATLAS_DEBUG: "true"
+          ATLAS_FLAVOR: enterprise
       - run: go test -v -cover ./...
         env:
           TF_ACC: '1'
@@ -298,3 +299,49 @@ jobs:
           terraform init > /dev/null
           terraform apply --auto-approve
           terraform apply --auto-approve -var="schema=schema-2.hcl"
+  integration-sqlserver:
+    name: Integration SQL Server (Terraform ${{ matrix.terraform-version }})
+    runs-on: ubuntu-latest
+    needs: [build-dev]
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: P@ssw0rd0995
+        ports:
+          - 1433:1433
+      sqlserver-dev:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: P@ssw0rd0995
+        ports:
+          - 1434:1433
+    strategy:
+      fail-fast: false
+      matrix:
+        terraform-version:
+          - '1.5.*'
+          - '1.6.*'
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '1.21'
+      - uses: actions/download-artifact@v3
+        with:
+          name: atlas-provider
+          path: ./dist
+      - uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ matrix.terraform-version }}
+          terraform_wrapper: false
+      - name: Terraform (login-feature)
+        working-directory: integration-tests/login-feature
+        run: |
+          ../../scripts/local.sh ../../dist 0.0.0-pre.0
+          terraform init > /dev/null
+          terraform apply --auto-approve
