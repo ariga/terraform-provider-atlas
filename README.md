@@ -12,9 +12,11 @@ Contrary to existing tools, Atlas intelligently plans schema migrations for you,
 ### Supported databases: 
 * MySQL
 * MariaDB
-* PostgresSQL
+* PostgreSQL
 * SQLite
 * TiDB
+* SQL Server
+* ClickHouse
 * CockroachDB
 
 ### Docs
