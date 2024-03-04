@@ -14,10 +14,10 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: './go.mod'
       - name: Run linters
         uses: golangci/golangci-lint-action@v3
         with:
@@ -68,11 +68,12 @@ jobs:
         terraform-version:
           - '1.5.*'
           - '1.6.*'
+          - '1.7.*'
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: './go.mod'
       - uses: actions/cache@v3
         with:
           path: ~/go/pkg/mod
@@ -96,10 +97,10 @@ jobs:
     name: Build provider bundles
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: './go.mod'
       - uses: actions/cache@v3
         with:
           path: ~/go/pkg/mod
@@ -107,7 +108,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v5.0.0
+        uses: goreleaser/goreleaser-action@v5
         with:
           version: latest
           args: release --clean --skip=validate,publish,sign
@@ -129,11 +130,12 @@ jobs:
         terraform-version:
           - '1.5.*'
           - '1.6.*'
+          - '1.7.*'
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: './go.mod'
       - uses: actions/download-artifact@v3
         with:
           name: atlas-provider
@@ -217,11 +219,12 @@ jobs:
         terraform-version:
           - '1.5.*'
           - '1.6.*'
+          - '1.7.*'
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: './go.mod'
       - uses: actions/download-artifact@v3
         with:
           name: atlas-provider
@@ -291,11 +294,12 @@ jobs:
         terraform-version:
           - '1.5.*'
           - '1.6.*'
+          - '1.7.*'
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: './go.mod'
       - uses: actions/download-artifact@v3
         with:
           name: atlas-provider
@@ -354,11 +358,12 @@ jobs:
         terraform-version:
           - '1.5.*'
           - '1.6.*'
+          - '1.7.*'
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: './go.mod'
       - uses: actions/download-artifact@v3
         with:
           name: atlas-provider
