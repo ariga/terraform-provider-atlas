@@ -46,7 +46,7 @@ provider "atlas" {
 
 2\. Then, inspect the schema of the database:
 ```shell
-atlas schema inspect -d "mysql://root:pass@localhost:3306/example" > schema.hcl
+atlas schema inspect -u "mysql://root:pass@localhost:3306/example" > schema.hcl
 ```
 
 3\. Finally, configure the terraform resource to apply the state to your database:
