@@ -58,7 +58,7 @@ func (d *AtlasSchemaDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 		Attributes: map[string]schema.Attribute{
 			"dev_url": schema.StringAttribute{
 				Description: "The url of the dev-db see https://atlasgo.io/cli/url",
-				Optional:    true,
+				Required:    true,
 				Sensitive:   true,
 			},
 			"src": schema.StringAttribute{
