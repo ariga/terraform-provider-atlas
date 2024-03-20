@@ -34,7 +34,6 @@ resource "atlas_schema" "market" {
 
 ### Optional
 
-- `dev_db_url` (String, Sensitive, Deprecated) Use `dev_url` instead.
 - `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `diff` (Block, Optional) (see [below for nested schema](#nestedblock--diff))
 - `exclude` (List of String) Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude-schemas

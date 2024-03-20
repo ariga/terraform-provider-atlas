@@ -44,7 +44,6 @@ resource "atlas_schema" "hello" {
 
 ### Optional
 
-- `dev_db_url` (String, Sensitive, Deprecated) Use `dev_url` instead.
 - `variables` (Map of String) The map of variables used in the HCL.
 
 ### Read-Only
