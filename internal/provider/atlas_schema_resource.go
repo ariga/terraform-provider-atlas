@@ -35,8 +35,6 @@ type (
 		TxMode  types.String `tfsdk:"tx_mode"`
 		// Policies
 		Diff *Diff `tfsdk:"diff"`
-
-		DeprecatedDevURL types.String `tfsdk:"dev_db_url"`
 	}
 	// Diff defines the diff policies to apply when planning schema changes.
 	Diff struct {
@@ -174,13 +172,6 @@ func (r *AtlasSchemaResource) Schema(ctx context.Context, _ resource.SchemaReque
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"dev_db_url": schema.StringAttribute{
-				Description: "Use `dev_url` instead.",
-				Optional:    true,
-				Sensitive:   true,
-				DeprecationMessage: "This attribute is deprecated and will be removed in the next major version. " +
-					"Please use the `dev_url` attribute instead.",
-			},
 		},
 	}
 }
@@ -306,7 +297,7 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 			return
 		}
 	}
-	resp.Diagnostics.Append(PrintPlanSQL(ctx, r.client, r.getDevURL(plan.DevURL, plan.DeprecatedDevURL), plan)...)
+	resp.Diagnostics.Append(PrintPlanSQL(ctx, r.client, r.getDevURL(plan.DevURL), plan)...)
 }
 
 func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
@@ -385,7 +376,7 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 	}
 	d := &schemaData{
 		URL:    u,
-		DevURL: r.getDevURL(data.DevURL, data.DeprecatedDevURL),
+		DevURL: r.getDevURL(data.DevURL),
 		Source: "schema.hcl",
 		Diff:   data.Diff,
 	}

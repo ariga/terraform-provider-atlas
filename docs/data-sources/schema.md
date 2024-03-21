@@ -39,12 +39,11 @@ resource "atlas_schema" "hello" {
 
 ### Required
 
+- `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `src` (String) The schema definition of the database. This attribute can be HCL schema or an URL to HCL/SQL file.
 
 ### Optional
 
-- `dev_db_url` (String, Sensitive, Deprecated) Use `dev_url` instead.
-- `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `variables` (Map of String) The map of variables used in the HCL.
 
 ### Read-Only

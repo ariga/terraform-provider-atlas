@@ -54,7 +54,7 @@ func TestAccSchemaDataSource(t *testing.T) {
 			// Read testing
 			{
 				Config: fmt.Sprintf(`data "atlas_schema" "market" {
-					dev_db_url = "mysql://root:pass@localhost:3307/test"
+					dev_url = "mysql://root:pass@localhost:3307/test"
 					variables = {
 						tenant = "test",
 					}
@@ -76,7 +76,7 @@ func TestAccSchemaDataSource(t *testing.T) {
 			// Read testing
 			{
 				Config: `data "atlas_schema" "market" {
-					dev_db_url = "mysql://root:pass@localhost:3307/test"
+					dev_url = "mysql://root:pass@localhost:3307/test"
 					src = ""
 				}`,
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -117,6 +117,7 @@ func TestAccSchemaDataSource(t *testing.T) {
 				}
 				data "atlas_schema" "hello" {
 					src = "file://./sql-files/schema.sql"
+					dev_url = "mysql://root:pass@localhost:3307/test"
 				}`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.atlas_schema.hello", "hcl", normalHCL),

@@ -27,8 +27,6 @@ type (
 		HCL       types.String `tfsdk:"hcl"`
 		ID        types.String `tfsdk:"id"`
 		Variables types.Map    `tfsdk:"variables"`
-
-		DeprecatedDevURL types.String `tfsdk:"dev_db_url"`
 	}
 )
 
@@ -58,7 +56,7 @@ func (d *AtlasSchemaDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 		Attributes: map[string]schema.Attribute{
 			"dev_url": schema.StringAttribute{
 				Description: "The url of the dev-db see https://atlasgo.io/cli/url",
-				Optional:    true,
+				Required:    true,
 				Sensitive:   true,
 			},
 			"src": schema.StringAttribute{
@@ -78,14 +76,6 @@ func (d *AtlasSchemaDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 				Description: "The map of variables used in the HCL.",
 				Optional:    true,
 				ElementType: types.StringType,
-			},
-
-			"dev_db_url": schema.StringAttribute{
-				Description: "Use `dev_url` instead.",
-				Optional:    true,
-				Sensitive:   true,
-				DeprecationMessage: "This attribute is deprecated and will be removed in the next major version. " +
-					"Please use the `dev_url` attribute instead.",
 			},
 		},
 	}
@@ -146,7 +136,7 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		}
 	}
 	normalHCL, err := d.client.SchemaInspect(ctx, &atlas.SchemaInspectParams{
-		DevURL: d.getDevURL(data.DevURL, data.DeprecatedDevURL),
+		DevURL: d.getDevURL(data.DevURL),
 		Format: "hcl",
 		URL:    src,
 		Vars:   vars,
