@@ -144,7 +144,7 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 		return
 	}
 	r, err := d.client.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-		ConfigURL: fmt.Sprintf("file://%s", cfgPath),
+		ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
 		Env:       "tf",
 	})
 	if err != nil {

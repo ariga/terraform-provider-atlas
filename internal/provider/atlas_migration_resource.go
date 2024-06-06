@@ -310,7 +310,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			return
 		}
 		report, err := r.client.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-			ConfigURL: fmt.Sprintf("file://%s", cfgPath),
+			ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
 			Env:       defaultString(plan.EnvName, "tf"),
 		})
 		if err != nil {
@@ -339,7 +339,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			return
 		}
 		lint, err := r.client.MigrateLint(ctx, &atlas.MigrateLintParams{
-			ConfigURL: fmt.Sprintf("file://%s", cfgPath),
+			ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
 			Env:       defaultString(plan.EnvName, "tf"),
 			Latest:    pendingCount,
 		})
@@ -383,7 +383,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 		return
 	}
 	statusReport, err := r.client.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-		ConfigURL: fmt.Sprintf("file://%s", cfgPath),
+		ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
 		Env:       defaultString(data.EnvName, "tf"),
 	})
 	if err != nil {
@@ -401,7 +401,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			return
 		}
 		_, err := r.client.MigrateApply(ctx, &atlas.MigrateApplyParams{
-			ConfigURL: fmt.Sprintf("file://%s", cfgPath),
+			ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
 			Env:       defaultString(data.EnvName, "tf"),
 			Amount:    amount,
 			Context: &atlas.DeployRunContext{
@@ -434,7 +434,7 @@ func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationReso
 		return
 	}
 	report, err := r.client.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-		ConfigURL: fmt.Sprintf("file://%s", cfgPath),
+		ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
 		Env:       defaultString(data.EnvName, "tf"),
 	})
 	if err != nil {
