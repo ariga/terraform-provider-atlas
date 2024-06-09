@@ -1,6 +1,7 @@
 module ariga.io/ariga/terraform-provider-atlas
 
-go 1.22
+go 1.22.4
+
 require (
 	ariga.io/atlas v0.23.0
 	ariga.io/atlas-go-sdk v0.5.2
