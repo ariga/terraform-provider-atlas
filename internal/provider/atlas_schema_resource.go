@@ -206,7 +206,6 @@ func (r *AtlasSchemaResource) Read(ctx context.Context, req resource.ReadRequest
 	hcl, err := r.client.SchemaInspect(ctx, &atlas.SchemaInspectParams{
 		URL:     data.URL.ValueString(),
 		Exclude: exclude,
-		Format:  "hcl",
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Inspect Error",
