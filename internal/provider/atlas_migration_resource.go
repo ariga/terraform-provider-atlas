@@ -430,8 +430,8 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 				fmt.Sprintf("Failed to create a temporary directory for migration: %s", err.Error()))
 			return
 		}
-		// in case of specifying a version < latest, we need a new dir
-		// that contains only the migrations up to the version
+		// in case of specifying a 'version' < latest, we need a new dir
+		// that contains only the migrations up to the 'version'
 		// helps getting the status of the migrations later
 		cdir, err := NewChunkedDir(mdir, data.Version.ValueString())
 		if err != nil {
