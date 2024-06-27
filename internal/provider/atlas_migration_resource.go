@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -50,6 +51,8 @@ type (
 		EnvName types.String `tfsdk:"env_name"`
 		Status  types.Object `tfsdk:"status"`
 		ID      types.String `tfsdk:"id"`
+
+		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
 	MigrationStatus struct {
 		Status  types.String `tfsdk:"status"`
@@ -91,13 +94,17 @@ func (r *MigrationResource) Configure(ctx context.Context, req resource.Configur
 }
 
 // GetSchema implements resource.Resource.
-func (r *MigrationResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *MigrationResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "The resource applies pending migration files on the connected database." +
 			"See https://atlasgo.io/",
 		Blocks: map[string]schema.Block{
 			"cloud":      cloudBlock,
 			"remote_dir": remoteDirBlock,
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{
+				Create: true,
+				Update: true,
+			}),
 		},
 		Attributes: map[string]schema.Attribute{
 			"url": schema.StringAttribute{
@@ -162,6 +169,13 @@ func (r *MigrationResource) Create(ctx context.Context, req resource.CreateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	createTimeout, diags := data.Timeouts.Create(ctx, 20*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, createTimeout)
+	defer cancel()
 	resp.Diagnostics.Append(r.migrate(ctx, data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -209,6 +223,13 @@ func (r *MigrationResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	updateTimeout, diags := data.Timeouts.Update(ctx, 20*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, updateTimeout)
+	defer cancel()
 	resp.Diagnostics.Append(r.migrate(ctx, data)...)
 	if resp.Diagnostics.HasError() {
 		return
