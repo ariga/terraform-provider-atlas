@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -411,7 +412,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			return
 		}
 	default:
-		dirURL, err := url.Parse(data.DirURL.ValueString())
+		dirURL, err := url.Parse(filepath.ToSlash(data.DirURL.ValueString()))
 		if err != nil {
 			diags.AddError("Generate config failure",
 				fmt.Sprintf("Failed to parse migration directory URL: %s", err.Error()))
@@ -480,22 +481,29 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 		default:
 			params.DirURL = fmt.Sprintf("file://%s", data.DirURL.ValueString())
 		}
-		run, err := r.client.MigrateDown(ctx, params)
-		if err != nil {
-			diags.AddError("Failed to down migration", err.Error())
-			return
-		}
-		switch run.Status {
-		case StatePending:
-			diags.AddWarning("Down migration",
-				fmt.Sprintf("Migration is waiting for approval, review here: %s", run.URL))
-			return
-		case StateAborted:
-			diags.AddError("Down migration",
-				fmt.Sprintf("Migration was aborted, review here: %s", run.URL))
-			return
-		case StateApplied, StateApproved:
-			break
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(1 * time.Second):
+				run, err := r.client.MigrateDown(ctx, params)
+				if err != nil {
+					diags.AddError("Failed to down migration", err.Error())
+					return
+				}
+				switch run.Status {
+				case StatePending:
+					diags.AddWarning("Down migration",
+						fmt.Sprintf("Migration is waiting for approval, review here: %s", run.URL))
+					continue
+				case StateAborted:
+					diags.AddError("Down migration",
+						fmt.Sprintf("Migration was aborted, review here: %s", run.URL))
+					return
+				case StateApplied, StateApproved:
+					break
+				}
+			}
 		}
 	case noPending:
 		break
