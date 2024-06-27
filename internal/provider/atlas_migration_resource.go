@@ -502,6 +502,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 		default:
 			params.DirURL = fmt.Sprintf("file://%s", data.DirURL.ValueString())
 		}
+	loop:
 		for {
 			select {
 			case <-ctx.Done():
@@ -522,7 +523,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 						fmt.Sprintf("Migration was aborted, review here: %s", run.URL))
 					return
 				case StateApplied, StateApproved:
-					break
+					break loop
 				}
 			}
 		}
