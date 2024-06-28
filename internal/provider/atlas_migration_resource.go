@@ -104,6 +104,12 @@ func (r *MigrationResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
 				Create: true,
 				Update: true,
+				CreateDescription: `Timeout defaults to 20 mins. A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) ` +
+					`consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are ` +
+					`"s" (seconds), "m" (minutes), "h" (hours).`,
+				UpdateDescription: `Timeout defaults to 20 mins. A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) ` +
+					`consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are ` +
+					`"s" (seconds), "m" (minutes), "h" (hours).`,
 			}),
 		},
 		Attributes: map[string]schema.Attribute{
