@@ -613,6 +613,205 @@ func TestAccMigrationResource_RemoteDirWithTag(t *testing.T) {
 	})
 }
 
+func TestAccMigrationResource_RequireApproval(t *testing.T) {
+	type (
+		DeploymentApprovalsStatus string
+		MigFile                   struct {
+			Name    string
+			Content []byte
+		}
+	)
+	const (
+		PlanPendingApproval DeploymentApprovalsStatus = "PENDING_USER"
+		PlanApproved        DeploymentApprovalsStatus = "APPROVED"
+		PlanAborted         DeploymentApprovalsStatus = "ABORTED"
+		PlanApplied         DeploymentApprovalsStatus = "APPLIED"
+	)
+	var (
+		flow   []*DeploymentApprovalsStatus
+		byTag  = make(map[string]migrate.Dir)
+		devURL = "sqlite://file::memory:?cache=shared"
+		dbURL  = fmt.Sprintf("sqlite://%s?_fk=true", filepath.Join(t.TempDir(), "sqlite.db"))
+		srv    = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			type (
+				GraphQLQuery struct {
+					Query     string `json:"query"`
+					Variables struct {
+						Input json.RawMessage `json:"input"`
+					} `json:"variables"`
+				}
+			)
+			var m GraphQLQuery
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&m))
+			switch {
+			case strings.Contains(m.Query, "query"):
+				switch {
+				case strings.Contains(m.Query, "Bot"):
+				case strings.Contains(m.Query, "dirState"):
+					var input struct {
+						Name string `json:"name"`
+						Tag  string `json:"tag"`
+					}
+					require.NoError(t, json.Unmarshal(m.Variables.Input, &input))
+					dir, ok := byTag[input.Tag]
+					if !ok {
+						fmt.Fprintf(w, `{"errors":[{"message":"not found"}]}`)
+						return
+					}
+					writeDir(t, dir, w)
+				case strings.Contains(m.Query, "protectedFlows"):
+					fmt.Fprintf(w, `{"data":{"dir":{"protectedFlows":{"migrateDown": true}}}}`)
+				case strings.Contains(m.Query, "migratePlanByExtID"):
+					require.NotEmpty(t, flow)
+					status := flow[0]
+					flow = flow[1:]
+					if status != nil {
+						fmt.Fprintf(w, `{"data":{"migratePlanByExtID":{"url": "https://gh.atlasgo.cloud/deployments/51539607559","status":%q}}}`, *status)
+					} else {
+						fmt.Fprintf(w, `{"data":{"migratePlanByExtID":null}}`)
+					}
+				case strings.Contains(m.Query, "migrateTargetByExtID"):
+					fmt.Fprint(w, `{"data":{"migrateTargetByExtID":null}}`)
+				default:
+					t.Fatalf("unexpected query: %s", m.Query)
+				}
+			case strings.Contains(m.Query, "mutation"):
+				switch {
+				case strings.Contains(m.Query, "CreateMigrateDownPlan"):
+					fmt.Fprint(w, `{"data":{"createMigrateDownPlan":{"url": "https://gh.atlasgo.cloud/deployments/51539607559"}}}`)
+				case strings.Contains(m.Query, "ReportMigrationDown"):
+					fmt.Fprint(w, `{"data":{"reportMigrationDown":{"url": "https://gh.atlasgo.cloud/deployments/51539607559"}}}`)
+				case strings.Contains(m.Query, "ReportMigration"):
+					fmt.Fprint(w, `{"data":{"reportMigration":{"success":true}}}`)
+				default:
+					t.Fatalf("unexpected mutation: %s", m.Query)
+				}
+			default:
+				t.Fatalf("unexpected query: %s", m.Query)
+			}
+		}))
+	)
+	t.Cleanup(srv.Close)
+	files := []MigFile{
+		{"1.sql", []byte("create table t1 (id int)")},
+		{"2.sql", []byte("create table t2 (id int)")},
+		{"3.sql", []byte("create table t3 (id int)")},
+		{"4.sql", []byte("create table t4 (id int)")},
+	}
+	latest, err := migrate.NewLocalDir(t.TempDir())
+	require.NoError(t, err)
+	for _, v := range files {
+		require.NoError(t, latest.WriteFile(v.Name, v.Content))
+	}
+	tag3, err := migrate.NewLocalDir(t.TempDir())
+	require.NoError(t, err)
+	for _, v := range files[:3] {
+		require.NoError(t, tag3.WriteFile(v.Name, v.Content))
+	}
+	tag2, err := migrate.NewLocalDir(t.TempDir())
+	require.NoError(t, err)
+	for _, v := range files[:2] {
+		require.NoError(t, tag2.WriteFile(v.Name, v.Content))
+	}
+	tag1, err := migrate.NewLocalDir(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, tag1.WriteFile("1.sql", []byte("create table t1 (id int)")))
+	byTag["latest"], byTag[""] = latest, latest
+	byTag["tag3"] = tag3
+	byTag["tag2"] = tag2
+	byTag["tag1"] = tag1
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				provider "atlas" {
+					dev_url = "%[1]s"
+					cloud {
+						token   = "aci_bearer_token"
+						url     = "%[2]s"
+						project = "test"
+					}
+				}
+				resource "atlas_migration" "hello" {
+					url = "%[3]s"
+					remote_dir {
+						name = "test"
+						tag  = "latest"
+					}
+				}`, devURL, srv.URL, dbURL),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("atlas_migration.hello", "id", "remote_dir://test"),
+					resource.TestCheckResourceAttr("atlas_migration.hello", "status.current", "4"),
+					resource.TestCheckResourceAttr("atlas_migration.hello", "status.latest", "4"),
+					resource.TestCheckNoResourceAttr("atlas_migration.hello", "status.next"),
+				),
+			},
+		},
+	})
+	newS := func(s DeploymentApprovalsStatus) *DeploymentApprovalsStatus { return &s }
+	// plan is waiting for approval, and then approved
+	flow = append(flow, newS(PlanPendingApproval), newS(PlanApproved))
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				provider "atlas" {
+					dev_url = "%[1]s"
+					cloud {
+						token   = "aci_bearer_token"
+						url     = "%[2]s"
+						project = "test"
+					}
+				}
+				resource "atlas_migration" "hello" {
+					url = "%[3]s"
+					remote_dir {
+						name = "test"
+						tag  = "tag3"
+					}
+				}`, devURL, srv.URL, dbURL),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("atlas_migration.hello", "id", "remote_dir://test"),
+					resource.TestCheckResourceAttr("atlas_migration.hello", "status.current", "3"),
+					resource.TestCheckResourceAttr("atlas_migration.hello", "status.latest", "3"),
+					resource.TestCheckNoResourceAttr("atlas_migration.hello", "status.next"),
+				),
+			},
+		},
+	})
+	// plan is waiting for approval, and then aborted
+	flow = append(flow, newS(PlanPendingApproval), newS(PlanAborted))
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				provider "atlas" {
+					dev_url = "%[1]s"
+					cloud {
+						token   = "aci_bearer_token"
+						url     = "%[2]s"
+						project = "test"
+					}
+				}
+				resource "atlas_migration" "hello" {
+					url = "%[3]s"
+					remote_dir {
+						name = "test"
+						tag  = "tag2"
+					}
+				}`, devURL, srv.URL, dbURL),
+				ExpectError: regexp.MustCompile("migration plan was aborted"),
+			},
+		},
+	})
+}
+
 func newFooProvider(name, resource string) func() (*schema.Provider, error) {
 	return func() (*schema.Provider, error) {
 		return &schema.Provider{
