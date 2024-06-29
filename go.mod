@@ -4,10 +4,11 @@ go 1.22.4
 
 require (
 	ariga.io/atlas v0.23.0
-	ariga.io/atlas-go-sdk v0.5.2
+	ariga.io/atlas-go-sdk v0.5.6
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/hashicorp/terraform-plugin-docs v0.16.0
 	github.com/hashicorp/terraform-plugin-framework v1.4.2
+	github.com/hashicorp/terraform-plugin-framework-timeouts v0.4.1
 	github.com/hashicorp/terraform-plugin-framework-validators v0.12.0
 	github.com/hashicorp/terraform-plugin-go v0.19.0
 	github.com/hashicorp/terraform-plugin-log v0.9.0
