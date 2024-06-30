@@ -347,7 +347,9 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			resp.Diagnostics.AddError("Failed to lint migration", err.Error())
 			return
 		}
+		stmts := []string{}
 		for _, f := range lint.Files {
+			stmts = append(stmts, fmt.Sprintf("File: %s\n%s", f.Name, f.Text))
 			switch {
 			case len(f.Reports) > 0:
 				for _, r := range f.Reports {
@@ -364,6 +366,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 				resp.Diagnostics.AddWarning("Lint error", fmt.Sprintf("File: %s\n%s", f.Name, f.Error))
 			}
 		}
+		resp.Diagnostics.AddWarning("Executing statements", strings.Join(stmts, "\n"))
 	}
 }
 

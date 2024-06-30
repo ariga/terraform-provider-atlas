@@ -13,10 +13,19 @@ import (
 
 	"ariga.io/atlas-go-sdk/atlasexec"
 	"ariga.io/atlas/sql/migrate"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	sdkprovider "github.com/hashicorp/terraform-plugin-framework/provider"
+	sdkschema "github.com/hashicorp/terraform-plugin-framework/provider/schema"
+	rs "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 	"github.com/stretchr/testify/require"
+
+	"ariga.io/ariga/terraform-provider-atlas/internal/provider"
 )
 
 func TestAccMigrationResource(t *testing.T) {
@@ -417,6 +426,231 @@ func TestAccMigrationResource_RemoteDir(t *testing.T) {
 			},
 		})
 	})
+}
+
+func TestModifyPlan(t *testing.T) {
+	type args struct {
+		req  rs.ModifyPlanRequest
+		resp rs.ModifyPlanResponse
+	}
+
+	tests := []struct {
+		name string
+		args args
+	}{
+		{
+			name: "no-change",
+			args: args{
+				req: rs.ModifyPlanRequest{
+					Plan: tfsdk.Plan{
+						Raw: tftypes.NewValue(tftypes.Object{
+							AttributeTypes: map[string]tftypes.Type{
+								"url":              tftypes.String,
+								"dev_url":          tftypes.String,
+								"dir":              tftypes.String,
+								"revisions_schema": tftypes.String,
+								"version":          tftypes.String,
+								"baseline":         tftypes.String,
+								"exec_order":       tftypes.String,
+								"cloud": tftypes.Object{
+									AttributeTypes: map[string]tftypes.Type{
+										"token":   tftypes.String,
+										"url":     tftypes.String,
+										"project": tftypes.String,
+									},
+								},
+								"remote_dir": tftypes.Object{
+									AttributeTypes: map[string]tftypes.Type{
+										"name": tftypes.String,
+										"tag":  tftypes.String,
+									},
+								},
+								"env_name": tftypes.String,
+								"status": tftypes.Object{
+									AttributeTypes: map[string]tftypes.Type{
+										"status":  tftypes.String,
+										"current": tftypes.String,
+										"next":    tftypes.String,
+										"latest":  tftypes.String,
+									},
+								},
+								"id": tftypes.String,
+							},
+						}, map[string]tftypes.Value{
+							"url":              tftypes.NewValue(tftypes.String, "sqlite://:memory:"),
+							"dev_url":          tftypes.NewValue(tftypes.String, "sqlite://:memory:"),
+							"dir":              tftypes.NewValue(tftypes.String, "migrations?format=atlas"),
+							"revisions_schema": tftypes.NewValue(tftypes.String, "atlas_schema_revisions"),
+							"version":          tftypes.NewValue(tftypes.String, "20221101163823"),
+							"baseline":         tftypes.NewValue(tftypes.String, "20221101163823"),
+							"exec_order":       tftypes.NewValue(tftypes.String, "linear"),
+							"cloud": tftypes.NewValue(tftypes.Object{
+								AttributeTypes: map[string]tftypes.Type{
+									"token":   tftypes.String,
+									"url":     tftypes.String,
+									"project": tftypes.String,
+								},
+							}, map[string]tftypes.Value{
+								"token":   tftypes.NewValue(tftypes.String, "aci_bearer_token"),
+								"url":     tftypes.NewValue(tftypes.String, "atlas"),
+								"project": tftypes.NewValue(tftypes.String, "test"),
+							}),
+							"remote_dir": tftypes.NewValue(tftypes.Object{
+								AttributeTypes: map[string]tftypes.Type{
+									"name": tftypes.String,
+									"tag":  tftypes.String,
+								},
+							}, map[string]tftypes.Value{
+								"name": tftypes.NewValue(tftypes.String, "test"),
+								"tag":  tftypes.NewValue(tftypes.String, "test"),
+							}),
+							"env_name": tftypes.NewValue(tftypes.String, "test"),
+							"status": tftypes.NewValue(tftypes.Object{
+								AttributeTypes: map[string]tftypes.Type{
+									"status":  tftypes.String,
+									"current": tftypes.String,
+									"next":    tftypes.String,
+									"latest":  tftypes.String,
+								},
+							}, map[string]tftypes.Value{
+								"status":  tftypes.NewValue(tftypes.String, "PENDING"),
+								"current": tftypes.NewValue(tftypes.String, "20221101163823"),
+								"next":    tftypes.NewValue(tftypes.String, "20221101163841"),
+								"latest":  tftypes.NewValue(tftypes.String, "20221101163841"),
+							}),
+							"id": tftypes.NewValue(tftypes.String, "test"),
+						}),
+						Schema: sdkschema.Schema{
+							Attributes: map[string]sdkschema.Attribute{
+
+								"url": sdkschema.StringAttribute{
+									Optional: true,
+								},
+								"env_name": sdkschema.StringAttribute{
+									Optional: true,
+								},
+								"status": sdkschema.ObjectAttribute{
+									Optional: true,
+									AttributeTypes: map[string]attr.Type{
+										"status":  types.StringType,
+										"current": types.StringType,
+										"next":    types.StringType,
+										"latest":  types.StringType,
+									},
+								},
+								"dev_url": sdkschema.StringAttribute{
+									Optional: true,
+								},
+								"id": sdkschema.StringAttribute{
+									Optional: true,
+								},
+								"dir": sdkschema.StringAttribute{
+									Optional: true,
+								},
+								"revisions_schema": sdkschema.StringAttribute{
+									Optional: true,
+								},
+								"version": sdkschema.StringAttribute{
+									Optional: true,
+								},
+								"remote_dir": sdkschema.SingleNestedAttribute{
+									Optional: true,
+									Attributes: map[string]sdkschema.Attribute{
+										"name": sdkschema.StringAttribute{
+											Optional: true,
+										},
+										"tag": sdkschema.StringAttribute{
+											Optional: true,
+										},
+									},
+								},
+								"exec_order": sdkschema.StringAttribute{
+									Optional: true,
+								},
+								"cloud": sdkschema.SingleNestedAttribute{
+									Optional: true,
+									Attributes: map[string]sdkschema.Attribute{
+										"token": sdkschema.StringAttribute{
+											Optional: true,
+										},
+										"url": sdkschema.StringAttribute{
+											Optional: true,
+										},
+										"project": sdkschema.StringAttribute{
+											Optional: true,
+										},
+									},
+								},
+							},
+						},
+					},
+					State: tfsdk.State{},
+				},
+				resp: rs.ModifyPlanResponse{},
+			},
+		},
+	}
+	// c, err := atlas.NewClient(t.TempDir(), "atlas")
+	// require.NoError(t, err)
+	providerResp := sdkprovider.ConfigureResponse{}
+	p := provider.New("", "", "")()
+	p.Configure(context.Background(), sdkprovider.ConfigureRequest{
+		Config: tfsdk.Config{
+			Raw: tftypes.NewValue(
+				tftypes.Object{
+					AttributeTypes: map[string]tftypes.Type{
+						"binary_path": tftypes.String,
+						"dev_url":     tftypes.String,
+						"cloud":       tftypes.Object{AttributeTypes: map[string]tftypes.Type{}},
+					},
+				},
+				map[string]tftypes.Value{
+					"binary_path": tftypes.NewValue(tftypes.String, "atlas"),
+					"dev_url":     tftypes.NewValue(tftypes.String, "sqlite://:memory:"),
+					"cloud":       tftypes.NewValue(tftypes.Object{AttributeTypes: map[string]tftypes.Type{}}, nil),
+				},
+			),
+			Schema: sdkschema.Schema{
+				Attributes: map[string]sdkschema.Attribute{
+					"binary_path": sdkschema.StringAttribute{
+						Optional: true,
+					},
+					"dev_url": sdkschema.StringAttribute{
+						Optional: true,
+					},
+					"cloud": sdkschema.SingleNestedAttribute{
+						Optional: true,
+						Attributes: map[string]sdkschema.Attribute{
+							"token": sdkschema.StringAttribute{
+								Optional: true,
+							},
+							"url": sdkschema.StringAttribute{
+								Optional: true,
+							},
+							"project": sdkschema.StringAttribute{
+								Optional: true,
+							},
+						},
+					},
+				},
+			},
+		},
+	}, &providerResp)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			z := p.Resources(context.Background())
+			require.Len(t, z, 2)
+			mgr, ok := z[1]().(*provider.MigrationResource)
+			require.True(t, ok, "resource is not MigrationResource")
+			mgr.Configure(context.Background(), rs.ConfigureRequest{
+				ProviderData: providerResp.ResourceData,
+			}, &rs.ConfigureResponse{})
+			mresp := rs.ModifyPlanResponse{}
+			mgr.ModifyPlan(context.Background(), tt.args.req, &mresp)
+			warningsCount := mresp.Diagnostics.WarningsCount()
+			require.Equal(t, 3, warningsCount)
+		})
+	}
 }
 
 func newFooProvider(name, resource string) func() (*schema.Provider, error) {
