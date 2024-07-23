@@ -469,9 +469,6 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 		}
 		wd, err := atlas.NewWorkingDir(
 			func(ce *atlas.WorkingDir) error {
-				if cdir == nil {
-					return nil
-				}
 				return ce.CopyFS(dirURL.Path, cdir)
 			},
 		)
