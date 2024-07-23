@@ -1,12 +1,19 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -20,6 +27,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 
 	atlas "ariga.io/atlas-go-sdk/atlasexec"
+	"ariga.io/atlas/sql/migrate"
 )
 
 type (
@@ -43,6 +51,8 @@ type (
 		EnvName types.String `tfsdk:"env_name"`
 		Status  types.Object `tfsdk:"status"`
 		ID      types.String `tfsdk:"id"`
+
+		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
 	MigrationStatus struct {
 		Status  types.String `tfsdk:"status"`
@@ -84,13 +94,23 @@ func (r *MigrationResource) Configure(ctx context.Context, req resource.Configur
 }
 
 // GetSchema implements resource.Resource.
-func (r *MigrationResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *MigrationResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "The resource applies pending migration files on the connected database." +
 			"See https://atlasgo.io/",
 		Blocks: map[string]schema.Block{
 			"cloud":      cloudBlock,
 			"remote_dir": remoteDirBlock,
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{
+				Create: true,
+				Update: true,
+				CreateDescription: `Timeout defaults to 20 mins. A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) ` +
+					`consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are ` +
+					`"s" (seconds), "m" (minutes), "h" (hours).`,
+				UpdateDescription: `Timeout defaults to 20 mins. A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) ` +
+					`consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are ` +
+					`"s" (seconds), "m" (minutes), "h" (hours).`,
+			}),
 		},
 		Attributes: map[string]schema.Attribute{
 			"url": schema.StringAttribute{
@@ -155,6 +175,13 @@ func (r *MigrationResource) Create(ctx context.Context, req resource.CreateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	createTimeout, diags := data.Timeouts.Create(ctx, 20*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, createTimeout)
+	defer cancel()
 	resp.Diagnostics.Append(r.migrate(ctx, data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -202,6 +229,13 @@ func (r *MigrationResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	updateTimeout, diags := data.Timeouts.Update(ctx, 20*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, updateTimeout)
+	defer cancel()
 	resp.Diagnostics.Append(r.migrate(ctx, data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -367,6 +401,13 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 	}
 }
 
+const (
+	StatePending  = "PENDING_USER"
+	StateApproved = "APPROVED"
+	StateAborted  = "ABORTED"
+	StateApplied  = "APPLIED"
+)
+
 func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResourceModel) (diags diag.Diagnostics) {
 	dir, err := os.MkdirTemp(os.TempDir(), "tf-atlas-*")
 	if err != nil {
@@ -376,42 +417,145 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 	}
 	defer os.RemoveAll(dir)
 	cfgPath := filepath.Join(dir, "atlas.hcl")
+	if data.Cloud != nil && data.Cloud.Token.ValueString() != "" {
+		// Override cloud config from provider if cloud config from resource is set
+		r.cloud = data.Cloud
+	}
 	err = data.AtlasHCL(cfgPath, r.devURL, r.cloud)
 	if err != nil {
 		diags.AddError("Generate config failure",
 			fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
 		return
 	}
-	statusReport, err := r.client.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-		ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
-		Env:       defaultString(data.EnvName, "tf"),
-	})
-	if err != nil {
-		diags.AddError("Failed to read migration status", err.Error())
-		return
-	}
-	amount, synced := statusReport.Amount(data.Version.ValueString())
-	if !synced {
-		if amount == 0 {
-			diags.AddAttributeError(
-				path.Root("version"),
-				"Incorrect version",
-				"The version is not found in the pending migrations.",
-			)
-			return
-		}
-		_, err := r.client.MigrateApply(ctx, &atlas.MigrateApplyParams{
+	var status *atlas.MigrateStatus
+	switch {
+	case r.cloud != nil && !data.RemoteDir.Name.IsNull():
+		status, err = r.client.MigrateStatus(ctx, &atlas.MigrateStatusParams{
 			ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
 			Env:       defaultString(data.EnvName, "tf"),
-			Amount:    amount,
+		})
+		if err != nil {
+			diags.AddError("Failed to read migration status", err.Error())
+			return
+		}
+	default:
+		dirURL, err := url.Parse(filepath.ToSlash(data.DirURL.ValueString()))
+		if err != nil {
+			diags.AddError("Generate config failure",
+				fmt.Sprintf("Failed to parse migration directory URL: %s", err.Error()))
+			return
+		}
+		switch f := dirURL.Query().Get("format"); strings.ToLower(f) {
+		case "", "atlas":
+		default:
+			diags.AddError("Generate config failure",
+				fmt.Sprintf("Unknown format for migration directory: %s", f))
+			return
+		}
+		mdir, err := migrate.NewLocalDir(dirURL.Path)
+		if err != nil {
+			diags.AddError("Generate config failure",
+				fmt.Sprintf("Failed to create a temporary directory for migration: %s", err.Error()))
+			return
+		}
+		// in case of specifying a 'version' < latest, we need a new dir
+		// that contains only the migrations up to the 'version'
+		// helps getting the status of the migrations later
+		cdir, err := NewChunkedDir(mdir, data.Version.ValueString())
+		if err != nil {
+			diags.AddError("Generate config failure",
+				fmt.Sprintf("Failed to create chunked directory: %s", err.Error()))
+			return
+		}
+		wd, err := atlas.NewWorkingDir(
+			func(ce *atlas.WorkingDir) error {
+				return ce.CopyFS(dirURL.Path, cdir)
+			},
+		)
+		err = r.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
+			status, err = c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
+				ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
+				Env:       defaultString(data.EnvName, "tf"),
+			})
+			return err
+		})
+		if err != nil {
+			diags.AddError("Failed to read migration status", err.Error())
+			return
+		}
+	}
+	var (
+		downing   = len(status.Pending) == 0 && len(status.Applied) > 0 && len(status.Applied) > len(status.Available)
+		noPending = len(status.Pending) == 0
+	)
+	switch {
+	case downing:
+		params := &atlas.MigrateDownParams{
+			ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
+			Env:       defaultString(data.EnvName, "tf"),
+			ToVersion: status.Available[len(status.Available)-1].Version,
 			Context: &atlas.DeployRunContext{
 				TriggerType:    atlas.TriggerTypeTerraform,
 				TriggerVersion: r.version,
 			},
-		})
-		if err != nil {
-			diags.AddError("Failed to apply migrations", err.Error())
-			return
+		}
+		switch {
+		case r.cloud != nil && !data.RemoteDir.Name.IsNull():
+			params.DirURL = fmt.Sprintf("atlas://%s", data.RemoteDir.Name.ValueString())
+		default:
+			params.DirURL = fmt.Sprintf("file://%s", data.DirURL.ValueString())
+		}
+	loop:
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(1 * time.Second):
+				run, err := r.client.MigrateDown(ctx, params)
+				if err != nil {
+					diags.AddError("Failed to down migration", err.Error())
+					return
+				}
+				switch run.Status {
+				case StatePending:
+					diags.AddWarning("Down migration",
+						fmt.Sprintf("Migration is waiting for approval, review here: %s", run.URL))
+					continue
+				case StateAborted:
+					diags.AddError("Down migration",
+						fmt.Sprintf("Migration was aborted, review here: %s", run.URL))
+					return
+				case StateApplied, StateApproved:
+					break loop
+				}
+			}
+		}
+	case noPending:
+		break
+	default:
+		amount, synced := status.Amount(data.Version.ValueString())
+		if !synced {
+			if amount == 0 {
+				diags.AddAttributeError(
+					path.Root("version"),
+					"Incorrect version",
+					fmt.Sprintf("The version %s is not found in the pending migrations.", data.Version.ValueString()),
+				)
+				return
+			}
+			_, err := r.client.MigrateApply(ctx, &atlas.MigrateApplyParams{
+				ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
+				Env:       defaultString(data.EnvName, "tf"),
+				Amount:    amount,
+				Context: &atlas.DeployRunContext{
+					TriggerType:    atlas.TriggerTypeTerraform,
+					TriggerVersion: r.version,
+				},
+			})
+			if err != nil {
+				diags.AddError("Failed to apply migrations", err.Error())
+				return
+			}
 		}
 	}
 	data.Status, diags = r.buildStatus(ctx, data)
@@ -476,6 +620,107 @@ func defaultString(s types.String, def string) string {
 	return s.ValueString()
 }
 
+type (
+	chunkedDir struct {
+		migrate.Dir
+		latestIndex int
+	}
+	// memFile implements fs.File.
+	memFile struct {
+		io.Reader
+		fs.FileInfo
+	}
+)
+
+var (
+	_ fs.File     = &memFile{}
+	_ migrate.Dir = (*chunkedDir)(nil)
+)
+
+// NewMemFile returns a new in-memory file.
+func NewMemFile(f io.Reader) fs.File {
+	return &memFile{Reader: f}
+}
+
+func (f *memFile) Close() error               { return nil }
+func (f *memFile) Stat() (fs.FileInfo, error) { return f.FileInfo, nil }
+
+// NewChunkedDir returns a new Dir that only contains migrations up to the
+// given version. (inclusive)
+//
+// If version is empty, the original Dir is returned.
+// If version is not found, an error is returned.
+func NewChunkedDir(dir migrate.Dir, version string) (migrate.Dir, error) {
+	if version == "" {
+		return dir, nil
+	}
+	files, err := dir.Files()
+	if err != nil {
+		return nil, err
+	}
+	idx := slices.IndexFunc(files, func(f migrate.File) bool {
+		return f.Version() == version
+	})
+	if idx == -1 {
+		return nil, fmt.Errorf("version %q not found", version)
+	}
+	// We want to include the version file, so add 1.
+	return &chunkedDir{Dir: dir, latestIndex: idx + 1}, nil
+}
+
+// CommitID implements Dir.CommitID.
+func (d *chunkedDir) CommitID() string {
+	if dir, ok := d.Dir.(interface{ CommitID() string }); ok {
+		return dir.CommitID()
+	}
+	return ""
+}
+
+// Open implements migrate.Dir.
+//
+// If the file is atlas.sum, we return a file with
+// the checksum of chunked migration files.
+func (d *chunkedDir) Open(name string) (fs.File, error) {
+	if name != migrate.HashFileName {
+		return d.Dir.Open(name)
+	}
+	sm, err := d.Checksum()
+	if err != nil {
+		return nil, err
+	}
+	data, err := sm.MarshalText()
+	if err != nil {
+		return nil, err
+	}
+	return NewMemFile(bytes.NewReader(data)), nil
+}
+
+// Path implements Dir.Path.
+func (d *chunkedDir) Path() string {
+	if dir, ok := d.Dir.(interface{ Path() string }); ok {
+		return dir.Path()
+	}
+	return ""
+}
+
+// Checksum implements Dir.Checksum.
+func (d *chunkedDir) Checksum() (migrate.HashFile, error) {
+	files, err := d.Files()
+	if err != nil {
+		return nil, err
+	}
+	return migrate.NewHashFile(files)
+}
+
+// Files implements Dir.Files.
+func (d *chunkedDir) Files() ([]migrate.File, error) {
+	files, err := d.Dir.Files()
+	if err != nil {
+		return nil, err
+	}
+	return files[:d.latestIndex], nil
+}
+
 func (d *MigrationResourceModel) AtlasHCL(name string, devURL string, cloud *AtlasCloudBlock) error {
 	cfg := templateData{
 		URL:             d.URL.ValueString(),
@@ -484,10 +729,6 @@ func (d *MigrationResourceModel) AtlasHCL(name string, devURL string, cloud *Atl
 		Baseline:        d.Baseline.ValueString(),
 		RevisionsSchema: d.RevisionsSchema.ValueString(),
 		ExecOrder:       d.ExecOrder.ValueString(),
-	}
-	if d.Cloud != nil && d.Cloud.Token.ValueString() != "" {
-		// Use the data source cloud block if it is set
-		cloud = d.Cloud
 	}
 	if cloud != nil {
 		cfg.Cloud = &cloudConfig{

@@ -137,7 +137,6 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 	}
 	normalHCL, err := d.client.SchemaInspect(ctx, &atlas.SchemaInspectParams{
 		DevURL: d.getDevURL(data.DevURL),
-		Format: "hcl",
 		URL:    src,
 		Vars:   vars,
 	})
