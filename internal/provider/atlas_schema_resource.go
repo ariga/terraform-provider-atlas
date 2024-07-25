@@ -307,7 +307,7 @@ func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *Atl
 		)
 		return
 	}
-	d := &schemaData{
+	d := &atlasHCL{
 		URL:    u,
 		DevURL: devURL,
 		Source: "schema.hcl",
@@ -317,7 +317,7 @@ func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *Atl
 	if diags.HasError() {
 		return
 	}
-	dir, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(d.render))
+	dir, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(d.Write))
 	if err != nil {
 		diags.AddError("HCL Error",
 			fmt.Sprintf("Unable to create working directory, got error: %s", err),
@@ -373,7 +373,7 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 		)
 		return
 	}
-	d := &schemaData{
+	d := &atlasHCL{
 		URL:    u,
 		DevURL: r.getDevURL(data.DevURL),
 		Source: "schema.hcl",
@@ -383,7 +383,7 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 	if diags.HasError() {
 		return
 	}
-	dir, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(d.render))
+	dir, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(d.Write))
 	if err != nil {
 		diags.AddError("HCL Error",
 			fmt.Sprintf("Unable to create working directory, got error: %s", err),
