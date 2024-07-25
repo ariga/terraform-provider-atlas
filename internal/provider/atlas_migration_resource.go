@@ -721,8 +721,6 @@ func (d *chunkedDir) Files() ([]migrate.File, error) {
 	return files[:d.latestIndex], nil
 }
 
-const migrationAtlasHCL = "env {\n  name = atlas.env\n}"
-
 func (d *MigrationResourceModel) AtlasHCL(name string, devURL string, cloud *AtlasCloudBlock) error {
 	cfg := atlasHCL{
 		URL:    d.URL.ValueString(),
@@ -754,5 +752,5 @@ func (d *MigrationResourceModel) AtlasHCL(name string, devURL string, cloud *Atl
 	default:
 		cfg.Migration.DirURL = "file://migrations"
 	}
-	return cfg.CreateFile(migrationAtlasHCL, name)
+	return cfg.CreateFile(name)
 }

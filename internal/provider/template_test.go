@@ -69,19 +69,19 @@ func TestTemplate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			name := filepath.Join(t.TempDir(), "atlas.hcl")
-			require.NoError(t, tt.data.CreateFile(migrationAtlasHCL, name))
+			require.NoError(t, tt.data.CreateFile(name))
 			checkContent(t, name, func(s string) error {
 				if !update {
 					return nil
 				}
-				return tt.data.CreateFile(migrationAtlasHCL, s)
+				return tt.data.CreateFile(s)
 			})
 		})
 	}
 }
 
 func Test_SchemaTemplate(t *testing.T) {
-	data := &schemaData{
+	data := &atlasHCL{
 		Source: "file://schema.hcl",
 		URL:    "mysql://user:pass@localhost:3306/tf-db",
 		DevURL: "mysql://user:pass@localhost:3307/tf-db",
@@ -97,26 +97,22 @@ func Test_SchemaTemplate(t *testing.T) {
 	}
 
 	out := &bytes.Buffer{}
-	require.NoError(t, data.render(out))
-	require.Equal(t, `
-diff {
-  concurrent_index {
-    create = true
-  }
-  skip {
-    drop_table = false
-    add_index = true
-  }
-}
-env {
+	require.NoError(t, data.Write(out))
+	require.Equal(t, `env {
   name = atlas.env
-  src  = "file://schema.hcl"
   url  = "mysql://user:pass@localhost:3306/tf-db"
   dev  = "mysql://user:pass@localhost:3307/tf-db"
-  schemas = []
-  exclude = []
-}
-`, out.String())
+  src  = "file://schema.hcl"
+  diff {
+    concurrent_index {
+      create = true
+    }
+    skip {
+      drop_table = false
+      add_index  = true
+    }
+  }
+}`, out.String())
 }
 
 func checkContent(t *testing.T, actual string, gen func(string) error) {

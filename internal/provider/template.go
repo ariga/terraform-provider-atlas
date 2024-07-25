@@ -1,13 +1,9 @@
 package provider
 
 import (
-	"embed"
-	"errors"
-	"fmt"
 	"io"
 	"os"
 	"strings"
-	"text/template"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclwrite"
@@ -19,11 +15,14 @@ type (
 	atlasHCL struct {
 		URL     string
 		DevURL  string
+		Source  string
 		Schemas []string
 		Exclude []string
 
-		Cloud     *cloudConfig
+		Diff      *Diff
 		Migration *migrationConfig
+
+		Cloud *cloudConfig
 	}
 	cloudConfig struct {
 		Token   string
@@ -36,42 +35,24 @@ type (
 		ExecOrder       string
 		RevisionsSchema string
 	}
-	schemaData struct {
-		Source  string
-		URL     string
-		DevURL  string
-		Schemas []string
-		Exclude []string
-		Diff    *Diff
-	}
 )
 
-var (
-	//go:embed templates/*.tmpl
-	tmpls embed.FS
-	tmpl  = template.Must(template.New("terraform").
-		Funcs(template.FuncMap{
-			"hclValue": hclValue,
-			"slides": func(s []string) (string, error) {
-				b := &strings.Builder{}
-				b.WriteRune('[')
-				for i, v := range s {
-					if i > 0 {
-						b.WriteRune(',')
-					}
-					fmt.Fprintf(b, "%q", v)
-				}
-				b.WriteRune(']')
-				return b.String(), nil
-			},
-		}).
-		ParseFS(tmpls, "templates/*.tmpl"),
-	)
-)
+// we will allow the user configure the base atlas.hcl file
+const baseAtlasHCL = "env {\n  name = atlas.env\n}"
 
 // CreateFile writes the template data to
 // atlas.hcl file in the given directory.
-func (d *atlasHCL) CreateFile(baseConfig, name string) error {
+func (d *atlasHCL) CreateFile(name string) error {
+	w, err := os.Create(name)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	return d.Write(w)
+}
+
+// Write writes the atlas config to the given writer.
+func (d *atlasHCL) Write(w io.Writer) error {
 	f := hclwrite.NewEmptyFile()
 	r := f.Body()
 	if cloud := d.Cloud; cloud != nil {
@@ -91,6 +72,9 @@ func (d *atlasHCL) CreateFile(baseConfig, name string) error {
 	}
 	if d.DevURL != "" {
 		e.SetAttributeValue("dev", cty.StringVal(d.DevURL))
+	}
+	if d.Source != "" {
+		e.SetAttributeValue("src", cty.StringVal(d.Source))
 	}
 	if len(d.Schemas) > 0 {
 		s := make([]cty.Value, len(d.Schemas))
@@ -123,29 +107,45 @@ func (d *atlasHCL) CreateFile(baseConfig, name string) error {
 			m.SetAttributeValue("revisions_schema", cty.StringVal(md.RevisionsSchema))
 		}
 	}
-	dst, err := parseConfig(baseConfig)
+	if dd := d.Diff; dd != nil {
+		d := e.AppendNewBlock("diff", nil).Body()
+		if v := dd.ConcurrentIndex; v != nil {
+			b := d.AppendNewBlock("concurrent_index", nil).Body()
+			attrBoolPtr(b, v.Create, "create")
+			attrBoolPtr(b, v.Drop, "drop")
+		}
+		if v := dd.Skip; v != nil {
+			b := d.AppendNewBlock("skip", nil).Body()
+			attrBoolPtr(b, v.AddSchema, "add_schema")
+			attrBoolPtr(b, v.DropSchema, "drop_schema")
+			attrBoolPtr(b, v.ModifySchema, "modify_schema")
+			attrBoolPtr(b, v.AddTable, "add_table")
+			attrBoolPtr(b, v.DropTable, "drop_table")
+			attrBoolPtr(b, v.ModifyTable, "modify_table")
+			attrBoolPtr(b, v.AddColumn, "add_column")
+			attrBoolPtr(b, v.DropColumn, "drop_column")
+			attrBoolPtr(b, v.ModifyColumn, "modify_column")
+			attrBoolPtr(b, v.AddIndex, "add_index")
+			attrBoolPtr(b, v.DropIndex, "drop_index")
+			attrBoolPtr(b, v.ModifyIndex, "modify_index")
+			attrBoolPtr(b, v.AddForeignKey, "add_foreign_key")
+			attrBoolPtr(b, v.DropForeignKey, "drop_foreign_key")
+			attrBoolPtr(b, v.ModifyForeignKey, "modify_foreign_key")
+		}
+	}
+	dst, err := parseConfig(baseAtlasHCL)
 	if err != nil {
 		return err
 	}
 	mergeFile(dst, f)
-	w, err := os.Create(name)
-	if err != nil {
-		return err
-	}
-	defer w.Close()
 	_, err = dst.WriteTo(w)
 	return err
 }
 
-// render renders the atlas.hcl template.
-//
-// The template is used by the Atlas CLI to apply the schema.
-// It also validates the data before rendering the template.
-func (d *schemaData) render(w io.Writer) error {
-	if d.URL == "" {
-		return errors.New("database url is not set")
+func attrBoolPtr(b *hclwrite.Body, v *bool, n string) {
+	if v != nil {
+		b.SetAttributeValue(n, cty.BoolVal(*v))
 	}
-	return tmpl.ExecuteTemplate(w, "atlas_schema.tmpl", d)
 }
 
 // hclValue returns the given string in

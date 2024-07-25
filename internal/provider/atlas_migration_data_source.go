@@ -204,5 +204,5 @@ func (d *MigrationDataSourceModel) AtlasHCL(path string, cloud *AtlasCloudBlock)
 	default:
 		cfg.Migration.DirURL = "file://migrations"
 	}
-	return cfg.CreateFile(migrationAtlasHCL, path)
+	return cfg.CreateFile(path)
 }
