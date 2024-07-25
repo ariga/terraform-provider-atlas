@@ -9,6 +9,8 @@ permissions:
   # Permission for checking out code
   contents: read
 
+env:
+  GOEXPERIMENT: rangefunc
 jobs:
   lint:
     name: Lint

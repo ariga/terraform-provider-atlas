@@ -3,6 +3,7 @@ package provider
 import (
 	"cmp"
 	"io"
+	"iter"
 	"os"
 	"slices"
 	"strings"
@@ -192,9 +193,9 @@ func address(block *hclwrite.Block) string {
 
 func mergeBlock(dst, src *hclwrite.Block) {
 	dstBody, srcBody := dst.Body(), src.Body()
-	safeLoop(srcBody.Attributes(), func(name string, attr *hclwrite.Attribute) {
+	for name, attr := range Iter(srcBody.Attributes()) {
 		dstBody.SetAttributeRaw(name, attr.Expr().BuildTokens(nil))
-	})
+	}
 	srcBlocks := srcBody.Blocks()
 	srcBlockTypes := make(map[string]struct{})
 	for _, blk := range srcBlocks {
@@ -224,15 +225,19 @@ func appendBlock(body *hclwrite.Body, blk *hclwrite.Block) *hclwrite.Block {
 	return body.AppendBlock(blk)
 }
 
-// safeLoop iterates over a map in a sorted order by key.
-// Because looping over a map is not deterministic.
-func safeLoop[K cmp.Ordered, V any](m map[K]V, fn func(K, V)) {
+// Iter returns an iterator for the given map that
+// yields the key-value pairs in sorted order.
+func Iter[Map ~map[K]V, K cmp.Ordered, V any](m Map) iter.Seq2[K, V] {
 	keys := make([]K, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
 	slices.Sort(keys)
-	for _, k := range keys {
-		fn(k, m[k])
+	return func(yield func(K, V) bool) {
+		for _, k := range keys {
+			if !yield(k, m[k]) {
+				return
+			}
+		}
 	}
 }
