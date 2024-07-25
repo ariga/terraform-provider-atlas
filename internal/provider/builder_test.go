@@ -100,9 +100,9 @@ func Test_SchemaTemplate(t *testing.T) {
 	require.NoError(t, data.Write(out))
 	require.Equal(t, `env {
   name = atlas.env
-  url  = "mysql://user:pass@localhost:3306/tf-db"
   dev  = "mysql://user:pass@localhost:3307/tf-db"
   src  = "file://schema.hcl"
+  url  = "mysql://user:pass@localhost:3306/tf-db"
   diff {
     concurrent_index {
       create = true

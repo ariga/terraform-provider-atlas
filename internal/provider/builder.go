@@ -1,8 +1,10 @@
 package provider
 
 import (
+	"cmp"
 	"io"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/hashicorp/hcl/v2"
@@ -190,9 +192,9 @@ func address(block *hclwrite.Block) string {
 
 func mergeBlock(dst, src *hclwrite.Block) {
 	dstBody, srcBody := dst.Body(), src.Body()
-	for name, attr := range srcBody.Attributes() {
+	safeLoop(srcBody.Attributes(), func(name string, attr *hclwrite.Attribute) {
 		dstBody.SetAttributeRaw(name, attr.Expr().BuildTokens(nil))
-	}
+	})
 	srcBlocks := srcBody.Blocks()
 	srcBlockTypes := make(map[string]struct{})
 	for _, blk := range srcBlocks {
@@ -220,4 +222,17 @@ func appendBlock(body *hclwrite.Body, blk *hclwrite.Block) *hclwrite.Block {
 		body.AppendNewline()
 	}
 	return body.AppendBlock(blk)
+}
+
+// safeLoop iterates over a map in a sorted order by key.
+// Because looping over a map is not deterministic.
+func safeLoop[K cmp.Ordered, V any](m map[K]V, fn func(K, V)) {
+	keys := make([]K, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		fn(k, m[k])
+	}
 }
