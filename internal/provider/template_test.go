@@ -14,55 +14,67 @@ func TestTemplate(t *testing.T) {
 	var update = false
 	tests := []struct {
 		name string
-		data templateData
+		data atlasHCL
 	}{
-		{name: "token", data: templateData{
+		{name: "token", data: atlasHCL{
 			URL: "mysql://user:pass@localhost:3306/tf-db",
 			Cloud: &cloudConfig{
 				Token: "token+%=_-",
 			},
-			DirURL: "file://migrations",
+			Migration: &migrationConfig{
+				DirURL: "file://migrations",
+			},
 		}},
-		{name: "cloud", data: templateData{
+		{name: "cloud", data: atlasHCL{
 			URL: "mysql://user:pass@localhost:3306/tf-db",
 			Cloud: &cloudConfig{
 				Token:   "token",
 				URL:     ptr("url"),
 				Project: ptr("project"),
 			},
-			DirURL: "atlas://tf-dir?tag=latest",
+			Migration: &migrationConfig{
+				DirURL: "atlas://tf-dir?tag=latest",
+			},
 		}},
-		{name: "local", data: templateData{
-			URL:    "mysql://user:pass@localhost:3306/tf-db",
-			DirURL: "file://migrations",
+		{name: "local", data: atlasHCL{
+			URL: "mysql://user:pass@localhost:3306/tf-db",
+			Migration: &migrationConfig{
+				DirURL: "file://migrations",
+			},
 		}},
-		{name: "local-exec-order", data: templateData{
-			URL:       "mysql://user:pass@localhost:3306/tf-db",
-			DirURL:    "file://migrations",
-			ExecOrder: "linear-skip",
+		{name: "local-exec-order", data: atlasHCL{
+			URL: "mysql://user:pass@localhost:3306/tf-db",
+			Migration: &migrationConfig{
+				DirURL:    "file://migrations",
+				ExecOrder: "linear-skip",
+			},
 		}},
-		{name: "baseline", data: templateData{
-			URL:      "mysql://user:pass@localhost:3306/tf-db",
-			DirURL:   "file://migrations",
-			Baseline: "100000",
+		{name: "baseline", data: atlasHCL{
+			URL: "mysql://user:pass@localhost:3306/tf-db",
+			Migration: &migrationConfig{
+				DirURL:   "file://migrations",
+				Baseline: "100000",
+			},
 		}},
-		{name: "cloud-tag", data: templateData{
+		{name: "cloud-tag", data: atlasHCL{
 			URL: "mysql://user:pass@localhost:3306/tf-db",
 			Cloud: &cloudConfig{
 				Token: "token",
 			},
-			DirURL: "atlas://tf-dir?tag=tag",
+			Migration: &migrationConfig{
+				DirURL: "atlas://tf-dir?tag=tag",
+			},
 		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			name := filepath.Join(t.TempDir(), "atlas.hcl")
-			require.NoError(t, tt.data.CreateFile(name))
+			require.NoError(t, tt.data.CreateFile(migrationAtlasHCL, name))
 			checkContent(t, name, func(s string) error {
 				if !update {
 					return nil
 				}
-				return tt.data.CreateFile(s)
+				return tt.data.CreateFile(migrationAtlasHCL, s)
 			})
 		})
 	}

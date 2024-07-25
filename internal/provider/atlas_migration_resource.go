@@ -721,13 +721,17 @@ func (d *chunkedDir) Files() ([]migrate.File, error) {
 	return files[:d.latestIndex], nil
 }
 
+const migrationAtlasHCL = "env {\n  name = atlas.env\n}"
+
 func (d *MigrationResourceModel) AtlasHCL(name string, devURL string, cloud *AtlasCloudBlock) error {
-	cfg := templateData{
-		URL:             d.URL.ValueString(),
-		DevURL:          defaultString(d.DevURL, devURL),
-		Baseline:        d.Baseline.ValueString(),
-		RevisionsSchema: d.RevisionsSchema.ValueString(),
-		ExecOrder:       d.ExecOrder.ValueString(),
+	cfg := atlasHCL{
+		URL:    d.URL.ValueString(),
+		DevURL: defaultString(d.DevURL, devURL),
+		Migration: &migrationConfig{
+			Baseline:        d.Baseline.ValueString(),
+			RevisionsSchema: d.RevisionsSchema.ValueString(),
+			ExecOrder:       d.ExecOrder.ValueString(),
+		},
 	}
 	if cloud != nil {
 		cfg.Cloud = &cloudConfig{
@@ -741,14 +745,14 @@ func (d *MigrationResourceModel) AtlasHCL(name string, devURL string, cloud *Atl
 		if cfg.Cloud == nil {
 			return fmt.Errorf("cloud configuration is not set")
 		}
-		cfg.DirURL = "atlas://" + d.RemoteDir.Name.ValueString()
+		cfg.Migration.DirURL = "atlas://" + d.RemoteDir.Name.ValueString()
 		if !d.RemoteDir.Tag.IsNull() {
-			cfg.DirURL += "?tag=" + d.RemoteDir.Tag.ValueString()
+			cfg.Migration.DirURL += "?tag=" + d.RemoteDir.Tag.ValueString()
 		}
 	case !d.DirURL.IsNull():
-		cfg.DirURL = fmt.Sprintf("file://%s", d.DirURL.ValueString())
+		cfg.Migration.DirURL = fmt.Sprintf("file://%s", d.DirURL.ValueString())
 	default:
-		cfg.DirURL = "file://migrations"
+		cfg.Migration.DirURL = "file://migrations"
 	}
-	return cfg.CreateFile(name)
+	return cfg.CreateFile(migrationAtlasHCL, name)
 }

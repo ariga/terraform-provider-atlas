@@ -173,9 +173,11 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 }
 
 func (d *MigrationDataSourceModel) AtlasHCL(path string, cloud *AtlasCloudBlock) error {
-	cfg := templateData{
-		URL:             d.URL.ValueString(),
-		RevisionsSchema: d.RevisionsSchema.ValueString(),
+	cfg := atlasHCL{
+		URL: d.URL.ValueString(),
+		Migration: &migrationConfig{
+			RevisionsSchema: d.RevisionsSchema.ValueString(),
+		},
 	}
 	if d.Cloud != nil && d.Cloud.Token.ValueString() != "" {
 		// Use the data source cloud block if it is set
@@ -193,14 +195,14 @@ func (d *MigrationDataSourceModel) AtlasHCL(path string, cloud *AtlasCloudBlock)
 		if cfg.Cloud == nil {
 			return fmt.Errorf("cloud configuration is not set")
 		}
-		cfg.DirURL = "atlas://" + d.RemoteDir.Name.ValueString()
+		cfg.Migration.DirURL = "atlas://" + d.RemoteDir.Name.ValueString()
 		if !d.RemoteDir.Tag.IsNull() {
-			cfg.DirURL += "?tag=" + d.RemoteDir.Tag.ValueString()
+			cfg.Migration.DirURL += "?tag=" + d.RemoteDir.Tag.ValueString()
 		}
 	case !d.DirURL.IsNull():
-		cfg.DirURL = fmt.Sprintf("file://%s", d.DirURL.ValueString())
+		cfg.Migration.DirURL = fmt.Sprintf("file://%s", d.DirURL.ValueString())
 	default:
-		cfg.DirURL = "file://migrations"
+		cfg.Migration.DirURL = "file://migrations"
 	}
-	return cfg.CreateFile(path)
+	return cfg.CreateFile(migrationAtlasHCL, path)
 }
