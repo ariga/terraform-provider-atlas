@@ -14,6 +14,8 @@ on:
   push:
     tags:
       - 'v*'
+env:
+  GOEXPERIMENT: rangefunc
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
