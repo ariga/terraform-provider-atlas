@@ -16,20 +16,14 @@ type (
 		Project *string
 		URL     *string
 	}
-	remoteDir struct {
-		Name string
-		Tag  *string
-	}
 	templateData struct {
 		URL     string
 		DevURL  string
 		Schemas []string
 		Exclude []string
 
-		Cloud     *cloudConfig
-		DirURL    *string
-		RemoteDir *remoteDir
-
+		Cloud           *cloudConfig
+		DirURL          string
 		Baseline        string
 		ExecOrder       string
 		RevisionsSchema string

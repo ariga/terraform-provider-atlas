@@ -11,14 +11,6 @@ atlas {
   }
 }
 {{- end }}
-{{- with .RemoteDir }}
-data "remote_dir" "this" {
-  name = "{{ .Name }}"
-{{- if .Tag }}
-  tag  = "{{ .Tag }}"
-{{- end }}
-}
-{{- end }}
 env {
   name = atlas.env
   url  = "{{ .URL }}"
@@ -40,11 +32,7 @@ env {
   ]
 {{- end }}
   migration {
-{{- if and .Cloud .RemoteDir }}
-    dir = data.remote_dir.this.url
-{{- else }}
-    dir = "file://{{ or .DirURL "migrations" }}"
-{{- end }}
+    dir = "{{ .DirURL }}"
 {{- if .Baseline }}
     baseline = "{{ .Baseline }}"
 {{- end }}

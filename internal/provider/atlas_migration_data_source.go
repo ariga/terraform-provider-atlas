@@ -175,7 +175,6 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 func (d *MigrationDataSourceModel) AtlasHCL(path string, cloud *AtlasCloudBlock) error {
 	cfg := templateData{
 		URL:             d.URL.ValueString(),
-		DirURL:          d.DirURL.ValueStringPointer(),
 		RevisionsSchema: d.RevisionsSchema.ValueString(),
 	}
 	if d.Cloud != nil && d.Cloud.Token.ValueString() != "" {
@@ -189,11 +188,19 @@ func (d *MigrationDataSourceModel) AtlasHCL(path string, cloud *AtlasCloudBlock)
 			URL:     cloud.URL.ValueStringPointer(),
 		}
 	}
-	if d := d.RemoteDir; d != nil {
-		cfg.RemoteDir = &remoteDir{
-			Name: d.Name.ValueString(),
-			Tag:  d.Tag.ValueStringPointer(),
+	switch {
+	case d.RemoteDir != nil:
+		if cfg.Cloud == nil {
+			return fmt.Errorf("cloud configuration is not set")
 		}
+		cfg.DirURL = "atlas://" + d.RemoteDir.Name.ValueString()
+		if !d.RemoteDir.Tag.IsNull() {
+			cfg.DirURL += "?tag=" + d.RemoteDir.Tag.ValueString()
+		}
+	case !d.DirURL.IsNull():
+		cfg.DirURL = fmt.Sprintf("file://%s", d.DirURL.ValueString())
+	default:
+		cfg.DirURL = "file://migrations"
 	}
 	return cfg.CreateFile(path)
 }
