@@ -725,7 +725,6 @@ func (d *MigrationResourceModel) AtlasHCL(name string, devURL string, cloud *Atl
 	cfg := templateData{
 		URL:             d.URL.ValueString(),
 		DevURL:          defaultString(d.DevURL, devURL),
-		DirURL:          d.DirURL.ValueStringPointer(),
 		Baseline:        d.Baseline.ValueString(),
 		RevisionsSchema: d.RevisionsSchema.ValueString(),
 		ExecOrder:       d.ExecOrder.ValueString(),
@@ -737,11 +736,19 @@ func (d *MigrationResourceModel) AtlasHCL(name string, devURL string, cloud *Atl
 			URL:     cloud.URL.ValueStringPointer(),
 		}
 	}
-	if d := d.RemoteDir; d != nil {
-		cfg.RemoteDir = &remoteDir{
-			Name: d.Name.ValueString(),
-			Tag:  d.Tag.ValueStringPointer(),
+	switch {
+	case d.RemoteDir != nil:
+		if cfg.Cloud == nil {
+			return fmt.Errorf("cloud configuration is not set")
 		}
+		cfg.DirURL = "atlas://" + d.RemoteDir.Name.ValueString()
+		if !d.RemoteDir.Tag.IsNull() {
+			cfg.DirURL += "?tag=" + d.RemoteDir.Tag.ValueString()
+		}
+	case !d.DirURL.IsNull():
+		cfg.DirURL = fmt.Sprintf("file://%s", d.DirURL.ValueString())
+	default:
+		cfg.DirURL = "file://migrations"
 	}
 	return cfg.CreateFile(name)
 }

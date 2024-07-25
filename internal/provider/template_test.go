@@ -21,6 +21,7 @@ func TestTemplate(t *testing.T) {
 			Cloud: &cloudConfig{
 				Token: "token+%=_-",
 			},
+			DirURL: "file://migrations",
 		}},
 		{name: "cloud", data: templateData{
 			URL: "mysql://user:pass@localhost:3306/tf-db",
@@ -29,37 +30,28 @@ func TestTemplate(t *testing.T) {
 				URL:     ptr("url"),
 				Project: ptr("project"),
 			},
-			RemoteDir: &remoteDir{
-				Name: "tf-dir",
-			},
+			DirURL: "atlas://tf-dir?tag=latest",
 		}},
 		{name: "local", data: templateData{
-			URL: "mysql://user:pass@localhost:3306/tf-db",
+			URL:    "mysql://user:pass@localhost:3306/tf-db",
+			DirURL: "file://migrations",
 		}},
 		{name: "local-exec-order", data: templateData{
 			URL:       "mysql://user:pass@localhost:3306/tf-db",
+			DirURL:    "file://migrations",
 			ExecOrder: "linear-skip",
 		}},
 		{name: "baseline", data: templateData{
 			URL:      "mysql://user:pass@localhost:3306/tf-db",
+			DirURL:   "file://migrations",
 			Baseline: "100000",
-		}},
-		{name: "cloud-no-token", data: templateData{
-			URL: "mysql://user:pass@localhost:3306/tf-db",
-			RemoteDir: &remoteDir{
-				Name: "tf-dir",
-			},
-			DirURL: ptr("dir-url"),
 		}},
 		{name: "cloud-tag", data: templateData{
 			URL: "mysql://user:pass@localhost:3306/tf-db",
 			Cloud: &cloudConfig{
 				Token: "token",
 			},
-			RemoteDir: &remoteDir{
-				Name: "tf-dir",
-				Tag:  ptr("tag"),
-			},
+			DirURL: "atlas://tf-dir?tag=tag",
 		}},
 	}
 	for _, tt := range tests {
