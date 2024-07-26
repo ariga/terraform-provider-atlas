@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"net/url"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -25,6 +22,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	atlas "ariga.io/atlas-go-sdk/atlasexec"
 	"ariga.io/atlas/sql/migrate"
@@ -37,9 +35,10 @@ type (
 	}
 	// MigrationResourceModel describes the resource data model.
 	MigrationResourceModel struct {
+		URL    types.String `tfsdk:"url"`
+		DevURL types.String `tfsdk:"dev_url"`
+
 		DirURL          types.String `tfsdk:"dir"`
-		URL             types.String `tfsdk:"url"`
-		DevURL          types.String `tfsdk:"dev_url"`
 		RevisionsSchema types.String `tfsdk:"revisions_schema"`
 		Version         types.String `tfsdk:"version"`
 		Baseline        types.String `tfsdk:"baseline"`
@@ -329,75 +328,76 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		if plan.DirURL.IsUnknown() || plan.URL.IsUnknown() {
 			return
 		}
-		dir, err := os.MkdirTemp(os.TempDir(), "tf-atlas-*")
-		if err != nil {
-			resp.Diagnostics.AddError("Generate config failure",
-				fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
-			return
-		}
-		defer os.RemoveAll(dir)
-		cfgPath := filepath.Join(dir, "atlas.hcl")
-		err = plan.AtlasHCL(cfgPath, r.devURL, r.cloud)
+		cfg, err := plan.projectConfig(r.cloud, r.devURL)
 		if err != nil {
 			resp.Diagnostics.AddError("Generate config failure",
 				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
 			return
 		}
-		report, err := r.client.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-			ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
-			Env:       defaultString(plan.EnvName, "tf"),
-		})
+		wd, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(cfg.Render))
 		if err != nil {
-			resp.Diagnostics.AddError("Failed to read migration status", err.Error())
+			resp.Diagnostics.AddError("Generate config failure",
+				fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
 			return
 		}
-		if plan.Version.ValueString() == "" {
-			v := report.LatestVersion()
-			if v == "" {
-				plan.Version = types.StringNull()
-			} else {
-				plan.Version = types.StringValue(v)
+		defer wd.Close()
+		_ = r.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
+			report, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
+				Env: cfg.EnvName,
+			})
+			if err != nil {
+				resp.Diagnostics.AddError("Failed to read migration status", err.Error())
+				return err
 			}
-			// Update plan if the user didn't specify a version
-			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("version"), v)...)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-		}
-		pendingCount, _ := report.Amount(plan.Version.ValueString())
-		if pendingCount == 0 {
-			return
-		}
-		devURL := r.getDevURL(plan.DevURL)
-		if devURL == "" {
-			return
-		}
-		lint, err := r.client.MigrateLint(ctx, &atlas.MigrateLintParams{
-			ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
-			Env:       defaultString(plan.EnvName, "tf"),
-			Latest:    pendingCount,
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to lint migration", err.Error())
-			return
-		}
-		for _, f := range lint.Files {
-			switch {
-			case len(f.Reports) > 0:
-				for _, r := range f.Reports {
-					lintDiags := []string{fmt.Sprintf("File: %s\n%s", f.Name, f.Error)}
-					for _, l := range r.Diagnostics {
-						lintDiags = append(lintDiags, fmt.Sprintf("- %s: %s", l.Code, l.Text))
-					}
-					resp.Diagnostics.AddWarning(
-						r.Text,
-						strings.Join(lintDiags, "\n"),
-					)
+			if plan.Version.ValueString() == "" {
+				v := report.LatestVersion()
+				if v == "" {
+					plan.Version = types.StringNull()
+				} else {
+					plan.Version = types.StringValue(v)
 				}
-			case f.Error != "":
-				resp.Diagnostics.AddWarning("Lint error", fmt.Sprintf("File: %s\n%s", f.Name, f.Error))
+				// Update plan if the user didn't specify a version
+				resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("version"), v)...)
+				if resp.Diagnostics.HasError() {
+					return nil
+				}
 			}
-		}
+			pendingCount, _ := report.Amount(plan.Version.ValueString())
+			if pendingCount == 0 {
+				return nil
+			}
+			if cfg.Env.DevURL == "" {
+				// We don't have a dev URL, so we can't lint the migration
+				return nil
+			}
+			lint, err := c.MigrateLint(ctx, &atlas.MigrateLintParams{
+				Env:    cfg.EnvName,
+				Latest: pendingCount,
+			})
+			if err != nil {
+				resp.Diagnostics.AddError("Failed to lint migration", err.Error())
+				return err
+			}
+			for _, f := range lint.Files {
+				switch {
+				case len(f.Reports) > 0:
+					for _, r := range f.Reports {
+						lintDiags := []string{fmt.Sprintf("File: %s\n%s", f.Name, f.Error)}
+						for _, l := range r.Diagnostics {
+							lintDiags = append(lintDiags, fmt.Sprintf("- %s: %s", l.Code, l.Text))
+						}
+						resp.Diagnostics.AddWarning(
+							r.Text,
+							strings.Join(lintDiags, "\n"),
+						)
+					}
+				case f.Error != "":
+					resp.Diagnostics.AddWarning("Lint error",
+						fmt.Sprintf("File: %s\n%s", f.Name, f.Error))
+				}
+			}
+			return nil
+		})
 	}
 }
 
@@ -409,200 +409,165 @@ const (
 )
 
 func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResourceModel) (diags diag.Diagnostics) {
-	dir, err := os.MkdirTemp(os.TempDir(), "tf-atlas-*")
-	if err != nil {
-		diags.AddError("Generate config failure",
-			fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
-		return
-	}
-	defer os.RemoveAll(dir)
-	cfgPath := filepath.Join(dir, "atlas.hcl")
-	if data.Cloud != nil && data.Cloud.Token.ValueString() != "" {
-		// Override cloud config from provider if cloud config from resource is set
-		r.cloud = data.Cloud
-	}
-	err = data.AtlasHCL(cfgPath, r.devURL, r.cloud)
+	cfg, err := data.projectConfig(r.cloud, r.devURL)
 	if err != nil {
 		diags.AddError("Generate config failure",
 			fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
 		return
 	}
-	var status *atlas.MigrateStatus
-	switch {
-	case r.cloud != nil && !data.RemoteDir.Name.IsNull():
-		status, err = r.client.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-			ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
-			Env:       defaultString(data.EnvName, "tf"),
-		})
-		if err != nil {
-			diags.AddError("Failed to read migration status", err.Error())
-			return
-		}
-	default:
-		dirURL, err := url.Parse(filepath.ToSlash(data.DirURL.ValueString()))
-		if err != nil {
-			diags.AddError("Generate config failure",
-				fmt.Sprintf("Failed to parse migration directory URL: %s", err.Error()))
-			return
-		}
-		switch f := dirURL.Query().Get("format"); strings.ToLower(f) {
-		case "", "atlas":
-		default:
-			diags.AddError("Generate config failure",
-				fmt.Sprintf("Unknown format for migration directory: %s", f))
-			return
-		}
-		mdir, err := migrate.NewLocalDir(dirURL.Path)
-		if err != nil {
-			diags.AddError("Generate config failure",
-				fmt.Sprintf("Failed to create a temporary directory for migration: %s", err.Error()))
-			return
-		}
-		// in case of specifying a 'version' < latest, we need a new dir
-		// that contains only the migrations up to the 'version'
-		// helps getting the status of the migrations later
-		cdir, err := NewChunkedDir(mdir, data.Version.ValueString())
-		if err != nil {
-			diags.AddError("Generate config failure",
-				fmt.Sprintf("Failed to create chunked directory: %s", err.Error()))
-			return
-		}
-		wd, err := atlas.NewWorkingDir(
-			func(ce *atlas.WorkingDir) error {
-				return ce.CopyFS(dirURL.Path, cdir)
-			},
-		)
-		err = r.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
-			status, err = c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-				ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
-				Env:       defaultString(data.EnvName, "tf"),
-			})
-			return err
-		})
-		if err != nil {
-			diags.AddError("Failed to read migration status", err.Error())
-			return
-		}
+	wd, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(cfg.Render))
+	if err != nil {
+		diags.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
+		return
 	}
-	var (
-		downing   = len(status.Pending) == 0 && len(status.Applied) > 0 && len(status.Applied) > len(status.Available)
-		noPending = len(status.Pending) == 0
-	)
-	switch {
-	case downing:
-		params := &atlas.MigrateDownParams{
-			ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
-			Env:       defaultString(data.EnvName, "tf"),
-			ToVersion: status.Available[len(status.Available)-1].Version,
-			Context: &atlas.DeployRunContext{
-				TriggerType:    atlas.TriggerTypeTerraform,
-				TriggerVersion: r.version,
-			},
+	defer func() {
+		if err := wd.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
+				"error": err,
+			})
+		}
+	}()
+	_ = r.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
+		toVersion := data.Version.ValueString()
+		dirURL, err := cfg.Env.DirURL(wd, toVersion)
+		if err != nil {
+			diags.AddError("Generate config failure",
+				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
+			return err
+		}
+		status, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
+			DirURL: dirURL,
+			Env:    cfg.EnvName,
+		})
+		if err != nil {
+			diags.AddError("Failed to read migration status", err.Error())
+			return err
 		}
 		switch {
-		case r.cloud != nil && !data.RemoteDir.Name.IsNull():
-			params.DirURL = fmt.Sprintf("atlas://%s", data.RemoteDir.Name.ValueString())
-		default:
-			params.DirURL = fmt.Sprintf("file://%s", data.DirURL.ValueString())
-		}
-	loop:
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(1 * time.Second):
-				run, err := r.client.MigrateDown(ctx, params)
-				if err != nil {
-					diags.AddError("Failed to down migration", err.Error())
-					return
-				}
-				switch run.Status {
-				case StatePending:
-					diags.AddWarning("Down migration",
-						fmt.Sprintf("Migration is waiting for approval, review here: %s", run.URL))
-					continue
-				case StateAborted:
-					diags.AddError("Down migration",
-						fmt.Sprintf("Migration was aborted, review here: %s", run.URL))
-					return
-				case StateApplied, StateApproved:
-					break loop
-				}
-			}
-		}
-	case noPending:
-		break
-	default:
-		amount, synced := status.Amount(data.Version.ValueString())
-		if !synced {
-			if amount == 0 {
-				diags.AddAttributeError(
-					path.Root("version"),
-					"Incorrect version",
-					fmt.Sprintf("The version %s is not found in the pending migrations.", data.Version.ValueString()),
-				)
-				return
-			}
-			_, err := r.client.MigrateApply(ctx, &atlas.MigrateApplyParams{
-				ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
-				Env:       defaultString(data.EnvName, "tf"),
-				Amount:    amount,
+		case len(status.Pending) == 0 && len(status.Applied) > 0 && len(status.Applied) > len(status.Available):
+			params := &atlas.MigrateDownParams{
+				Env:       cfg.EnvName,
+				ToVersion: status.Available[len(status.Available)-1].Version,
 				Context: &atlas.DeployRunContext{
 					TriggerType:    atlas.TriggerTypeTerraform,
 					TriggerVersion: r.version,
 				},
-			})
+			}
+			params.DirURL, err = cfg.Env.DirURLLatest()
 			if err != nil {
-				diags.AddError("Failed to apply migrations", err.Error())
-				return
+				diags.AddError("Generate config failure",
+					fmt.Sprintf("Failed to parse migration directory URL: %s", err.Error()))
+				return err
+			}
+		loop:
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-time.After(1 * time.Second):
+					run, err := c.MigrateDown(ctx, params)
+					if err != nil {
+						diags.AddError("Failed to down migration", err.Error())
+						return err
+					}
+					switch run.Status {
+					case StatePending:
+						diags.AddWarning("Down migration",
+							fmt.Sprintf("Migration is waiting for approval, review here: %s", run.URL))
+						continue
+					case StateAborted:
+						diags.AddError("Down migration",
+							fmt.Sprintf("Migration was aborted, review here: %s", run.URL))
+						return nil
+					case StateApplied, StateApproved:
+						break loop
+					}
+				}
+			}
+		case len(status.Pending) == 0:
+			break
+		default:
+			amount, synced := status.Amount(toVersion)
+			if !synced {
+				if amount == 0 {
+					diags.AddAttributeError(
+						path.Root("version"),
+						"Incorrect version",
+						fmt.Sprintf("The version %s is not found in the pending migrations.", data.Version.ValueString()),
+					)
+					return nil
+				}
+				_, err := c.MigrateApply(ctx, &atlas.MigrateApplyParams{
+					Env:    cfg.EnvName,
+					Amount: amount,
+					Context: &atlas.DeployRunContext{
+						TriggerType:    atlas.TriggerTypeTerraform,
+						TriggerVersion: r.version,
+					},
+				})
+				if err != nil {
+					diags.AddError("Failed to apply migrations", err.Error())
+					return err
+				}
 			}
 		}
-	}
-	data.Status, diags = r.buildStatus(ctx, data)
-	return
+		data.Status, diags = r.buildStatus(ctx, data)
+		return nil
+	})
+	return diags
 }
 
 func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationResourceModel) (obj types.Object, diags diag.Diagnostics) {
 	obj = types.ObjectNull(statusObjectAttrs)
-
-	dir, err := os.MkdirTemp(os.TempDir(), "tf-atlas-*")
+	cfg, err := data.projectConfig(r.cloud, r.devURL)
 	if err != nil {
-		diags.AddError("Generate config failure", fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
+		diags.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
 		return
 	}
-	defer os.RemoveAll(dir)
-	cfgPath := filepath.Join(dir, "atlas.hcl")
-	err = data.AtlasHCL(cfgPath, r.devURL, r.cloud)
+	wd, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(cfg.Render))
 	if err != nil {
-		diags.AddError("Generate config failure", fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
+		diags.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
 		return
 	}
-	report, err := r.client.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-		ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
-		Env:       defaultString(data.EnvName, "tf"),
+	defer func() {
+		if err := wd.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
+				"error": err,
+			})
+		}
+	}()
+	_ = r.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
+		report, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
+			Env: cfg.EnvName,
+		})
+		if err != nil {
+			diags.AddError("Failed to read migration status", err.Error())
+			return err
+		}
+		current := types.StringNull()
+		if !(report.Status == "PENDING" && report.Current == noMigration) {
+			current = types.StringValue(report.Current)
+		}
+		next := types.StringNull()
+		if !(report.Status == "OK" && report.Next == latestVersion) {
+			next = types.StringValue(report.Next)
+		}
+		latest := types.StringNull()
+		if v := report.LatestVersion(); v != "" {
+			latest = types.StringValue(v)
+		}
+		obj, diags = types.ObjectValue(statusObjectAttrs, map[string]attr.Value{
+			"status":  types.StringValue(report.Status),
+			"current": current,
+			"next":    next,
+			"latest":  latest,
+		})
+		return nil
 	})
-	if err != nil {
-		diags.AddError("Failed to read migration status", err.Error())
-		return
-	}
-	current := types.StringNull()
-	if !(report.Status == "PENDING" && report.Current == noMigration) {
-		current = types.StringValue(report.Current)
-	}
-	next := types.StringNull()
-	if !(report.Status == "OK" && report.Next == latestVersion) {
-		next = types.StringValue(report.Next)
-	}
-	latest := types.StringNull()
-	if v := report.LatestVersion(); v != "" {
-		latest = types.StringValue(v)
-	}
-	return types.ObjectValue(statusObjectAttrs, map[string]attr.Value{
-		"status":  types.StringValue(report.Status),
-		"current": current,
-		"next":    next,
-		"latest":  latest,
-	})
+	return
 }
 
 // dirToID returns the ID of the resource.
@@ -653,6 +618,11 @@ func (f *memFile) Stat() (fs.FileInfo, error) { return f.FileInfo, nil }
 func NewChunkedDir(dir migrate.Dir, version string) (migrate.Dir, error) {
 	if version == "" {
 		return dir, nil
+	}
+	// Validate the directory first,
+	// to ensure its checksum is correct.
+	if err := migrate.Validate(dir); err != nil {
+		return nil, err
 	}
 	files, err := dir.Files()
 	if err != nil {
@@ -721,15 +691,34 @@ func (d *chunkedDir) Files() ([]migrate.File, error) {
 	return files[:d.latestIndex], nil
 }
 
-func (d *MigrationResourceModel) AtlasHCL(name string, devURL string, cloud *AtlasCloudBlock) error {
-	cfg := atlasHCL{
-		URL:    d.URL.ValueString(),
-		DevURL: defaultString(d.DevURL, devURL),
-		Migration: &migrationConfig{
-			Baseline:        d.Baseline.ValueString(),
-			RevisionsSchema: d.RevisionsSchema.ValueString(),
-			ExecOrder:       d.ExecOrder.ValueString(),
+// Schema reader types (URL schemes).
+const (
+	SchemaTypeFile   = "file"
+	SchemaTypeAtlas  = "atlas"
+	SchemaTypeSQLite = "sqlite"
+)
+
+func (d *MigrationResourceModel) projectConfig(cloud *AtlasCloudBlock, devURL string) (*projectConfig, error) {
+	dbURL, err := absoluteSqliteURL(d.URL.ValueString())
+	if err != nil {
+		return nil, err
+	}
+	cfg := projectConfig{
+		Config:  baseAtlasHCL,
+		EnvName: defaultString(d.EnvName, "tf"),
+		Env: &envConfig{
+			URL:    dbURL,
+			DevURL: defaultString(d.DevURL, devURL),
+			Migration: &migrationConfig{
+				Baseline:        d.Baseline.ValueString(),
+				RevisionsSchema: d.RevisionsSchema.ValueString(),
+				ExecOrder:       d.ExecOrder.ValueString(),
+			},
 		},
+	}
+	if d.Cloud != nil && d.Cloud.Token.ValueString() != "" {
+		// Use the resource's cloud block if it is set
+		cloud = d.Cloud
 	}
 	if cloud != nil {
 		cfg.Cloud = &cloudConfig{
@@ -738,19 +727,17 @@ func (d *MigrationResourceModel) AtlasHCL(name string, devURL string, cloud *Atl
 			URL:     cloud.URL.ValueStringPointer(),
 		}
 	}
-	switch {
-	case d.RemoteDir != nil:
+	if rd := d.RemoteDir; rd != nil {
 		if cfg.Cloud == nil {
-			return fmt.Errorf("cloud configuration is not set")
+			return nil, fmt.Errorf("cloud configuration is not set")
 		}
-		cfg.Migration.DirURL = "atlas://" + d.RemoteDir.Name.ValueString()
-		if !d.RemoteDir.Tag.IsNull() {
-			cfg.Migration.DirURL += "?tag=" + d.RemoteDir.Tag.ValueString()
-		}
-	case !d.DirURL.IsNull():
-		cfg.Migration.DirURL = fmt.Sprintf("file://%s", d.DirURL.ValueString())
-	default:
-		cfg.Migration.DirURL = "file://migrations"
+		cfg.Env.Migration.DirURL, err = rd.AtlasURL()
+	} else {
+		cfg.Env.Migration.DirURL, err = absoluteFileURL(
+			defaultString(d.DirURL, "migrations"))
 	}
-	return cfg.CreateFile(name)
+	if err != nil {
+		return nil, err
+	}
+	return &cfg, nil
 }

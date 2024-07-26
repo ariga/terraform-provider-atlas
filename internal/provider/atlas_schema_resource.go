@@ -300,31 +300,35 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 }
 
 func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	u, err := absPath(data.URL.ValueString())
+	dbURL, err := absoluteSqliteURL(data.URL.ValueString())
 	if err != nil {
 		diags.AddError("URL Error",
 			fmt.Sprintf("Unable to get absolute path for URL, got error: %s", err),
 		)
 		return
 	}
-	d := &atlasHCL{
-		URL:    u,
-		DevURL: devURL,
-		Source: "schema.hcl",
-		Diff:   data.Diff,
+	cfg := &projectConfig{
+		Config:  baseAtlasHCL,
+		EnvName: "tf",
+		Env: &envConfig{
+			URL:    dbURL,
+			DevURL: devURL,
+			Source: "schema.hcl",
+			Diff:   data.Diff,
+		},
 	}
-	diags.Append(data.GetExclude(ctx, &d.Exclude)...)
+	diags.Append(data.GetExclude(ctx, &cfg.Env.Exclude)...)
 	if diags.HasError() {
 		return
 	}
-	dir, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(d.Write))
+	dir, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(cfg.Render))
 	if err != nil {
 		diags.AddError("HCL Error",
 			fmt.Sprintf("Unable to create working directory, got error: %s", err),
 		)
 		return
 	}
-	_, err = dir.WriteFile(d.Source, []byte(data.HCL.ValueString()))
+	_, err = dir.WriteFile(cfg.Env.Source, []byte(data.HCL.ValueString()))
 	if err != nil {
 		diags.AddError("HCL Error",
 			fmt.Sprintf("Unable to create temporary file for HCL, got error: %s", err),
@@ -341,7 +345,7 @@ func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *Atl
 	var result *atlas.SchemaApply
 	err = c.WithWorkDir(dir.Path(), func(c *atlas.Client) (err error) {
 		result, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
-			Env:    "tf",
+			Env:    cfg.EnvName,
 			TxMode: data.TxMode.ValueString(),
 			DryRun: true,
 		})
@@ -366,47 +370,50 @@ func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *Atl
 }
 
 func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	u, err := absPath(data.URL.ValueString())
+	dbURL, err := absoluteSqliteURL(data.URL.ValueString())
 	if err != nil {
 		diags.AddError("URL Error",
 			fmt.Sprintf("Unable to get absolute path for URL, got error: %s", err),
 		)
 		return
 	}
-	d := &atlasHCL{
-		URL:    u,
-		DevURL: r.getDevURL(data.DevURL),
-		Source: "schema.hcl",
-		Diff:   data.Diff,
+	cfg := &projectConfig{
+		Config:  baseAtlasHCL,
+		EnvName: "tf",
+		Env: &envConfig{
+			URL:    dbURL,
+			DevURL: r.getDevURL(data.DevURL),
+			Source: "schema.hcl",
+			Diff:   data.Diff,
+		},
 	}
-	diags.Append(data.GetExclude(ctx, &d.Exclude)...)
+	diags.Append(data.GetExclude(ctx, &cfg.Env.Exclude)...)
 	if diags.HasError() {
 		return
 	}
-	dir, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(d.Write))
+	wd, err := atlas.NewWorkingDir(
+		atlas.WithAtlasHCL(cfg.Render),
+		func(ce *atlas.WorkingDir) error {
+			_, err = ce.WriteFile(cfg.Env.Source, []byte(data.HCL.ValueString()))
+			return err
+		},
+	)
 	if err != nil {
 		diags.AddError("HCL Error",
 			fmt.Sprintf("Unable to create working directory, got error: %s", err),
 		)
 		return
 	}
-	_, err = dir.WriteFile(d.Source, []byte(data.HCL.ValueString()))
-	if err != nil {
-		diags.AddError("HCL Error",
-			fmt.Sprintf("Unable to create temporary file for HCL, got error: %s", err),
-		)
-		return
-	}
 	defer func() {
-		if err := dir.Close(); err != nil {
+		if err := wd.Close(); err != nil {
 			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
 				"error": err,
 			})
 		}
 	}()
-	err = r.client.WithWorkDir(dir.Path(), func(c *atlas.Client) error {
+	err = r.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
 		_, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
-			Env:    "tf",
+			Env:    cfg.EnvName,
 			TxMode: data.TxMode.ValueString(),
 		})
 		return err
