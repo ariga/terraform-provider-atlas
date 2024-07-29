@@ -33,7 +33,7 @@ jobs:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY_V2 }}
           passphrase: ${{ secrets.PASSPHRASE_V2 }}
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v5
+        uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
           args: release --clean
