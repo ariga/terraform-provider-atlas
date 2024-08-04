@@ -456,14 +456,13 @@ func (data *AtlasSchemaResourceModel) projectConfig(devdb string) (*projectConfi
 	if err != nil {
 		return nil, nil, err
 	}
-	source := "schema.hcl"
 	cfg := &projectConfig{
 		Config:  baseAtlasHCL,
 		EnvName: "tf",
 		Env: &envConfig{
 			URL:    dbURL,
 			DevURL: defaultString(data.DevURL, devdb),
-			Source: source,
+			Source: "file://schema.hcl",
 			Diff:   data.Diff,
 		},
 	}
@@ -474,7 +473,7 @@ func (data *AtlasSchemaResourceModel) projectConfig(devdb string) (*projectConfi
 	wd, err := atlas.NewWorkingDir(
 		atlas.WithAtlasHCL(cfg.Render),
 		func(ce *atlas.WorkingDir) error {
-			_, err = ce.WriteFile(source, []byte(data.HCL.ValueString()))
+			_, err = ce.WriteFile("schema.hcl", []byte(data.HCL.ValueString()))
 			return err
 		},
 	)

@@ -232,6 +232,80 @@ func TestAccMigrationResource(t *testing.T) {
 	})
 }
 
+func TestAccMigrationResource_AtlasHCL(t *testing.T) {
+	var (
+		schema1 = "test_atlashcl"
+	)
+	tempSchemas(t, mysqlURL, schema1)
+	tempSchemas(t, mysqlDevURL, schema1)
+
+	t.Setenv("ATLAS_SCHEMA", schema1)
+	// Jump to one-by-one using the data source
+	config := fmt.Sprintf(`
+	locals {
+		config = <<-HCL
+variable "url" {
+	type = string
+}
+variable "schemas" {
+	type = list(string)
+}
+env {
+	for_each = toset(var.schemas)
+	url      = urlsetpath(var.url, each.value)
+	migration {
+		dir = "this-dir-does-not-exist-and-always-gets-overrides"
+	}
+}
+HCL
+		vars = jsonencode({
+			url = "%[1]s",
+			# The multiple-tenant deployment isn't support at the moment
+			# Because the TF provider depends on the migration status commands
+			# which doesn't support the multiple-tenant deployment
+			schemas = ["test_atlashcl"]
+		})
+	}
+	data "atlas_migration" "hello" {
+		# The dir attribute is required to be set, and
+		# can't be supplied from the atlas.hcl
+		dir       = "file://migrations"
+		config    = local.config
+		variables = local.vars
+	}
+	resource "atlas_migration" "testdb" {
+		# The dir attribute is required to be set, and
+		# can't be supplied from the atlas.hcl
+		dir       = "file://migrations"
+		version   = data.atlas_migration.hello.next
+		config    = local.config
+		variables = local.vars
+	}`, mysqlURL)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:             config,
+				ExpectNonEmptyPlan: true,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "20221101163823"),
+					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.next", "20221101163841"),
+				),
+			},
+			{
+				Config:             config,
+				ExpectNonEmptyPlan: true,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "20221101163841"),
+					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.next", "20221101164227"),
+				),
+			},
+		},
+	})
+}
+
 func TestAccMigrationResource_WithLatestVersion(t *testing.T) {
 	schema := "test_1"
 	tempSchemas(t, mysqlURL, schema)
