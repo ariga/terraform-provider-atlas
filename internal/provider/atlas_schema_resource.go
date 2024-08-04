@@ -2,8 +2,10 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -198,22 +200,10 @@ func (r *AtlasSchemaResource) Read(ctx context.Context, req resource.ReadRequest
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	var exclude []string
-	resp.Diagnostics.Append(data.GetExclude(ctx, &exclude)...)
+	resp.Diagnostics.Append(r.readSchema(ctx, data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	hcl, err := r.client.SchemaInspect(ctx, &atlas.SchemaInspectParams{
-		URL:     data.URL.ValueString(),
-		Exclude: exclude,
-	})
-	if err != nil {
-		resp.Diagnostics.AddError("Inspect Error",
-			fmt.Sprintf("Unable to inspect, got error: %s", err),
-		)
-		return
-	}
-	data.HCL = types.StringValue(hcl)
 	data.ID = types.StringValue(urlToID(data.URL))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -246,9 +236,6 @@ func (r *AtlasSchemaResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 	resp.Diagnostics.Append(r.applySchema(ctx, data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
 }
 
 // ValidateConfig implements resource.ResourceWithValidateConfig.
@@ -300,50 +287,22 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 }
 
 func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	dbURL, err := absoluteSqliteURL(data.URL.ValueString())
-	if err != nil {
-		diags.AddError("URL Error",
-			fmt.Sprintf("Unable to get absolute path for URL, got error: %s", err),
-		)
-		return
-	}
-	cfg := &projectConfig{
-		Config:  baseAtlasHCL,
-		EnvName: "tf",
-		Env: &envConfig{
-			URL:    dbURL,
-			DevURL: devURL,
-			Source: "schema.hcl",
-			Diff:   data.Diff,
-		},
-	}
-	diags.Append(data.GetExclude(ctx, &cfg.Env.Exclude)...)
-	if diags.HasError() {
-		return
-	}
-	dir, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(cfg.Render))
+	cfg, wd, err := data.projectConfig(devURL)
 	if err != nil {
 		diags.AddError("HCL Error",
 			fmt.Sprintf("Unable to create working directory, got error: %s", err),
 		)
 		return
 	}
-	_, err = dir.WriteFile(cfg.Env.Source, []byte(data.HCL.ValueString()))
-	if err != nil {
-		diags.AddError("HCL Error",
-			fmt.Sprintf("Unable to create temporary file for HCL, got error: %s", err),
-		)
-		return
-	}
 	defer func() {
-		if err := dir.Close(); err != nil {
+		if err := wd.Close(); err != nil {
 			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
 				"error": err,
 			})
 		}
 	}()
 	var result *atlas.SchemaApply
-	err = c.WithWorkDir(dir.Path(), func(c *atlas.Client) (err error) {
+	err = c.WithWorkDir(wd.Path(), func(c *atlas.Client) (err error) {
 		result, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
 			Env:    cfg.EnvName,
 			TxMode: data.TxMode.ValueString(),
@@ -369,35 +328,42 @@ func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *Atl
 	return diags
 }
 
-func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	dbURL, err := absoluteSqliteURL(data.URL.ValueString())
+func (r *AtlasSchemaResource) readSchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+	cfg, wd, err := data.projectConfig(r.devURL)
 	if err != nil {
-		diags.AddError("URL Error",
-			fmt.Sprintf("Unable to get absolute path for URL, got error: %s", err),
+		diags.AddError("HCL Error",
+			fmt.Sprintf("Unable to create working directory, got error: %s", err),
 		)
 		return
 	}
-	cfg := &projectConfig{
-		Config:  baseAtlasHCL,
-		EnvName: "tf",
-		Env: &envConfig{
-			URL:    dbURL,
-			DevURL: r.getDevURL(data.DevURL),
-			Source: "schema.hcl",
-			Diff:   data.Diff,
-		},
-	}
-	diags.Append(data.GetExclude(ctx, &cfg.Env.Exclude)...)
-	if diags.HasError() {
-		return
-	}
-	wd, err := atlas.NewWorkingDir(
-		atlas.WithAtlasHCL(cfg.Render),
-		func(ce *atlas.WorkingDir) error {
-			_, err = ce.WriteFile(cfg.Env.Source, []byte(data.HCL.ValueString()))
+	defer func() {
+		if err := wd.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
+				"error": err,
+			})
+		}
+	}()
+	err = r.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
+		hcl, err := c.SchemaInspect(ctx, &atlas.SchemaInspectParams{
+			Env: cfg.EnvName,
+		})
+		if err != nil {
 			return err
-		},
-	)
+		}
+		// Set the HCL value
+		data.HCL = types.StringValue(hcl)
+		return nil
+	})
+	if err != nil {
+		diags.AddError("Inspect Error",
+			fmt.Sprintf("Unable to inspect, got error: %s", err),
+		)
+	}
+	return diags
+}
+
+func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+	cfg, wd, err := data.projectConfig(r.devURL)
 	if err != nil {
 		diags.AddError("HCL Error",
 			fmt.Sprintf("Unable to create working directory, got error: %s", err),
@@ -428,63 +394,83 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 }
 
 func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	to, cleanup, err := data.handleHCL()
+	cfg, wd, err := data.projectConfig(r.devURL)
 	if err != nil {
 		diags.AddError("HCL Error",
-			fmt.Sprintf("Unable to create temporary file for HCL, got error: %s", err),
+			fmt.Sprintf("Unable to create working directory, got error: %s", err),
 		)
 		return
 	}
 	defer func() {
-		if err := cleanup(); err != nil {
+		if err := wd.Close(); err != nil {
 			tflog.Debug(ctx, "Failed to remove HCL file", map[string]interface{}{
 				"error": err,
 			})
 		}
 	}()
-	var exclude []string
-	diags.Append(data.GetExclude(ctx, &exclude)...)
-	if diags.HasError() {
-		return
-	}
-	result, err := r.client.SchemaApply(ctx, &atlas.SchemaApplyParams{
-		DevURL:  r.getDevURL(data.DevURL),
-		DryRun:  true,
-		Exclude: exclude,
-		To:      to,
-		URL:     data.URL.ValueString(),
+	err = r.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
+		result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
+			DryRun: true,
+			Env:    cfg.EnvName,
+		})
+		if err != nil {
+			return err
+		}
+		var causes []string
+		for _, c := range result.Changes.Pending {
+			if strings.Contains(c, "DROP ") {
+				causes = append(causes, c)
+			}
+		}
+		if len(causes) > 0 {
+			diags.AddError(
+				"Unrecognized schema resources",
+				fmt.Sprintf(`The database contains resources that Atlas wants to drop because they are not defined in the HCL file on the first run.
+	- %s
+	To learn how to add an existing database to a project, read:
+	https://atlasgo.io/terraform-provider#working-with-an-existing-database`, strings.Join(causes, "\n- ")))
+		}
+		return nil
 	})
 	if err != nil {
 		diags.AddError("Atlas Plan Error",
 			fmt.Sprintf("Unable to generate migration plan, got error: %s", err),
 		)
-		return
-	}
-	var causes []string
-	for _, c := range result.Changes.Pending {
-		if strings.Contains(c, "DROP ") {
-			causes = append(causes, c)
-		}
-	}
-	if len(causes) > 0 {
-		diags.AddError(
-			"Unrecognized schema resources",
-			fmt.Sprintf(`The database contains resources that Atlas wants to drop because they are not defined in the HCL file on the first run.
-- %s
-To learn how to add an existing database to a project, read:
-https://atlasgo.io/terraform-provider#working-with-an-existing-database`, strings.Join(causes, "\n- ")))
 	}
 	return
 }
 
-func nonEmptyStringSlice(in []string) []string {
-	out := make([]string, 0, len(in))
-	for _, s := range in {
-		if s != "" {
-			out = append(out, s)
-		}
+func (data *AtlasSchemaResourceModel) projectConfig(devdb string) (*projectConfig, *atlas.WorkingDir, error) {
+	dbURL, err := absoluteSqliteURL(data.URL.ValueString())
+	if err != nil {
+		return nil, nil, err
 	}
-	return out
+	source := "schema.hcl"
+	cfg := &projectConfig{
+		Config:  baseAtlasHCL,
+		EnvName: "tf",
+		Env: &envConfig{
+			URL:    dbURL,
+			DevURL: defaultString(data.DevURL, devdb),
+			Source: source,
+			Diff:   data.Diff,
+		},
+	}
+	diags := data.Exclude.ElementsAs(context.Background(), &cfg.Env.Exclude, false)
+	if diags.HasError() {
+		return nil, nil, errors.New(diags.Errors()[0].Summary())
+	}
+	wd, err := atlas.NewWorkingDir(
+		atlas.WithAtlasHCL(cfg.Render),
+		func(ce *atlas.WorkingDir) error {
+			_, err = ce.WriteFile(source, []byte(data.HCL.ValueString()))
+			return err
+		},
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cfg, wd, nil
 }
 
 func urlToID(u types.String) string {
@@ -496,22 +482,17 @@ func urlToID(u types.String) string {
 	return uu.String()
 }
 
-func (data *AtlasSchemaResourceModel) handleHCL() (string, func() error, error) {
-	return atlas.TempFile(data.HCL.ValueString(), "hcl")
-}
-
-func (data *AtlasSchemaResourceModel) GetExclude(ctx context.Context, exclude *[]string) (diags diag.Diagnostics) {
-	diags = data.Exclude.ElementsAs(ctx, exclude, false)
-	if diags.HasError() {
-		return
-	}
-	*exclude = nonEmptyStringSlice(*exclude)
-	return
-}
-
 func boolOptional(desc string) schema.Attribute {
 	return schema.BoolAttribute{
 		Description: desc,
 		Optional:    true,
 	}
+}
+
+// deleteZero removes zero values from a slice.
+func deleteZero[S ~[]E, E comparable](s S) S {
+	var zero E
+	return slices.DeleteFunc(s, func(e E) bool {
+		return e == zero
+	})
 }

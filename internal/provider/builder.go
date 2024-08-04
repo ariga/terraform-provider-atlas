@@ -93,11 +93,11 @@ func (c *projectConfig) File() *hclwrite.File {
 		if env.Source != "" {
 			e.SetAttributeValue("src", cty.StringVal(env.Source))
 		}
-		if len(env.Schemas) > 0 {
-			e.SetAttributeValue("schemas", listStringVal(env.Schemas))
+		if l := deleteZero(env.Schemas); len(l) > 0 {
+			e.SetAttributeValue("schemas", listStringVal(l))
 		}
-		if len(env.Exclude) > 0 {
-			e.SetAttributeValue("exclude", listStringVal(env.Exclude))
+		if l := deleteZero(env.Exclude); len(l) > 0 {
+			e.SetAttributeValue("exclude", listStringVal(l))
 		}
 		if md := env.Migration; md != nil {
 			m := e.AppendNewBlock("migration", nil).Body()

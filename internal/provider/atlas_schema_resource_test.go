@@ -303,7 +303,7 @@ EOT
 		Steps: []resource.TestStep{
 			{
 				Config:      hcl,
-				ExpectError: regexp.MustCompile("Error: Value Conversion Error"),
+				ExpectError: regexp.MustCompile("Value Conversion Error"),
 			},
 		},
 	})
