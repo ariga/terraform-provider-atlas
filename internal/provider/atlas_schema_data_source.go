@@ -108,12 +108,16 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 		return
 	}
-	var vars atlas.Vars
+	var vars atlas.Vars2
 	if !data.Variables.IsNull() {
-		vars = make(atlas.Vars)
-		resp.Diagnostics.Append(data.Variables.ElementsAs(ctx, &vars, false)...)
+		varsRaw := make(map[string]string)
+		resp.Diagnostics.Append(data.Variables.ElementsAs(ctx, &varsRaw, false)...)
 		if resp.Diagnostics.HasError() {
 			return
+		}
+		vars = make(atlas.Vars2, len(varsRaw))
+		for k, v := range varsRaw {
+			vars[k] = v
 		}
 	}
 	cfg, wd, err := data.projectConfig(d.devURL)

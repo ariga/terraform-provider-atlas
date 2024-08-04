@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -37,6 +38,8 @@ type (
 	}
 	// MigrationResourceModel describes the resource data model.
 	MigrationResourceModel struct {
+		Config types.String `tfsdk:"config"`
+		Vars   types.String `tfsdk:"variables"`
 		URL    types.String `tfsdk:"url"`
 		DevURL types.String `tfsdk:"dev_url"`
 
@@ -114,9 +117,18 @@ func (r *MigrationResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			}),
 		},
 		Attributes: map[string]schema.Attribute{
+			"config": schema.StringAttribute{
+				Description: "The content of atlas.hcl config",
+				Optional:    true,
+				Sensitive:   false,
+			},
+			"variables": schema.StringAttribute{
+				Description: "Stringify JSON object containing variables to be used inside the Atlas configuration file.",
+				Optional:    true,
+			},
 			"url": schema.StringAttribute{
 				Description: "The url of the database see https://atlasgo.io/cli/url",
-				Required:    true,
+				Optional:    true,
 				Sensitive:   true,
 			},
 			"dev_url": schema.StringAttribute{
@@ -362,7 +374,8 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		return
 	}
 	report, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-		Env: cfg.EnvName,
+		Env:  cfg.EnvName,
+		Vars: cfg.Vars,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read migration status", err.Error())
@@ -391,6 +404,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 	}
 	lint, err := c.MigrateLint(ctx, &atlas.MigrateLintParams{
 		Env:    cfg.EnvName,
+		Vars:   cfg.Vars,
 		Latest: pendingCount,
 	})
 	if err != nil {
@@ -457,8 +471,9 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 		return
 	}
 	status, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-		DirURL: dirURL,
 		Env:    cfg.EnvName,
+		Vars:   cfg.Vars,
+		DirURL: dirURL,
 	})
 	if err != nil {
 		diags.AddError("Failed to read migration status", err.Error())
@@ -468,6 +483,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 	case len(status.Pending) == 0 && len(status.Applied) > 0 && len(status.Applied) > len(status.Available):
 		params := &atlas.MigrateDownParams{
 			Env:       cfg.EnvName,
+			Vars:      cfg.Vars,
 			ToVersion: status.Available[len(status.Available)-1].Version,
 			Context: &atlas.DeployRunContext{
 				TriggerType:    atlas.TriggerTypeTerraform,
@@ -520,6 +536,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			}
 			_, err := c.MigrateApply(ctx, &atlas.MigrateApplyParams{
 				Env:    cfg.EnvName,
+				Vars:   cfg.Vars,
 				Amount: amount,
 				Context: &atlas.DeployRunContext{
 					TriggerType:    atlas.TriggerTypeTerraform,
@@ -563,7 +580,8 @@ func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationReso
 		return
 	}
 	report, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-		Env: cfg.EnvName,
+		Env:  cfg.EnvName,
+		Vars: cfg.Vars,
 	})
 	if err != nil {
 		diags.AddError("Failed to read migration status", err.Error())
@@ -734,7 +752,7 @@ func (d *MigrationResourceModel) projectConfig(cloud *AtlasCloudBlock, devURL st
 		return nil, err
 	}
 	cfg := projectConfig{
-		Config:  baseAtlasHCL,
+		Config:  defaultString(d.Config, baseAtlasHCL),
 		EnvName: defaultString(d.EnvName, "tf"),
 		Env: &envConfig{
 			URL:    dbURL,
@@ -768,6 +786,11 @@ func (d *MigrationResourceModel) projectConfig(cloud *AtlasCloudBlock, devURL st
 	}
 	if err != nil {
 		return nil, err
+	}
+	if vars := d.Vars.ValueString(); vars != "" {
+		if err = json.Unmarshal([]byte(vars), &cfg.Vars); err != nil {
+			return nil, fmt.Errorf("failed to parse variables: %w", err)
+		}
 	}
 	return &cfg, nil
 }
