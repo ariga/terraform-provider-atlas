@@ -341,63 +341,65 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			return
 		}
 		defer wd.Close()
-		_ = r.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
-			report, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-				Env: cfg.EnvName,
-			})
-			if err != nil {
-				resp.Diagnostics.AddError("Failed to read migration status", err.Error())
-				return err
-			}
-			if plan.Version.ValueString() == "" {
-				v := report.LatestVersion()
-				if v == "" {
-					plan.Version = types.StringNull()
-				} else {
-					plan.Version = types.StringValue(v)
-				}
-				// Update plan if the user didn't specify a version
-				resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("version"), v)...)
-				if resp.Diagnostics.HasError() {
-					return nil
-				}
-			}
-			pendingCount, _ := report.Amount(plan.Version.ValueString())
-			if pendingCount == 0 {
-				return nil
-			}
-			if cfg.Env.DevURL == "" {
-				// We don't have a dev URL, so we can't lint the migration
-				return nil
-			}
-			lint, err := c.MigrateLint(ctx, &atlas.MigrateLintParams{
-				Env:    cfg.EnvName,
-				Latest: pendingCount,
-			})
-			if err != nil {
-				resp.Diagnostics.AddError("Failed to lint migration", err.Error())
-				return err
-			}
-			for _, f := range lint.Files {
-				switch {
-				case len(f.Reports) > 0:
-					for _, r := range f.Reports {
-						lintDiags := []string{fmt.Sprintf("File: %s\n%s", f.Name, f.Error)}
-						for _, l := range r.Diagnostics {
-							lintDiags = append(lintDiags, fmt.Sprintf("- %s: %s", l.Code, l.Text))
-						}
-						resp.Diagnostics.AddWarning(
-							r.Text,
-							strings.Join(lintDiags, "\n"),
-						)
-					}
-				case f.Error != "":
-					resp.Diagnostics.AddWarning("Lint error",
-						fmt.Sprintf("File: %s\n%s", f.Name, f.Error))
-				}
-			}
-			return nil
+		c, err := r.client(wd.Path())
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to create client", err.Error())
+			return
+		}
+		report, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
+			Env: cfg.EnvName,
 		})
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to read migration status", err.Error())
+			return
+		}
+		if plan.Version.ValueString() == "" {
+			v := report.LatestVersion()
+			if v == "" {
+				plan.Version = types.StringNull()
+			} else {
+				plan.Version = types.StringValue(v)
+			}
+			// Update plan if the user didn't specify a version
+			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("version"), v)...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+		}
+		pendingCount, _ := report.Amount(plan.Version.ValueString())
+		if pendingCount == 0 {
+			return
+		}
+		if cfg.Env.DevURL == "" {
+			// We don't have a dev URL, so we can't lint the migration
+			return
+		}
+		lint, err := c.MigrateLint(ctx, &atlas.MigrateLintParams{
+			Env:    cfg.EnvName,
+			Latest: pendingCount,
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to lint migration", err.Error())
+			return
+		}
+		for _, f := range lint.Files {
+			switch {
+			case len(f.Reports) > 0:
+				for _, r := range f.Reports {
+					lintDiags := []string{fmt.Sprintf("File: %s\n%s", f.Name, f.Error)}
+					for _, l := range r.Diagnostics {
+						lintDiags = append(lintDiags, fmt.Sprintf("- %s: %s", l.Code, l.Text))
+					}
+					resp.Diagnostics.AddWarning(
+						r.Text,
+						strings.Join(lintDiags, "\n"),
+					)
+				}
+			case f.Error != "":
+				resp.Diagnostics.AddWarning("Lint error",
+					fmt.Sprintf("File: %s\n%s", f.Name, f.Error))
+			}
+		}
 	}
 }
 
@@ -428,93 +430,95 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			})
 		}
 	}()
-	_ = r.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
-		toVersion := data.Version.ValueString()
-		dirURL, err := cfg.Env.DirURL(wd, toVersion)
+	toVersion := data.Version.ValueString()
+	dirURL, err := cfg.Env.DirURL(wd, toVersion)
+	if err != nil {
+		diags.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
+		return
+	}
+	c, err := r.client(wd.Path())
+	if err != nil {
+		diags.AddError("Failed to create client", err.Error())
+		return
+	}
+	status, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
+		DirURL: dirURL,
+		Env:    cfg.EnvName,
+	})
+	if err != nil {
+		diags.AddError("Failed to read migration status", err.Error())
+		return
+	}
+	switch {
+	case len(status.Pending) == 0 && len(status.Applied) > 0 && len(status.Applied) > len(status.Available):
+		params := &atlas.MigrateDownParams{
+			Env:       cfg.EnvName,
+			ToVersion: status.Available[len(status.Available)-1].Version,
+			Context: &atlas.DeployRunContext{
+				TriggerType:    atlas.TriggerTypeTerraform,
+				TriggerVersion: r.version,
+			},
+		}
+		params.DirURL, err = cfg.Env.DirURLLatest()
 		if err != nil {
 			diags.AddError("Generate config failure",
-				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
-			return err
+				fmt.Sprintf("Failed to parse migration directory URL: %s", err.Error()))
+			return
 		}
-		status, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-			DirURL: dirURL,
-			Env:    cfg.EnvName,
-		})
-		if err != nil {
-			diags.AddError("Failed to read migration status", err.Error())
-			return err
+	loop:
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(1 * time.Second):
+				run, err := c.MigrateDown(ctx, params)
+				if err != nil {
+					diags.AddError("Failed to down migration", err.Error())
+					return
+				}
+				switch run.Status {
+				case StatePending:
+					diags.AddWarning("Down migration",
+						fmt.Sprintf("Migration is waiting for approval, review here: %s", run.URL))
+					continue
+				case StateAborted:
+					diags.AddError("Down migration",
+						fmt.Sprintf("Migration was aborted, review here: %s", run.URL))
+					return nil
+				case StateApplied, StateApproved:
+					break loop
+				}
+			}
 		}
-		switch {
-		case len(status.Pending) == 0 && len(status.Applied) > 0 && len(status.Applied) > len(status.Available):
-			params := &atlas.MigrateDownParams{
-				Env:       cfg.EnvName,
-				ToVersion: status.Available[len(status.Available)-1].Version,
+	case len(status.Pending) == 0:
+		break
+	default:
+		amount, synced := status.Amount(toVersion)
+		if !synced {
+			if amount == 0 {
+				diags.AddAttributeError(
+					path.Root("version"),
+					"Incorrect version",
+					fmt.Sprintf("The version %s is not found in the pending migrations.", data.Version.ValueString()),
+				)
+				return nil
+			}
+			_, err := c.MigrateApply(ctx, &atlas.MigrateApplyParams{
+				Env:    cfg.EnvName,
+				Amount: amount,
 				Context: &atlas.DeployRunContext{
 					TriggerType:    atlas.TriggerTypeTerraform,
 					TriggerVersion: r.version,
 				},
-			}
-			params.DirURL, err = cfg.Env.DirURLLatest()
+			})
 			if err != nil {
-				diags.AddError("Generate config failure",
-					fmt.Sprintf("Failed to parse migration directory URL: %s", err.Error()))
-				return err
-			}
-		loop:
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-time.After(1 * time.Second):
-					run, err := c.MigrateDown(ctx, params)
-					if err != nil {
-						diags.AddError("Failed to down migration", err.Error())
-						return err
-					}
-					switch run.Status {
-					case StatePending:
-						diags.AddWarning("Down migration",
-							fmt.Sprintf("Migration is waiting for approval, review here: %s", run.URL))
-						continue
-					case StateAborted:
-						diags.AddError("Down migration",
-							fmt.Sprintf("Migration was aborted, review here: %s", run.URL))
-						return nil
-					case StateApplied, StateApproved:
-						break loop
-					}
-				}
-			}
-		case len(status.Pending) == 0:
-			break
-		default:
-			amount, synced := status.Amount(toVersion)
-			if !synced {
-				if amount == 0 {
-					diags.AddAttributeError(
-						path.Root("version"),
-						"Incorrect version",
-						fmt.Sprintf("The version %s is not found in the pending migrations.", data.Version.ValueString()),
-					)
-					return nil
-				}
-				_, err := c.MigrateApply(ctx, &atlas.MigrateApplyParams{
-					Env:    cfg.EnvName,
-					Amount: amount,
-					Context: &atlas.DeployRunContext{
-						TriggerType:    atlas.TriggerTypeTerraform,
-						TriggerVersion: r.version,
-					},
-				})
-				if err != nil {
-					diags.AddError("Failed to apply migrations", err.Error())
-					return err
-				}
+				diags.AddError("Failed to apply migrations", err.Error())
+				return
 			}
 		}
-		data.Status, diags = r.buildStatus(ctx, data)
-		return nil
-	})
+	}
+	data.Status, diags = r.buildStatus(ctx, data)
 	return diags
 }
 
@@ -539,35 +543,36 @@ func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationReso
 			})
 		}
 	}()
-	_ = r.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
-		report, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-			Env: cfg.EnvName,
-		})
-		if err != nil {
-			diags.AddError("Failed to read migration status", err.Error())
-			return err
-		}
-		current := types.StringNull()
-		if !(report.Status == "PENDING" && report.Current == noMigration) {
-			current = types.StringValue(report.Current)
-		}
-		next := types.StringNull()
-		if !(report.Status == "OK" && report.Next == latestVersion) {
-			next = types.StringValue(report.Next)
-		}
-		latest := types.StringNull()
-		if v := report.LatestVersion(); v != "" {
-			latest = types.StringValue(v)
-		}
-		obj, diags = types.ObjectValue(statusObjectAttrs, map[string]attr.Value{
-			"status":  types.StringValue(report.Status),
-			"current": current,
-			"next":    next,
-			"latest":  latest,
-		})
-		return nil
+	c, err := r.client(wd.Path())
+	if err != nil {
+		diags.AddError("Failed to create client", err.Error())
+		return
+	}
+	report, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
+		Env: cfg.EnvName,
 	})
-	return
+	if err != nil {
+		diags.AddError("Failed to read migration status", err.Error())
+		return
+	}
+	current := types.StringNull()
+	if !(report.Status == "PENDING" && report.Current == noMigration) {
+		current = types.StringValue(report.Current)
+	}
+	next := types.StringNull()
+	if !(report.Status == "OK" && report.Next == latestVersion) {
+		next = types.StringValue(report.Next)
+	}
+	latest := types.StringNull()
+	if v := report.LatestVersion(); v != "" {
+		latest = types.StringValue(v)
+	}
+	return types.ObjectValue(statusObjectAttrs, map[string]attr.Value{
+		"status":  types.StringValue(report.Status),
+		"current": current,
+		"next":    next,
+		"latest":  latest,
+	})
 }
 
 // dirToID returns the ID of the resource.

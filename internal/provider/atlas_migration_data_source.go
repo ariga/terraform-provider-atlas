@@ -148,35 +148,35 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 			})
 		}
 	}()
-	err = d.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
-		r, err := d.client.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-			Env: cfg.EnvName,
-		})
-		if err != nil {
-			return err
-		}
-		data.Status = types.StringValue(r.Status)
-		if r.Status == "PENDING" && r.Current == noMigration {
-			data.Current = types.StringValue("")
-		} else {
-			data.Current = types.StringValue(r.Current)
-		}
-		if r.Status == "OK" && r.Next == latestVersion {
-			data.Next = types.StringValue("")
-		} else {
-			data.Next = types.StringValue(r.Next)
-		}
-		v := r.LatestVersion()
-		data.ID = dirToID(data.RemoteDir, data.DirURL)
-		if v == "" {
-			data.Latest = types.StringNull()
-		} else {
-			data.Latest = types.StringValue(v)
-		}
-		return nil
+	c, err := d.client(wd.Path())
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to create client", err.Error())
+		return
+	}
+	r, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
+		Env: cfg.EnvName,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read migration status", err.Error())
+		return
+	}
+	data.Status = types.StringValue(r.Status)
+	if r.Status == "PENDING" && r.Current == noMigration {
+		data.Current = types.StringValue("")
+	} else {
+		data.Current = types.StringValue(r.Current)
+	}
+	if r.Status == "OK" && r.Next == latestVersion {
+		data.Next = types.StringValue("")
+	} else {
+		data.Next = types.StringValue(r.Next)
+	}
+	v := r.LatestVersion()
+	data.ID = dirToID(data.RemoteDir, data.DirURL)
+	if v == "" {
+		data.Latest = types.StringNull()
+	} else {
+		data.Latest = types.StringValue(v)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

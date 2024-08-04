@@ -130,16 +130,16 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 			})
 		}
 	}()
-	err = d.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
-		hcl, err := c.SchemaInspect(ctx, &atlas.SchemaInspectParams{
-			Env:  cfg.EnvName,
-			Vars: vars,
-		})
-		if err != nil {
-			return err
-		}
-		data.HCL = types.StringValue(hcl)
-		return nil
+	c, err := d.client(wd.Path())
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error",
+			fmt.Sprintf("Unable to create client, got error: %s", err),
+		)
+		return
+	}
+	hcl, err := c.SchemaInspect(ctx, &atlas.SchemaInspectParams{
+		Env:  cfg.EnvName,
+		Vars: vars,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Inspect Error",
@@ -147,6 +147,7 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		)
 		return
 	}
+	data.HCL = types.StringValue(hcl)
 	data.ID = types.StringValue(hclID([]byte(data.HCL.ValueString())))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

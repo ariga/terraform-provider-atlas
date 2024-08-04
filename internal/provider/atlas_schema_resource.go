@@ -286,7 +286,7 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 	resp.Diagnostics.Append(PrintPlanSQL(ctx, r.client, r.getDevURL(plan.DevURL), plan)...)
 }
 
-func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+func PrintPlanSQL(ctx context.Context, fn func(string) (AtlasExec, error), devURL string, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
 	cfg, wd, err := data.projectConfig(devURL)
 	if err != nil {
 		diags.AddError("HCL Error",
@@ -301,14 +301,17 @@ func PrintPlanSQL(ctx context.Context, c *atlas.Client, devURL string, data *Atl
 			})
 		}
 	}()
-	var result *atlas.SchemaApply
-	err = c.WithWorkDir(wd.Path(), func(c *atlas.Client) (err error) {
-		result, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
-			Env:    cfg.EnvName,
-			TxMode: data.TxMode.ValueString(),
-			DryRun: true,
-		})
-		return err
+	c, err := fn(wd.Path())
+	if err != nil {
+		diags.AddError("Client Error",
+			fmt.Sprintf("Unable to create client, got error: %s", err),
+		)
+		return
+	}
+	result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
+		Env:    cfg.EnvName,
+		TxMode: data.TxMode.ValueString(),
+		DryRun: true,
 	})
 	if err != nil {
 		diags.AddError("Atlas Plan Error",
@@ -343,23 +346,25 @@ func (r *AtlasSchemaResource) readSchema(ctx context.Context, data *AtlasSchemaR
 			})
 		}
 	}()
-	err = r.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
-		hcl, err := c.SchemaInspect(ctx, &atlas.SchemaInspectParams{
-			Env: cfg.EnvName,
-		})
-		if err != nil {
-			return err
-		}
-		// Set the HCL value
-		data.HCL = types.StringValue(hcl)
-		return nil
+	c, err := r.client(wd.Path())
+	if err != nil {
+		diags.AddError("Client Error",
+			fmt.Sprintf("Unable to create client, got error: %s", err),
+		)
+		return
+	}
+	hcl, err := c.SchemaInspect(ctx, &atlas.SchemaInspectParams{
+		Env: cfg.EnvName,
 	})
 	if err != nil {
 		diags.AddError("Inspect Error",
 			fmt.Sprintf("Unable to inspect, got error: %s", err),
 		)
+		return
 	}
-	return diags
+	// Set the HCL value
+	data.HCL = types.StringValue(hcl)
+	return
 }
 
 func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
@@ -377,12 +382,16 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 			})
 		}
 	}()
-	err = r.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
-		_, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
-			Env:    cfg.EnvName,
-			TxMode: data.TxMode.ValueString(),
-		})
-		return err
+	c, err := r.client(wd.Path())
+	if err != nil {
+		diags.AddError("Client Error",
+			fmt.Sprintf("Unable to create client, got error: %s", err),
+		)
+		return
+	}
+	_, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
+		Env:    cfg.EnvName,
+		TxMode: data.TxMode.ValueString(),
 	})
 	if err != nil {
 		diags.AddError("Apply Error",
@@ -408,34 +417,36 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 			})
 		}
 	}()
-	err = r.client.WithWorkDir(wd.Path(), func(c *atlas.Client) error {
-		result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
-			DryRun: true,
-			Env:    cfg.EnvName,
-		})
-		if err != nil {
-			return err
-		}
-		var causes []string
-		for _, c := range result.Changes.Pending {
-			if strings.Contains(c, "DROP ") {
-				causes = append(causes, c)
-			}
-		}
-		if len(causes) > 0 {
-			diags.AddError(
-				"Unrecognized schema resources",
-				fmt.Sprintf(`The database contains resources that Atlas wants to drop because they are not defined in the HCL file on the first run.
-	- %s
-	To learn how to add an existing database to a project, read:
-	https://atlasgo.io/terraform-provider#working-with-an-existing-database`, strings.Join(causes, "\n- ")))
-		}
-		return nil
+	c, err := r.client(wd.Path())
+	if err != nil {
+		diags.AddError("Client Error",
+			fmt.Sprintf("Unable to create client, got error: %s", err),
+		)
+		return
+	}
+	result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
+		DryRun: true,
+		Env:    cfg.EnvName,
 	})
 	if err != nil {
 		diags.AddError("Atlas Plan Error",
 			fmt.Sprintf("Unable to generate migration plan, got error: %s", err),
 		)
+		return
+	}
+	var causes []string
+	for _, c := range result.Changes.Pending {
+		if strings.Contains(c, "DROP ") {
+			causes = append(causes, c)
+		}
+	}
+	if len(causes) > 0 {
+		diags.AddError(
+			"Unrecognized schema resources",
+			fmt.Sprintf(`The database contains resources that Atlas wants to drop because they are not defined in the HCL file on the first run.
+	- %s
+	To learn how to add an existing database to a project, read:
+	https://atlasgo.io/terraform-provider#working-with-an-existing-database`, strings.Join(causes, "\n- ")))
 	}
 	return
 }
