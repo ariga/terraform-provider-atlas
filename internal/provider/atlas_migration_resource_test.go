@@ -376,7 +376,7 @@ func TestAccMigrationResource_RemoteDir(t *testing.T) {
 				var i Input
 				err := json.Unmarshal(m.Variables.Input, &i)
 				require.NoError(t, err)
-				require.Equal(t, "test", i.Context.TriggerVersion)
+				require.Equal(t, "0.0.0-test", i.Context.TriggerVersion)
 				require.Equal(t, atlas.TriggerTypeTerraform, i.Context.TriggerType)
 				fmt.Fprint(w, `{"data":{"reportMigration":{"success":true}}}`)
 			default:
@@ -495,7 +495,7 @@ func TestAccMigrationResource_RemoteDirWithTag(t *testing.T) {
 				var i Input
 				err := json.Unmarshal(m.Variables.Input, &i)
 				require.NoError(t, err)
-				require.Equal(t, "test", i.Context.TriggerVersion)
+				require.Equal(t, "0.0.0-test", i.Context.TriggerVersion)
 				require.Equal(t, atlas.TriggerTypeTerraform, i.Context.TriggerType)
 				fmt.Fprint(w, `{"data":{"reportMigration":{"success":true}}}`)
 			default:
