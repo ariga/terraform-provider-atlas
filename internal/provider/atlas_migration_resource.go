@@ -319,86 +319,85 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	var state *MigrationResourceModel
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-	if resp.Diagnostics.HasError() {
+	if plan == nil || plan.DirURL.IsUnknown() || plan.URL.IsUnknown() {
 		return
 	}
-	if plan != nil {
-		if plan.DirURL.IsUnknown() || plan.URL.IsUnknown() {
+	cfg, err := plan.projectConfig(r.cloud, r.devURL)
+	if err != nil {
+		resp.Diagnostics.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
+		return
+	}
+	wd, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(cfg.Render))
+	if err != nil {
+		resp.Diagnostics.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
+		return
+	}
+	defer func() {
+		if err := wd.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
+				"error": err,
+			})
+		}
+	}()
+	c, err := r.client(wd.Path())
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to create client", err.Error())
+		return
+	}
+	report, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
+		Env: cfg.EnvName,
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to read migration status", err.Error())
+		return
+	}
+	if plan.Version.ValueString() == "" {
+		v := report.LatestVersion()
+		if v == "" {
+			plan.Version = types.StringNull()
+		} else {
+			plan.Version = types.StringValue(v)
+		}
+		// Update plan if the user didn't specify a version
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("version"), v)...)
+		if resp.Diagnostics.HasError() {
 			return
 		}
-		cfg, err := plan.projectConfig(r.cloud, r.devURL)
-		if err != nil {
-			resp.Diagnostics.AddError("Generate config failure",
-				fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
-			return
-		}
-		wd, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(cfg.Render))
-		if err != nil {
-			resp.Diagnostics.AddError("Generate config failure",
-				fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
-			return
-		}
-		defer wd.Close()
-		c, err := r.client(wd.Path())
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to create client", err.Error())
-			return
-		}
-		report, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-			Env: cfg.EnvName,
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to read migration status", err.Error())
-			return
-		}
-		if plan.Version.ValueString() == "" {
-			v := report.LatestVersion()
-			if v == "" {
-				plan.Version = types.StringNull()
-			} else {
-				plan.Version = types.StringValue(v)
-			}
-			// Update plan if the user didn't specify a version
-			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("version"), v)...)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-		}
-		pendingCount, _ := report.Amount(plan.Version.ValueString())
-		if pendingCount == 0 {
-			return
-		}
-		if cfg.Env.DevURL == "" {
-			// We don't have a dev URL, so we can't lint the migration
-			return
-		}
-		lint, err := c.MigrateLint(ctx, &atlas.MigrateLintParams{
-			Env:    cfg.EnvName,
-			Latest: pendingCount,
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to lint migration", err.Error())
-			return
-		}
-		for _, f := range lint.Files {
-			switch {
-			case len(f.Reports) > 0:
-				for _, r := range f.Reports {
-					lintDiags := []string{fmt.Sprintf("File: %s\n%s", f.Name, f.Error)}
-					for _, l := range r.Diagnostics {
-						lintDiags = append(lintDiags, fmt.Sprintf("- %s: %s", l.Code, l.Text))
-					}
-					resp.Diagnostics.AddWarning(
-						r.Text,
-						strings.Join(lintDiags, "\n"),
-					)
+	}
+	pendingCount, _ := report.Amount(plan.Version.ValueString())
+	if pendingCount == 0 {
+		return
+	}
+	if cfg.Env.DevURL == "" {
+		// We don't have a dev URL, so we can't lint the migration
+		return
+	}
+	lint, err := c.MigrateLint(ctx, &atlas.MigrateLintParams{
+		Env:    cfg.EnvName,
+		Latest: pendingCount,
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to lint migration", err.Error())
+		return
+	}
+	for _, f := range lint.Files {
+		switch {
+		case len(f.Reports) > 0:
+			for _, r := range f.Reports {
+				lintDiags := []string{fmt.Sprintf("File: %s\n%s", f.Name, f.Error)}
+				for _, l := range r.Diagnostics {
+					lintDiags = append(lintDiags, fmt.Sprintf("- %s: %s", l.Code, l.Text))
 				}
-			case f.Error != "":
-				resp.Diagnostics.AddWarning("Lint error",
-					fmt.Sprintf("File: %s\n%s", f.Name, f.Error))
+				resp.Diagnostics.AddWarning(
+					r.Text,
+					strings.Join(lintDiags, "\n"),
+				)
 			}
+		case f.Error != "":
+			resp.Diagnostics.AddWarning("Lint error",
+				fmt.Sprintf("File: %s\n%s", f.Name, f.Error))
 		}
 	}
 }

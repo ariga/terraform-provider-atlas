@@ -125,7 +125,7 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 	}
 	defer func() {
 		if err := wd.Close(); err != nil {
-			tflog.Debug(ctx, "Failed to remove HCL file", map[string]interface{}{
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
 				"error": err,
 			})
 		}
