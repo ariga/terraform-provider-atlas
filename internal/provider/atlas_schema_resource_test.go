@@ -3,7 +3,6 @@ package provider_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -303,7 +302,7 @@ EOT
 		Steps: []resource.TestStep{
 			{
 				Config:      hcl,
-				ExpectError: regexp.MustCompile("Error: Value Conversion Error"),
+				ExpectError: regexp.MustCompile("Value Conversion Error"),
 			},
 		},
 	})
@@ -596,10 +595,6 @@ func drop(t *testing.T, c *sqlclient.Client, schemas ...string) {
 }
 
 func TestPrintPlanSQL(t *testing.T) {
-	wd, err := os.Getwd()
-	require.NoError(t, err)
-	c, err := atlas.NewClient(wd, "atlas")
-	require.NoError(t, err)
 	type args struct {
 		ctx  context.Context
 		data *provider.AtlasSchemaResourceModel
@@ -652,7 +647,9 @@ table "orders" {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotDiags := provider.PrintPlanSQL(tt.args.ctx, c, mysqlDevURL, tt.args.data)
+			gotDiags := provider.PrintPlanSQL(tt.args.ctx, func(wd string) (provider.AtlasExec, error) {
+				return atlas.NewClient(wd, "atlas")
+			}, mysqlDevURL, tt.args.data)
 			require.Equal(t, tt.wantDiags, gotDiags)
 		})
 	}

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"ariga.io/atlas-go-sdk/atlasexec"
+	atlas "ariga.io/atlas-go-sdk/atlasexec"
 	"ariga.io/atlas/sql/migrate"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -155,7 +155,7 @@ func TestAccMigrationResource(t *testing.T) {
 					version = "not-in-the-list"
 					url     = "%[1]s"
 				}`, fmt.Sprintf("%s/%s", mysqlURL, schema3)),
-				ExpectError: regexp.MustCompile(`Failed to create chunked directory: version "not-in-the-list" not found`),
+				ExpectError: regexp.MustCompile(`version "not-in-the-list" not found`),
 			},
 		},
 	})
@@ -358,7 +358,7 @@ func TestAccMigrationResource_RemoteDir(t *testing.T) {
 		srv   = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			type (
 				Input struct {
-					Context atlasexec.DeployRunContext `json:"context,omitempty"`
+					Context atlas.DeployRunContext `json:"context,omitempty"`
 				}
 				GraphQLQuery struct {
 					Query     string `json:"query"`
@@ -376,8 +376,8 @@ func TestAccMigrationResource_RemoteDir(t *testing.T) {
 				var i Input
 				err := json.Unmarshal(m.Variables.Input, &i)
 				require.NoError(t, err)
-				require.Equal(t, "test", i.Context.TriggerVersion)
-				require.Equal(t, atlasexec.TriggerTypeTerraform, i.Context.TriggerType)
+				require.Equal(t, "0.0.0-test", i.Context.TriggerVersion)
+				require.Equal(t, atlas.TriggerTypeTerraform, i.Context.TriggerType)
 				fmt.Fprint(w, `{"data":{"reportMigration":{"success":true}}}`)
 			default:
 				t.Fatalf("unexpected query: %s", m.Query)
@@ -463,7 +463,7 @@ func TestAccMigrationResource_RemoteDirWithTag(t *testing.T) {
 		srv    = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			type (
 				Input struct {
-					Context atlasexec.DeployRunContext `json:"context,omitempty"`
+					Context atlas.DeployRunContext `json:"context,omitempty"`
 				}
 				GraphQLQuery struct {
 					Query     string `json:"query"`
@@ -495,8 +495,8 @@ func TestAccMigrationResource_RemoteDirWithTag(t *testing.T) {
 				var i Input
 				err := json.Unmarshal(m.Variables.Input, &i)
 				require.NoError(t, err)
-				require.Equal(t, "test", i.Context.TriggerVersion)
-				require.Equal(t, atlasexec.TriggerTypeTerraform, i.Context.TriggerType)
+				require.Equal(t, "0.0.0-test", i.Context.TriggerVersion)
+				require.Equal(t, atlas.TriggerTypeTerraform, i.Context.TriggerType)
 				fmt.Fprint(w, `{"data":{"reportMigration":{"success":true}}}`)
 			default:
 				t.Fatalf("unexpected query: %s", m.Query)

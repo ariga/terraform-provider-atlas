@@ -4,10 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net/url"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/mitchellh/go-homedir"
 
@@ -29,8 +26,6 @@ import (
 type (
 	// AtlasProvider defines the provider implementation.
 	AtlasProvider struct {
-		// client is the client used to interact with the Atlas CLI.
-		client *atlas.Client
 		// version is set to the provider version on release, "dev" when the
 		// provider is built and ran locally, and "test" when running acceptance
 		// testing.
@@ -51,9 +46,21 @@ type (
 		URL     types.String `tfsdk:"url"`
 		Project types.String `tfsdk:"project"`
 	}
+	AtlasExec interface {
+		MigrateApply(context.Context, *atlas.MigrateApplyParams) (*atlas.MigrateApply, error)
+		MigrateDown(context.Context, *atlas.MigrateDownParams) (*atlas.MigrateDown, error)
+		MigrateLint(context.Context, *atlas.MigrateLintParams) (*atlas.SummaryReport, error)
+		MigrateStatus(context.Context, *atlas.MigrateStatusParams) (*atlas.MigrateStatus, error)
+
+		SchemaInspect(context.Context, *atlas.SchemaInspectParams) (string, error)
+		SchemaApply(context.Context, *atlas.SchemaApplyParams) (*atlas.SchemaApply, error)
+
+		Version(context.Context) (*atlas.Version, error)
+	}
 	providerData struct {
-		// client is the client used to interact with the Atlas CLI.
-		client *atlas.Client
+		// client is the factory function to create a new AtlasExec client.
+		// It is set during the provider configuration.
+		client func(wd string) (AtlasExec, error)
 		// devURL is the URL of the dev-db.
 		devURL string
 		// cloud is the Atlas Cloud configuration.
@@ -140,7 +147,19 @@ func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureReq
 	if s := model.BinaryPath.ValueString(); s != "" {
 		binPath = s
 	}
-	c, err := atlas.NewClient("", binPath)
+	fnClient := func(wd string) (AtlasExec, error) {
+		c, err := atlas.NewClient(wd, binPath)
+		if err != nil {
+			return nil, err
+		}
+		env := atlas.NewOSEnviron()
+		env["ATLAS_INTEGRATION"] = fmt.Sprintf("terraform-provider-atlas/v%s", p.version)
+		if err = c.SetEnv(env); err != nil {
+			return nil, err
+		}
+		return c, nil
+	}
+	c, err := fnClient("")
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create client", err.Error())
 		return
@@ -157,8 +176,7 @@ func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureReq
 	tflog.Debug(ctx, "found atlas-cli", map[string]any{
 		"version": version,
 	})
-	p.client = c
-	p.data = providerData{client: c, cloud: model.Cloud, version: p.version}
+	p.data = providerData{client: fnClient, cloud: model.Cloud, version: p.version}
 	if model != nil {
 		p.data.devURL = model.DevURL.ValueString()
 	}
@@ -271,22 +289,4 @@ func checkForUpdate(ctx context.Context, version string) (string, error) {
 		return "", err
 	}
 	return b.String(), nil
-}
-
-// absPath returns the absolute path of a file URL.
-func absPath(path string) (string, error) {
-	u, err := url.Parse(path)
-	if err != nil {
-		return "", err
-	}
-	switch s := u.Scheme; strings.ToLower(s) {
-	case "file", "sqlite":
-		scheme := fmt.Sprintf("%s://", s)
-		p, err := filepath.Abs(strings.TrimPrefix(path, scheme))
-		if err != nil {
-			return "", err
-		}
-		return scheme + p, nil
-	}
-	return path, nil
 }

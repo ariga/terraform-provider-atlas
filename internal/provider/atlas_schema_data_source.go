@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net/url"
+	"path/filepath"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -107,26 +108,6 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 		return
 	}
-	if !isURL(src) {
-		var (
-			cleanup func() error
-			err     error
-		)
-		src, cleanup, err = atlas.TempFile(src, "hcl")
-		if err != nil {
-			resp.Diagnostics.AddError("HCL Error",
-				fmt.Sprintf("Unable to create temporary file for HCL, got error: %s", err),
-			)
-			return
-		}
-		defer func() {
-			if err := cleanup(); err != nil {
-				tflog.Debug(ctx, "Failed to remove HCL file", map[string]interface{}{
-					"error": err,
-				})
-			}
-		}()
-	}
 	var vars atlas.Vars
 	if !data.Variables.IsNull() {
 		vars = make(atlas.Vars)
@@ -135,10 +116,30 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 			return
 		}
 	}
-	normalHCL, err := d.client.SchemaInspect(ctx, &atlas.SchemaInspectParams{
-		DevURL: d.getDevURL(data.DevURL),
-		URL:    src,
-		Vars:   vars,
+	cfg, wd, err := data.projectConfig(d.devURL)
+	if err != nil {
+		resp.Diagnostics.AddError("HCL Error",
+			fmt.Sprintf("Unable to create working directory, got error: %s", err),
+		)
+		return
+	}
+	defer func() {
+		if err := wd.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
+				"error": err,
+			})
+		}
+	}()
+	c, err := d.client(wd.Path())
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error",
+			fmt.Sprintf("Unable to create client, got error: %s", err),
+		)
+		return
+	}
+	hcl, err := c.SchemaInspect(ctx, &atlas.SchemaInspectParams{
+		Env:  cfg.EnvName,
+		Vars: vars,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Inspect Error",
@@ -146,14 +147,44 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		)
 		return
 	}
-	data.ID = types.StringValue(hclID([]byte(normalHCL)))
-	data.HCL = types.StringValue(normalHCL)
+	data.HCL = types.StringValue(hcl)
+	data.ID = types.StringValue(hclID([]byte(data.HCL.ValueString())))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func isURL(s string) bool {
-	u, err := url.Parse(s)
-	return err == nil && u.Scheme != ""
+func (d *AtlasSchemaDataSourceModel) projectConfig(devURL string) (*projectConfig, *atlas.WorkingDir, error) {
+	cfg := &projectConfig{
+		Config:  baseAtlasHCL,
+		EnvName: "tf",
+		Env: &envConfig{
+			URL:    "file://schema.hcl",
+			DevURL: defaultString(d.DevURL, devURL),
+		},
+	}
+	opts := []atlas.Option{atlas.WithAtlasHCL(cfg.Render)}
+	u, err := url.Parse(filepath.ToSlash(d.Src.ValueString()))
+	if err == nil && u.Scheme == SchemaTypeFile {
+		// Convert relative path to absolute path
+		absPath, err := filepath.Abs(filepath.Join(u.Host, u.Path))
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get absolute path: %w", err)
+		}
+		cfg.Env.URL = (&url.URL{
+			Scheme:   SchemaTypeFile,
+			Path:     absPath,
+			RawQuery: u.RawQuery,
+		}).String()
+	} else {
+		opts = append(opts, func(wd *atlas.WorkingDir) error {
+			_, err := wd.WriteFile("schema.hcl", []byte(d.Src.ValueString()))
+			return err
+		})
+	}
+	wd, err := atlas.NewWorkingDir(opts...)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cfg, wd, nil
 }
 
 func hclID(hcl []byte) string {

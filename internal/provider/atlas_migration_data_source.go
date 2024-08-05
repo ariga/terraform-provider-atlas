@@ -3,12 +3,12 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
+	"net/url"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	atlas "ariga.io/atlas-go-sdk/atlasexec"
 )
@@ -130,22 +130,31 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	dir, err := os.MkdirTemp(os.TempDir(), "tf-atlas-*")
+	cfg, err := data.projectConfig(d.cloud)
+	if err != nil {
+		resp.Diagnostics.AddError("Generate config failure", err.Error())
+		return
+	}
+	wd, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(cfg.Render))
 	if err != nil {
 		resp.Diagnostics.AddError("Generate config failure",
 			fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
 		return
 	}
-	defer os.RemoveAll(dir)
-	cfgPath := filepath.Join(dir, "atlas.hcl")
-	if err := data.AtlasHCL(cfgPath, d.cloud); err != nil {
-		resp.Diagnostics.AddError("Generate config failure",
-			fmt.Sprintf("Failed to write configuration file: %s", err.Error()))
+	defer func() {
+		if err := wd.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
+				"error": err,
+			})
+		}
+	}()
+	c, err := d.client(wd.Path())
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to create client", err.Error())
 		return
 	}
-	r, err := d.client.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-		ConfigURL: fmt.Sprintf("file://%s", filepath.ToSlash(cfgPath)),
-		Env:       "tf",
+	r, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
+		Env: cfg.EnvName,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read migration status", err.Error())
@@ -172,11 +181,19 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (d *MigrationDataSourceModel) AtlasHCL(path string, cloud *AtlasCloudBlock) error {
-	cfg := atlasHCL{
-		URL: d.URL.ValueString(),
-		Migration: &migrationConfig{
-			RevisionsSchema: d.RevisionsSchema.ValueString(),
+func (d *MigrationDataSourceModel) projectConfig(cloud *AtlasCloudBlock) (*projectConfig, error) {
+	dbURL, err := absoluteSqliteURL(d.URL.ValueString())
+	if err != nil {
+		return nil, err
+	}
+	cfg := projectConfig{
+		Config:  baseAtlasHCL,
+		EnvName: "tf",
+		Env: &envConfig{
+			URL: dbURL,
+			Migration: &migrationConfig{
+				RevisionsSchema: d.RevisionsSchema.ValueString(),
+			},
 		},
 	}
 	if d.Cloud != nil && d.Cloud.Token.ValueString() != "" {
@@ -190,19 +207,34 @@ func (d *MigrationDataSourceModel) AtlasHCL(path string, cloud *AtlasCloudBlock)
 			URL:     cloud.URL.ValueStringPointer(),
 		}
 	}
-	switch {
-	case d.RemoteDir != nil:
+	if rd := d.RemoteDir; rd != nil {
 		if cfg.Cloud == nil {
-			return fmt.Errorf("cloud configuration is not set")
+			return nil, fmt.Errorf("cloud configuration is not set")
 		}
-		cfg.Migration.DirURL = "atlas://" + d.RemoteDir.Name.ValueString()
-		if !d.RemoteDir.Tag.IsNull() {
-			cfg.Migration.DirURL += "?tag=" + d.RemoteDir.Tag.ValueString()
-		}
-	case !d.DirURL.IsNull():
-		cfg.Migration.DirURL = fmt.Sprintf("file://%s", d.DirURL.ValueString())
-	default:
-		cfg.Migration.DirURL = "file://migrations"
+		cfg.Env.Migration.DirURL, err = rd.AtlasURL()
+	} else {
+		cfg.Env.Migration.DirURL, err = absoluteFileURL(
+			defaultString(d.DirURL, "migrations"))
 	}
-	return cfg.CreateFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+// AtlasURL returns the atlas URL for the remote directory.
+func (r *RemoteDirBlock) AtlasURL() (string, error) {
+	q := url.Values{}
+	n := r.Name.ValueString()
+	if n == "" {
+		return "", fmt.Errorf("remote_dir.name is required")
+	}
+	if t := r.Tag.ValueString(); t != "" {
+		q.Set("tag", t)
+	}
+	return (&url.URL{
+		Scheme:   SchemaTypeAtlas,
+		Path:     n,
+		RawQuery: q.Encode(),
+	}).String(), nil
 }
