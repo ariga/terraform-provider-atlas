@@ -30,7 +30,7 @@ data "atlas_migration" "hello" {
 
 - `cloud` (Block, Optional) (see [below for nested schema](#nestedblock--cloud))
 - `dir` (String) Select migration directory using URL format
-- `remote_dir` (Block, Optional) (see [below for nested schema](#nestedblock--remote_dir))
+- `remote_dir` (Block, Optional, Deprecated) (see [below for nested schema](#nestedblock--remote_dir))
 - `revisions_schema` (String) The name of the schema the revisions table resides in
 
 ### Read-Only

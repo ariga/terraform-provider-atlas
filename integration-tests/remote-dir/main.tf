@@ -20,14 +20,10 @@ provider "atlas" {
 
 data "atlas_migration" "db" {
   url = "sqlite://file.db"
-  remote_dir {
-    name = "tf-remote-dir"
-  }
+  dir = "atlas://tf-remote-dir"
 }
 
 resource "atlas_migration" "db" {
   url = "sqlite://file.db"
-  remote_dir {
-    name = "tf-remote-dir"
-  }
+  dir = "atlas://tf-remote-dir"
 }
