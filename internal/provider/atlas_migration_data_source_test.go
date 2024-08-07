@@ -59,7 +59,7 @@ func TestAccMigrationDataSource(t *testing.T) {
 	})
 }
 
-func TestAccMigrationDataSource_RemoteDir(t *testing.T) {
+func TestAccMigrationDataSource_AtlasURL(t *testing.T) {
 	var (
 		dir   = migrate.MemDir{}
 		dbURL = fmt.Sprintf("sqlite://%s?_fk=true", filepath.Join(t.TempDir(), "sqlite.db"))
@@ -81,9 +81,7 @@ func TestAccMigrationDataSource_RemoteDir(t *testing.T) {
 		config = fmt.Sprintf(`
 data "atlas_migration" "hello" {
 	url = "%s"
-	remote_dir {
-		name = "test"
-	}
+	dir = "atlas://test"
 	cloud {
 		token = "aci_bearer_token"
 		url   = "%s"
@@ -91,6 +89,36 @@ data "atlas_migration" "hello" {
 }`, dbURL, srv.URL)
 	)
 	t.Cleanup(srv.Close)
+
+	t.Run("Dir-From-Remote_Dir", func(t *testing.T) {
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: fmt.Sprintf(`
+data "atlas_migration" "hello" {
+	url = "%s"
+	remote_dir {
+		name = "test"
+	}
+	cloud {
+		token = "aci_bearer_token"
+		url   = "%s"
+	}
+}`, dbURL, srv.URL),
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttr("data.atlas_migration.hello", "id", "remote_dir://test"),
+						resource.TestCheckResourceAttr("data.atlas_migration.hello", "dir", "atlas://test"),
+						resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "OK"),
+						resource.TestCheckResourceAttr("data.atlas_migration.hello", "current", "No migration applied yet"),
+						resource.TestCheckResourceAttr("data.atlas_migration.hello", "next", ""),
+						resource.TestCheckNoResourceAttr("data.atlas_migration.hello", "latest"),
+					),
+				},
+			},
+		})
+	})
 
 	t.Run("NoPendingFiles", func(t *testing.T) {
 		resource.Test(t, resource.TestCase{
@@ -101,6 +129,9 @@ data "atlas_migration" "hello" {
 					Config: config,
 					Check: resource.ComposeAggregateTestCheckFunc(
 						resource.TestCheckResourceAttr("data.atlas_migration.hello", "id", "remote_dir://test"),
+						resource.TestCheckResourceAttr("data.atlas_migration.hello", "dir", "atlas://test"),
+						resource.TestCheckResourceAttr("data.atlas_migration.hello", "remote_dir.name", "test"),
+						resource.TestCheckNoResourceAttr("data.atlas_migration.hello", "remote_dir.tag"),
 						resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "OK"),
 						resource.TestCheckResourceAttr("data.atlas_migration.hello", "current", "No migration applied yet"),
 						resource.TestCheckResourceAttr("data.atlas_migration.hello", "next", ""),

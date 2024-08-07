@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/url"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -14,7 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/path"
+	tfpath "github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -185,8 +187,16 @@ func (r *MigrationResource) Create(ctx context.Context, req resource.CreateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	if data.RemoteDir != nil {
+		u, err := data.RemoteDir.AtlasURL()
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to create remote directory URL", err.Error())
+			return
+		}
+		data.DirURL = types.StringValue(u)
+	}
 	// Only set ID when creating a new resource
-	data.ID = dirToID(data.RemoteDir, data.DirURL)
+	data.ID = dirToID(data.DirURL)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -254,7 +264,20 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if data.RemoteDir == nil {
+	switch u, err := url.Parse(filepath.ToSlash(data.DirURL.ValueString())); {
+	case err != nil:
+		resp.Diagnostics.AddError("url is invalid", err.Error())
+		return
+	case u.Scheme == SchemaTypeAtlas:
+		// Remote dir, validate config for cloud
+		// providerData.client is set when the provider is configured
+		if data.Cloud == nil && (r.cloud == nil && r.providerData.client != nil) {
+			resp.Diagnostics.AddError(
+				"cloud is unset", "cloud is required when using atlas:// URL",
+			)
+		}
+		return
+	default:
 		// Local dir, validate config for dev-url
 		resp.Diagnostics.Append(r.validateConfig(ctx, req.Config)...)
 		if resp.Diagnostics.HasError() {
@@ -268,14 +291,6 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 			resp.Diagnostics.AddError(
 				"remote_dir.name is unset",
 				"remote_dir.name is required when remote_dir is set",
-			)
-			return
-		}
-		// providerData.client is set when the provider is configured
-		if data.Cloud == nil && (r.cloud == nil && r.providerData.client != nil) {
-			resp.Diagnostics.AddError(
-				"cloud is unset",
-				"cloud is required when remote_dir is set",
 			)
 			return
 		}
@@ -302,7 +317,7 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 	}
 	if data.Version.IsNull() {
 		resp.Diagnostics.AddAttributeWarning(
-			path.Root("version"),
+			tfpath.Root("version"),
 			"version is unset",
 			"We recommend that you use 'version' to specify a version of the migration to run.\n"+
 				"If you don't specify a version, the latest version will be used when the resource being created.\n"+
@@ -361,7 +376,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			plan.Version = types.StringValue(v)
 		}
 		// Update plan if the user didn't specify a version
-		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("version"), v)...)
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, tfpath.Root("version"), v)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -497,7 +512,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 		if !synced {
 			if amount == 0 {
 				diags.AddAttributeError(
-					path.Root("version"),
+					tfpath.Root("version"),
 					"Incorrect version",
 					fmt.Sprintf("The version %s is not found in the pending migrations.", data.Version.ValueString()),
 				)
@@ -575,11 +590,22 @@ func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationReso
 }
 
 // dirToID returns the ID of the resource.
-func dirToID(remoteDir *RemoteDirBlock, dir types.String) types.String {
-	if remoteDir != nil {
-		return types.StringValue(fmt.Sprintf("remote_dir://%s", remoteDir.Name.ValueString()))
+func dirToID(dir types.String) types.String {
+	u, err := url.Parse(dir.ValueString())
+	if err != nil {
+		return types.StringNull()
 	}
-	return types.StringValue(fmt.Sprintf("file://%s", dir.ValueString()))
+	switch u.Scheme {
+	case SchemaTypeAtlas:
+		// Compatible with the remote_dir block
+		u.Scheme, u.RawQuery = "remote_dir", ""
+		return types.StringValue(u.String())
+	case "":
+		u.Scheme = SchemaTypeFile
+		fallthrough
+	default: // file:// or unknown scheme
+		return types.StringValue(u.String())
+	}
 }
 
 func defaultString(s types.String, def string) string {

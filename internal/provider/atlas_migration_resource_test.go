@@ -351,7 +351,7 @@ func TestAccMigrationResource_Dirty(t *testing.T) {
 	})
 }
 
-func TestAccMigrationResource_RemoteDir(t *testing.T) {
+func TestAccMigrationResource_AtlasURL(t *testing.T) {
 	var (
 		dir   = migrate.MemDir{}
 		dbURL = fmt.Sprintf("sqlite://%s?_fk=true", filepath.Join(t.TempDir(), "sqlite.db"))
@@ -393,17 +393,12 @@ func TestAccMigrationResource_RemoteDir(t *testing.T) {
 		}
 		data "atlas_migration" "hello" {
 			url = "%[2]s"
-			remote_dir {
-				name = "test"
-			}
+			dir = "atlas://test"
 		}
 		resource "atlas_migration" "testdb" {
-			url = "%[2]s"
+			url     = "%[2]s"
 			version = data.atlas_migration.hello.next
-			remote_dir {
-				name = data.atlas_migration.hello.remote_dir.name
-				tag  = data.atlas_migration.hello.remote_dir.tag
-			}
+			dir     = data.atlas_migration.hello.dir
 		}
 		`, srv.URL, dbURL)
 	)
@@ -455,7 +450,7 @@ func TestAccMigrationResource_RemoteDir(t *testing.T) {
 	})
 }
 
-func TestAccMigrationResource_RemoteDirWithTag(t *testing.T) {
+func TestAccMigrationResource_AtlasURL_WithTag(t *testing.T) {
 	var (
 		byTag  = make(map[string]migrate.Dir)
 		dbURL  = fmt.Sprintf("sqlite://%s?_fk=true", filepath.Join(t.TempDir(), "sqlite.db"))
@@ -526,9 +521,7 @@ func TestAccMigrationResource_RemoteDirWithTag(t *testing.T) {
 	}
 	resource "atlas_migration" "hello" {
 		url = "%[3]s"
-		remote_dir {
-			name = "test"
-		}
+		dir = "atlas://test"
 	}
 	`, devURL, srv.URL, dbURL)
 	resource.Test(t, resource.TestCase{
@@ -539,6 +532,7 @@ func TestAccMigrationResource_RemoteDirWithTag(t *testing.T) {
 				Config: config,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("atlas_migration.hello", "id", "remote_dir://test"),
+					resource.TestCheckResourceAttr("atlas_migration.hello", "dir", "atlas://test"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.current", "2"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.latest", "2"),
 					resource.TestCheckNoResourceAttr("atlas_migration.hello", "status.next"),
@@ -558,10 +552,7 @@ func TestAccMigrationResource_RemoteDirWithTag(t *testing.T) {
 	}
 	resource "atlas_migration" "hello" {
 		url = "%[3]s"
-		remote_dir {
-			name = "test"
-			tag  = "one-down"
-		}
+		dir = "atlas://test?tag=one-down"
 	}
 	`, devURL, srv.URL, dbURL)
 	resource.Test(t, resource.TestCase{
@@ -572,6 +563,7 @@ func TestAccMigrationResource_RemoteDirWithTag(t *testing.T) {
 				Config: config,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("atlas_migration.hello", "id", "remote_dir://test"),
+					resource.TestCheckResourceAttr("atlas_migration.hello", "dir", "atlas://test?tag=one-down"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.current", "1"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.latest", "1"),
 					resource.TestCheckNoResourceAttr("atlas_migration.hello", "status.next"),
@@ -591,10 +583,7 @@ func TestAccMigrationResource_RemoteDirWithTag(t *testing.T) {
 	}
 	resource "atlas_migration" "hello" {
 		url = "%[3]s"
-		remote_dir {
-			name = "test"
-			tag  = "latest"
-		}
+		dir = "atlas://test?tag=latest"
 	}`, devURL, srv.URL, dbURL)
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -604,6 +593,7 @@ func TestAccMigrationResource_RemoteDirWithTag(t *testing.T) {
 				Config: config,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("atlas_migration.hello", "id", "remote_dir://test"),
+					resource.TestCheckResourceAttr("atlas_migration.hello", "dir", "atlas://test?tag=latest"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.current", "2"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.latest", "2"),
 					resource.TestCheckNoResourceAttr("atlas_migration.hello", "status.next"),
@@ -736,10 +726,7 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 				}
 				resource "atlas_migration" "hello" {
 					url = "%[3]s"
-					remote_dir {
-						name = "test"
-						tag  = "latest"
-					}
+					dir = "atlas://test?tag=latest"
 				}`, devURL, srv.URL, dbURL),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("atlas_migration.hello", "id", "remote_dir://test"),
@@ -769,10 +756,7 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 				}
 				resource "atlas_migration" "hello" {
 					url = "%[3]s"
-					remote_dir {
-						name = "test"
-						tag  = "tag3"
-					}
+					dir = "atlas://test?tag=tag3"
 				}`, devURL, srv.URL, dbURL),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("atlas_migration.hello", "id", "remote_dir://test"),
@@ -801,10 +785,7 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 				}
 				resource "atlas_migration" "hello" {
 					url = "%[3]s"
-					remote_dir {
-						name = "test"
-						tag  = "tag2"
-					}
+					dir = "atlas://test?tag=tag2"
 				}`, devURL, srv.URL, dbURL),
 				ExpectError: regexp.MustCompile("migration plan was aborted"),
 			},

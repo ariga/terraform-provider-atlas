@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"path"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -48,6 +49,7 @@ var (
 	latestVersion  = "Already at latest version"
 	noMigration    = "No migration applied yet"
 	remoteDirBlock = schema.SingleNestedBlock{
+		DeprecationMessage: "use the dir attribute with atlas:// URL instead",
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
 				Description: "The name of the remote directory. This attribute is required when remote_dir is set",
@@ -172,7 +174,29 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 		data.Next = types.StringValue(r.Next)
 	}
 	v := r.LatestVersion()
-	data.ID = dirToID(data.RemoteDir, data.DirURL)
+	if data.RemoteDir != nil {
+		u, err := data.RemoteDir.AtlasURL()
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to create remote directory URL", err.Error())
+			return
+		}
+		data.DirURL = types.StringValue(u)
+	} else {
+		switch u, err := url.Parse(data.DirURL.ValueString()); {
+		case err != nil:
+			resp.Diagnostics.AddError("Failed to parse migration directory URL", err.Error())
+			return
+		case u.Scheme == SchemaTypeAtlas:
+			data.RemoteDir = &RemoteDirBlock{
+				Name: types.StringValue(path.Join(u.Host, u.Path)),
+				Tag:  types.StringNull(),
+			}
+			if t := u.Query().Get("tag"); t != "" {
+				data.RemoteDir.Tag = types.StringValue(t)
+			}
+		}
+	}
+	data.ID = dirToID(data.DirURL)
 	if v == "" {
 		data.Latest = types.StringNull()
 	} else {

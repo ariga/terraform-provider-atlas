@@ -40,7 +40,7 @@ resource "atlas_migration" "hello" {
 - `dir` (String) the URL of the migration directory. dir or remote_dir block is required
 - `env_name` (String) The name of the environment used for reporting runs to Atlas Cloud. Default: tf
 - `exec_order` (String) How Atlas computes and executes pending migration files to the database. One of `linear`,`linear-skip` or `non-linear`. See https://atlasgo.io/versioned/apply#execution-order
-- `remote_dir` (Block, Optional) (see [below for nested schema](#nestedblock--remote_dir))
+- `remote_dir` (Block, Optional, Deprecated) (see [below for nested schema](#nestedblock--remote_dir))
 - `revisions_schema` (String) The name of the schema the revisions table resides in
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 - `version` (String) The version of the migration to apply, if not specified the latest version will be applied
