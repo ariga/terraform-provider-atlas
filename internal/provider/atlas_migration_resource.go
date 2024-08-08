@@ -36,6 +36,11 @@ type (
 	MigrationResource struct {
 		providerData
 	}
+	// DeploymentFlow defines the flow of a deployment.
+	DeploymentFlow struct {
+		Allow       types.Bool `tfsdk:"allow"`
+		AutoApprove types.Bool `tfsdk:"auto_approve"`
+	}
 	// MigrationResourceModel describes the resource data model.
 	MigrationResourceModel struct {
 		Config types.String `tfsdk:"config"`
@@ -49,8 +54,11 @@ type (
 		Baseline        types.String `tfsdk:"baseline"`
 		ExecOrder       types.String `tfsdk:"exec_order"`
 
-		Cloud     *AtlasCloudBlock `tfsdk:"cloud"`
-		RemoteDir *RemoteDirBlock  `tfsdk:"remote_dir"`
+		Cloud          *AtlasCloudBlock `tfsdk:"cloud"`
+		RemoteDir      *RemoteDirBlock  `tfsdk:"remote_dir"`
+		ProtectedFlows *struct {
+			MigrateDown *DeploymentFlow `tfsdk:"migrate_down"`
+		} `tfsdk:"protected_flows"`
 
 		EnvName types.String `tfsdk:"env_name"`
 		Status  types.Object `tfsdk:"status"`
@@ -105,6 +113,24 @@ func (r *MigrationResource) Schema(ctx context.Context, _ resource.SchemaRequest
 		Blocks: map[string]schema.Block{
 			"cloud":      cloudBlock,
 			"remote_dir": remoteDirBlock,
+			"protected_flows": schema.SingleNestedBlock{
+				Description: "ProtectedFlows defines the protected flows of a deployment.",
+				Blocks: map[string]schema.Block{
+					"migrate_down": schema.SingleNestedBlock{
+						Description: "migrate_down defines policies for down migrations.",
+						Attributes: map[string]schema.Attribute{
+							"allow": schema.BoolAttribute{
+								Description: "Allow allows the flow to be executed.",
+								Optional:    true,
+							},
+							"auto_approve": schema.BoolAttribute{
+								Description: "AutoApprove allows the flow to be automatically approved.",
+								Optional:    true,
+							},
+						},
+					},
+				},
+			},
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
 				Create: true,
 				Update: true,
@@ -288,12 +314,34 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 				"cloud is unset", "cloud is required when using atlas:// URL",
 			)
 		}
+		if f := data.ProtectedFlows; f != nil {
+			if d := f.MigrateDown; d != nil {
+				if d.Allow.ValueBool() && d.AutoApprove.ValueBool() {
+					resp.Diagnostics.AddError(
+						"Protected flow error",
+						"auto_approve is not allowed for a remote directory",
+					)
+					return
+				}
+			}
+		}
 		return
 	default:
 		// Local dir, validate config for dev-url
 		resp.Diagnostics.Append(r.validateConfig(ctx, req.Config)...)
 		if resp.Diagnostics.HasError() {
 			return
+		}
+		if f := data.ProtectedFlows; f != nil {
+			if d := f.MigrateDown; d != nil {
+				if d.Allow.ValueBool() && !d.AutoApprove.ValueBool() {
+					resp.Diagnostics.AddError(
+						"Protected flow error",
+						"allow cannot be true without auto_approve for local migration directory",
+					)
+					return
+				}
+			}
 		}
 	}
 	// Validate the remote_dir block
@@ -481,6 +529,13 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 	}
 	switch {
 	case len(status.Pending) == 0 && len(status.Applied) > 0 && len(status.Applied) > len(status.Available):
+		if !cfg.MigrateDown {
+			diags.AddError(
+				"Protected flow error",
+				"migrate down is not allowed, set `migrate_down.allow` to true to allow downgrade",
+			)
+			return
+		}
 		params := &atlas.MigrateDownParams{
 			Env:       cfg.EnvName,
 			Vars:      cfg.Vars,
@@ -786,6 +841,20 @@ func (d *MigrationResourceModel) projectConfig(cloud *AtlasCloudBlock, devURL st
 	}
 	if err != nil {
 		return nil, err
+	}
+	if f := d.ProtectedFlows; f != nil {
+		if d := f.MigrateDown; d != nil && d.Allow.ValueBool() {
+			if strings.HasPrefix(cfg.Env.Migration.DirURL, "atlas://") {
+				if d.AutoApprove.ValueBool() {
+					return nil, fmt.Errorf("auto_approve is not allowed for a remote directory")
+				}
+			} else {
+				if !d.AutoApprove.ValueBool() {
+					return nil, fmt.Errorf("allow cannot be true without auto_approve for local migration directory")
+				}
+			}
+			cfg.MigrateDown = true
+		}
 	}
 	if vars := d.Vars.ValueString(); vars != "" {
 		if err = json.Unmarshal([]byte(vars), &cfg.Vars); err != nil {

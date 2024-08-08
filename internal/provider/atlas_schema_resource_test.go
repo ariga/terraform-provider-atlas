@@ -556,6 +556,7 @@ func TestAccMultipleSchemas(t *testing.T) {
 }
 
 func tempSchemas(t *testing.T, url string, schemas ...string) *sqlclient.Client {
+	t.Helper()
 	c, err := sqlclient.Open(context.Background(), url)
 	if err != nil {
 		t.Fatal(err)
@@ -580,7 +581,9 @@ func createTables(t *testing.T, c *sqlclient.Client, tables ...string) {
 }
 
 func drop(t *testing.T, c *sqlclient.Client, schemas ...string) {
+	t.Helper()
 	t.Cleanup(func() {
+		t.Helper()
 		t.Log("Dropping all schemas")
 		for _, s := range schemas {
 			_, err := c.ExecContext(context.Background(), fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", s))

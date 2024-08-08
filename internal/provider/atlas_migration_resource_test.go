@@ -309,6 +309,7 @@ HCL
 func TestAccMigrationResource_WithLatestVersion(t *testing.T) {
 	schema := "test_1"
 	tempSchemas(t, mysqlURL, schema)
+	tempSchemas(t, mysqlDevURL, schema)
 
 	// Jump to the latest version
 	resource.Test(t, resource.TestCase{
@@ -349,6 +350,96 @@ func TestAccMigrationResource_WithLatestVersion(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "20221101165415"),
 					resource.TestCheckNoResourceAttr("atlas_migration.testdb", "status.next"),
+				),
+			},
+		},
+	})
+
+	// Test protected_flows block
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				resource "atlas_migration" "testdb" {
+					dir     = "migrations?format=atlas"
+					version = "20221101165036"
+					url     = "%[1]s"
+				}`, fmt.Sprintf("%s/%s", mysqlURL, schema)),
+				ExpectError: regexp.MustCompile("migrate down is not allowed, set `migrate_down.allow` to true to allow"),
+			},
+		},
+	})
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				resource "atlas_migration" "testdb" {
+					dir     = "migrations?format=atlas"
+					version = "20221101165036"
+					url     = "%[1]s"
+					protected_flows {
+						migrate_down {
+							allow = true
+						}
+					}
+				}`, fmt.Sprintf("%s/%s", mysqlURL, schema)),
+				ExpectError: regexp.MustCompile("allow cannot be true without auto_approve for local migration directory"),
+			},
+		},
+	})
+
+	// Dev-URL is required for migrate down
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				resource "atlas_migration" "testdb" {
+					dir     = "migrations?format=atlas"
+					version = "20221101165036"
+					url     = "%[1]s"
+					protected_flows {
+						migrate_down {
+							allow        = true
+							auto_approve = true
+						}
+					}
+				}`, fmt.Sprintf("%s/%s", mysqlURL, schema)),
+				ExpectError: regexp.MustCompile("Error: --dev-url cannot be empty."),
+			},
+		},
+	})
+
+	// Migrate down to the previous version
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				resource "atlas_migration" "testdb" {
+					dir     = "migrations?format=atlas"
+					version = "20221101165036"
+					url     = "%[1]s"
+					dev_url = "%[2]s"
+					protected_flows {
+						migrate_down {
+							allow        = true
+							auto_approve = true
+						}
+					}
+				}`,
+					fmt.Sprintf("%s/%s", mysqlURL, schema),
+					fmt.Sprintf("%s/%s", mysqlDevURL, schema),
+				),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "20221101165036"),
+					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.next", "20221101165147"),
 				),
 			},
 		},
@@ -627,6 +718,11 @@ func TestAccMigrationResource_AtlasURL_WithTag(t *testing.T) {
 	resource "atlas_migration" "hello" {
 		url = "%[3]s"
 		dir = "atlas://test?tag=one-down"
+		protected_flows {
+			migrate_down {
+				allow = true
+			}
+		}
 	}
 	`, devURL, srv.URL, dbURL)
 	resource.Test(t, resource.TestCase{
@@ -784,6 +880,7 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 	byTag["tag3"] = tag3
 	byTag["tag2"] = tag2
 	byTag["tag1"] = tag1
+	// Initial the migration to the latest version
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -811,6 +908,57 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 			},
 		},
 	})
+	// Test the protected_flows block
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				provider "atlas" {
+					dev_url = "%[1]s"
+					cloud {
+						token   = "aci_bearer_token"
+						url     = "%[2]s"
+						project = "test"
+					}
+				}
+				resource "atlas_migration" "hello" {
+					url = "%[3]s"
+					dir = "atlas://test?tag=tag3"
+				}`, devURL, srv.URL, dbURL),
+				ExpectError: regexp.MustCompile("migrate down is not allowed, set `migrate_down.allow` to true to allow"),
+			},
+		},
+	})
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				provider "atlas" {
+					dev_url = "%[1]s"
+					cloud {
+						token   = "aci_bearer_token"
+						url     = "%[2]s"
+						project = "test"
+					}
+				}
+				resource "atlas_migration" "hello" {
+					url = "%[3]s"
+					dir = "atlas://test?tag=tag3"
+					protected_flows {
+						migrate_down {
+							allow        = true
+							auto_approve = true
+						}
+					}
+				}`, devURL, srv.URL, dbURL),
+				ExpectError: regexp.MustCompile("auto_approve is not allowed for a remote directory"),
+			},
+		},
+	})
 	newS := func(s DeploymentApprovalsStatus) *DeploymentApprovalsStatus { return &s }
 	// plan is waiting for approval, and then approved
 	flow = append(flow, newS(PlanPendingApproval), newS(PlanApproved))
@@ -831,6 +979,11 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 				resource "atlas_migration" "hello" {
 					url = "%[3]s"
 					dir = "atlas://test?tag=tag3"
+					protected_flows {
+						migrate_down {
+							allow = true
+						}
+					}
 				}`, devURL, srv.URL, dbURL),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("atlas_migration.hello", "id", "remote_dir://test"),
@@ -860,6 +1013,11 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 				resource "atlas_migration" "hello" {
 					url = "%[3]s"
 					dir = "atlas://test?tag=tag2"
+					protected_flows {
+						migrate_down {
+							allow = true
+						}
+					}
 				}`, devURL, srv.URL, dbURL),
 				ExpectError: regexp.MustCompile("migration plan was aborted"),
 			},

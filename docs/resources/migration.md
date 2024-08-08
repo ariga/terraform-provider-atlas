@@ -37,6 +37,7 @@ resource "atlas_migration" "hello" {
 - `dir` (String) the URL of the migration directory. dir or remote_dir block is required
 - `env_name` (String) The name of the environment used for reporting runs to Atlas Cloud. Default: tf
 - `exec_order` (String) How Atlas computes and executes pending migration files to the database. One of `linear`,`linear-skip` or `non-linear`. See https://atlasgo.io/versioned/apply#execution-order
+- `protected_flows` (Block, Optional) ProtectedFlows defines the protected flows of a deployment. (see [below for nested schema](#nestedblock--protected_flows))
 - `remote_dir` (Block, Optional, Deprecated) (see [below for nested schema](#nestedblock--remote_dir))
 - `revisions_schema` (String) The name of the schema the revisions table resides in
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
@@ -57,6 +58,23 @@ Optional:
 - `project` (String)
 - `token` (String)
 - `url` (String)
+
+
+<a id="nestedblock--protected_flows"></a>
+### Nested Schema for `protected_flows`
+
+Optional:
+
+- `migrate_down` (Block, Optional) migrate_down defines policies for down migrations. (see [below for nested schema](#nestedblock--protected_flows--migrate_down))
+
+<a id="nestedblock--protected_flows--migrate_down"></a>
+### Nested Schema for `protected_flows.migrate_down`
+
+Optional:
+
+- `allow` (Boolean) Allow allows the flow to be executed.
+- `auto_approve` (Boolean) AutoApprove allows the flow to be automatically approved.
+
 
 
 <a id="nestedblock--remote_dir"></a>
