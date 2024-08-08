@@ -1,39 +1,25 @@
 package provider
 
 import (
-	"context"
-	"fmt"
-
-	// The following imports are required to register the SQL drivers.
-	// For emptySchema() function to work.
-	_ "ariga.io/atlas/sql/mysql"
-	_ "ariga.io/atlas/sql/postgres"
-	_ "ariga.io/atlas/sql/sqlite"
-	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
-	_ "github.com/mattn/go-sqlite3"
-
-	"ariga.io/atlas/sql/sqlclient"
-	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclwrite"
 )
 
-// emptySchema returns an empty schema block if the URL is connected to a schema.
-// Otherwise, it returns a null string for schema.
-func emptySchema(ctx context.Context, url string, hcl *types.String) (diags diag.Diagnostics) {
-	s, err := sqlclient.Open(ctx, url)
-	if err != nil {
-		diags.AddError("Atlas Plan Error",
-			fmt.Sprintf("Unable to connect to database, got error: %s", err),
-		)
-		return
+// emptySchemas removes all all blocks except the schema block from the given schema.
+func emptySchemas(schema string) (string, error) {
+	f, diags := hclwrite.ParseConfig([]byte(schema), "schema.hcl", hcl.InitialPos)
+	if diags.HasErrors() {
+		return "", diags
 	}
-	defer s.Close()
-	name := s.URL.Schema
-	if name != "" {
-		*hcl = types.StringValue(fmt.Sprintf("schema %q {}", name))
-		return
+	root := f.Body()
+	for _, blk := range root.Blocks() {
+		if blk.Type() == "schema" {
+			// Clear the schema block to get an empty schema.
+			blk.Body().Clear()
+		} else {
+			// Remove all other blocks.
+			root.RemoveBlock(blk)
+		}
 	}
-	*hcl = types.StringNull()
-	return diags
+	return string(f.Bytes()), nil
 }

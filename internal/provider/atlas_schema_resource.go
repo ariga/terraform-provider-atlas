@@ -231,10 +231,14 @@ func (r *AtlasSchemaResource) Delete(ctx context.Context, req resource.DeleteReq
 	}
 	// Delete the resource by setting
 	// the HCL to an empty string
-	resp.Diagnostics.Append(emptySchema(ctx, data.URL.ValueString(), &data.HCL)...)
-	if resp.Diagnostics.HasError() {
+	empty, err := emptySchemas(data.HCL.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("HCL Error",
+			fmt.Sprintf("Unable to generate empty state, got error: %s", err),
+		)
 		return
 	}
+	data.HCL = types.StringValue(empty)
 	resp.Diagnostics.Append(r.applySchema(ctx, data)...)
 }
 
@@ -277,11 +281,15 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		}
 		plan = state.Clone()
 		// Delete the resource by setting
-		// the HCL to an empty string.
-		resp.Diagnostics.Append(emptySchema(ctx, plan.URL.ValueString(), &plan.HCL)...)
-		if resp.Diagnostics.HasError() {
+		// the HCL to an empty string
+		empty, err := emptySchemas(plan.HCL.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("HCL Error",
+				fmt.Sprintf("Unable to generate empty state, got error: %s", err),
+			)
 			return
 		}
+		plan.HCL = types.StringValue(empty)
 	}
 	resp.Diagnostics.Append(PrintPlanSQL(ctx, r.client, r.getDevURL(plan.DevURL), plan)...)
 }
