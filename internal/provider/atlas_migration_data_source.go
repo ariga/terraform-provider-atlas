@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"path"
@@ -21,6 +22,8 @@ type (
 	}
 	// MigrationDataSourceModel describes the data source data model.
 	MigrationDataSourceModel struct {
+		Config          types.String `tfsdk:"config"`
+		Vars            types.String `tfsdk:"variables"`
 		URL             types.String `tfsdk:"url"`
 		RevisionsSchema types.String `tfsdk:"revisions_schema"`
 
@@ -49,7 +52,7 @@ var (
 	latestVersion  = "Already at latest version"
 	noMigration    = "No migration applied yet"
 	remoteDirBlock = schema.SingleNestedBlock{
-		DeprecationMessage: "use the dir attribute with atlas:// URL instead",
+		DeprecationMessage: "Use the dir attribute with (atlas://<name>?tag=<tag>) URL format",
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
 				Description: "The name of the remote directory. This attribute is required when remote_dir is set",
@@ -87,9 +90,18 @@ func (d *MigrationDataSource) Schema(_ context.Context, _ datasource.SchemaReque
 			"remote_dir": remoteDirBlock,
 		},
 		Attributes: map[string]schema.Attribute{
+			"config": schema.StringAttribute{
+				Description: "The configuration file for the migration",
+				Optional:    true,
+				Sensitive:   false,
+			},
+			"variables": schema.StringAttribute{
+				Description: "Stringify JSON object containing variables to be used inside the Atlas configuration file.",
+				Optional:    true,
+			},
 			"url": schema.StringAttribute{
 				Description: "[driver://username:password@address/dbname?param=value] select a resource using the URL format",
-				Required:    true,
+				Optional:    true,
 				Sensitive:   true,
 			},
 			"dir": schema.StringAttribute{
@@ -156,7 +168,8 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 		return
 	}
 	r, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-		Env: cfg.EnvName,
+		Env:  cfg.EnvName,
+		Vars: cfg.Vars,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read migration status", err.Error())
@@ -211,7 +224,7 @@ func (d *MigrationDataSourceModel) projectConfig(cloud *AtlasCloudBlock) (*proje
 		return nil, err
 	}
 	cfg := projectConfig{
-		Config:  baseAtlasHCL,
+		Config:  defaultString(d.Config, baseAtlasHCL),
 		EnvName: "tf",
 		Env: &envConfig{
 			URL: dbURL,
@@ -242,6 +255,11 @@ func (d *MigrationDataSourceModel) projectConfig(cloud *AtlasCloudBlock) (*proje
 	}
 	if err != nil {
 		return nil, err
+	}
+	if vars := d.Vars.ValueString(); vars != "" {
+		if err = json.Unmarshal([]byte(vars), &cfg.Vars); err != nil {
+			return nil, fmt.Errorf("failed to parse variables: %w", err)
+		}
 	}
 	return &cfg, nil
 }

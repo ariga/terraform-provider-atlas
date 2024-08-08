@@ -26,6 +26,7 @@ type (
 		Cloud   *cloudConfig
 		Env     *envConfig
 		Config  string
+		Vars    atlas.Vars2
 	}
 	envConfig struct {
 		URL       string

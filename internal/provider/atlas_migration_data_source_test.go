@@ -57,6 +57,47 @@ func TestAccMigrationDataSource(t *testing.T) {
 			},
 		},
 	})
+
+	// With custom atlas.hcl and variables
+	t.Setenv("DB_URL", mysqlURL)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+data "atlas_migration" "hello" {
+	# The dir attribute is required to be set, and
+	# can't be supplied from the atlas.hcl
+	dir    = "file://migrations?format=atlas"
+	config = <<-HCL
+variable "schema_name" {
+	type = string
+}
+locals {
+	db_url = getenv("DB_URL")
+}
+env {
+	url = urlsetpath(local.db_url, var.schema_name)
+	migration {
+		dir = "this-dir-does-not-exist-and-always-gets-overrides"
+	}
+}
+HCL
+	variables = jsonencode({
+		schema_name = "test"
+	})
+}`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "id", "file://migrations?format=atlas"),
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "PENDING"),
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "current", ""),
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "next", "20221101163823"),
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "latest", "20221101165415"),
+				),
+			},
+		},
+	})
 }
 
 func TestAccMigrationDataSource_AtlasURL(t *testing.T) {

@@ -4,7 +4,7 @@ go 1.22.5
 
 require (
 	ariga.io/atlas v0.25.1-0.20240725062027-d43199a66f6e
-	ariga.io/atlas-go-sdk v0.5.8-0.20240724040154-54fd5f09583c
+	ariga.io/atlas-go-sdk v0.5.8-0.20240806151605-4999cdd98524
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/hashicorp/hcl/v2 v2.21.0
 	github.com/hashicorp/terraform-plugin-docs v0.16.0
