@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -29,14 +30,17 @@ type (
 	}
 	// AtlasSchemaResourceModel describes the resource data model.
 	AtlasSchemaResourceModel struct {
-		ID      types.String `tfsdk:"id"`
 		HCL     types.String `tfsdk:"hcl"`
+		Config  types.String `tfsdk:"config"`
+		Vars    types.String `tfsdk:"variables"`
 		URL     types.String `tfsdk:"url"`
 		DevURL  types.String `tfsdk:"dev_url"`
 		Exclude types.List   `tfsdk:"exclude"`
 		TxMode  types.String `tfsdk:"tx_mode"`
 		// Policies
 		Diff *Diff `tfsdk:"diff"`
+
+		ID types.String `tfsdk:"id"`
 	}
 	// Diff defines the diff policies to apply when planning schema changes.
 	Diff struct {
@@ -145,9 +149,14 @@ func (r *AtlasSchemaResource) Schema(ctx context.Context, _ resource.SchemaReque
 					stringvalidator.LengthAtLeast(1),
 				},
 			},
+			"config": schema.StringAttribute{
+				Description: "The content of atlas.hcl config",
+				Optional:    true,
+				Sensitive:   false,
+			},
 			"url": schema.StringAttribute{
 				Description: "The url of the database see https://atlasgo.io/cli/url",
-				Required:    true,
+				Optional:    true,
 				Sensitive:   true,
 			},
 			"dev_url": schema.StringAttribute{
@@ -166,6 +175,10 @@ func (r *AtlasSchemaResource) Schema(ctx context.Context, _ resource.SchemaReque
 				Validators: []validator.String{
 					stringvalidator.OneOf("file", "all", "none"),
 				},
+			},
+			"variables": schema.StringAttribute{
+				Description: "Stringify JSON object containing variables to be used inside the Atlas configuration file.",
+				Optional:    true,
 			},
 			"id": schema.StringAttribute{
 				Description: "The ID of this resource",
@@ -231,10 +244,14 @@ func (r *AtlasSchemaResource) Delete(ctx context.Context, req resource.DeleteReq
 	}
 	// Delete the resource by setting
 	// the HCL to an empty string
-	resp.Diagnostics.Append(emptySchema(ctx, data.URL.ValueString(), &data.HCL)...)
-	if resp.Diagnostics.HasError() {
+	empty, err := emptySchemas(data.HCL.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("HCL Error",
+			fmt.Sprintf("Unable to generate empty state, got error: %s", err),
+		)
 		return
 	}
+	data.HCL = types.StringValue(empty)
 	resp.Diagnostics.Append(r.applySchema(ctx, data)...)
 }
 
@@ -277,11 +294,15 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		}
 		plan = state.Clone()
 		// Delete the resource by setting
-		// the HCL to an empty string.
-		resp.Diagnostics.Append(emptySchema(ctx, plan.URL.ValueString(), &plan.HCL)...)
-		if resp.Diagnostics.HasError() {
+		// the HCL to an empty string
+		empty, err := emptySchemas(plan.HCL.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("HCL Error",
+				fmt.Sprintf("Unable to generate empty state, got error: %s", err),
+			)
 			return
 		}
+		plan.HCL = types.StringValue(empty)
 	}
 	resp.Diagnostics.Append(PrintPlanSQL(ctx, r.client, r.getDevURL(plan.DevURL), plan)...)
 }
@@ -310,6 +331,7 @@ func PrintPlanSQL(ctx context.Context, fn func(string) (AtlasExec, error), devUR
 	}
 	result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
 		Env:    cfg.EnvName,
+		Vars:   cfg.Vars,
 		TxMode: data.TxMode.ValueString(),
 		DryRun: true,
 	})
@@ -354,7 +376,8 @@ func (r *AtlasSchemaResource) readSchema(ctx context.Context, data *AtlasSchemaR
 		return
 	}
 	hcl, err := c.SchemaInspect(ctx, &atlas.SchemaInspectParams{
-		Env: cfg.EnvName,
+		Env:  cfg.EnvName,
+		Vars: cfg.Vars,
 	})
 	if err != nil {
 		diags.AddError("Inspect Error",
@@ -391,6 +414,7 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 	}
 	_, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
 		Env:    cfg.EnvName,
+		Vars:   cfg.Vars,
 		TxMode: data.TxMode.ValueString(),
 	})
 	if err != nil {
@@ -427,6 +451,7 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 	result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
 		DryRun: true,
 		Env:    cfg.EnvName,
+		Vars:   cfg.Vars,
 	})
 	if err != nil {
 		diags.AddError("Atlas Plan Error",
@@ -457,7 +482,7 @@ func (data *AtlasSchemaResourceModel) projectConfig(devdb string) (*projectConfi
 		return nil, nil, err
 	}
 	cfg := &projectConfig{
-		Config:  baseAtlasHCL,
+		Config:  defaultString(data.Config, baseAtlasHCL),
 		EnvName: "tf",
 		Env: &envConfig{
 			URL:    dbURL,
@@ -479,6 +504,11 @@ func (data *AtlasSchemaResourceModel) projectConfig(devdb string) (*projectConfi
 	)
 	if err != nil {
 		return nil, nil, err
+	}
+	if vars := data.Vars.ValueString(); vars != "" {
+		if err = json.Unmarshal([]byte(vars), &cfg.Vars); err != nil {
+			return nil, nil, err
+		}
 	}
 	return cfg, wd, nil
 }
