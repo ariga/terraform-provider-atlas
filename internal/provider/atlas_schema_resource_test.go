@@ -655,7 +655,7 @@ table "orders" {
 					return atlas.NewClient(wd, "atlas")
 				},
 				DevURL: mysqlDevURL,
-			}, tt.args.data)
+			}, tt.args.data, false)
 			require.Equal(t, tt.wantDiags, gotDiags)
 		})
 	}

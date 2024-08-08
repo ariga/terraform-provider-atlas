@@ -51,6 +51,7 @@ type (
 
 		SchemaInspect(context.Context, *atlas.SchemaInspectParams) (string, error)
 		SchemaApply(context.Context, *atlas.SchemaApplyParams) (*atlas.SchemaApply, error)
+		SchemaClean(context.Context, *atlas.SchemaCleanParams) (*atlas.SchemaClean, error)
 
 		Version(context.Context) (*atlas.Version, error)
 
