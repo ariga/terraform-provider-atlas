@@ -22,11 +22,13 @@ import (
 type (
 	// projectConfig is the builder for the atlas.hcl file.
 	projectConfig struct {
-		EnvName string
-		Cloud   *cloudConfig
-		Env     *envConfig
-		Config  string
-		Vars    atlas.Vars2
+		Cloud *cloudConfig
+		Env   *envConfig
+
+		Config      string      // The base atlas.hcl to merge with, provided by the user
+		Vars        atlas.Vars2 // Variable supplied for atlas.hcl
+		EnvName     string      // The env name to report
+		MigrateDown bool        // Allow TF run migrate down when detected
 	}
 	envConfig struct {
 		URL       string
