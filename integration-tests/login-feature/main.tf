@@ -7,6 +7,17 @@ terraform {
   }
 }
 
+variable "atlas_token" {
+  type      = string
+  sensitive = true
+}
+
+provider "atlas" {
+  cloud {
+    token = var.atlas_token
+  }
+}
+
 variable "schema" {
   type    = string
   default = "schema-1.hcl"
