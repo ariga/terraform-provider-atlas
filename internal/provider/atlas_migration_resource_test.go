@@ -549,21 +549,24 @@ func TestAccMigrationResource_AtlasURL(t *testing.T) {
 			}
 		}))
 		config = fmt.Sprintf(`
-		provider "atlas" {
+		data "atlas_migration" "hello" {
+			url = "%[2]s"
+			dir = "atlas://test"
 			cloud {
 				token   = "aci_bearer_token"
 				url     = "%[1]s"
 				project = "test"
 			}
 		}
-		data "atlas_migration" "hello" {
-			url = "%[2]s"
-			dir = "atlas://test"
-		}
 		resource "atlas_migration" "testdb" {
 			url     = "%[2]s"
 			version = data.atlas_migration.hello.next
 			dir     = data.atlas_migration.hello.dir
+			cloud {
+				token   = "aci_bearer_token"
+				url     = "%[1]s"
+				project = "test"
+			}
 		}
 		`, srv.URL, dbURL)
 	)
@@ -678,15 +681,15 @@ func TestAccMigrationResource_AtlasURL_WithTag(t *testing.T) {
 	config := fmt.Sprintf(`
 	provider "atlas" {
 		dev_url = "%[1]s"
+	}
+	resource "atlas_migration" "hello" {
+		url = "%[3]s"
+		dir = "atlas://test"
 		cloud {
 			token   = "aci_bearer_token"
 			url     = "%[2]s"
 			project = "test"
 		}
-	}
-	resource "atlas_migration" "hello" {
-		url = "%[3]s"
-		dir = "atlas://test"
 	}
 	`, devURL, srv.URL, dbURL)
 	resource.Test(t, resource.TestCase{
@@ -709,11 +712,6 @@ func TestAccMigrationResource_AtlasURL_WithTag(t *testing.T) {
 	config = fmt.Sprintf(`
 	provider "atlas" {
 		dev_url = "%[1]s"
-		cloud {
-			token   = "aci_bearer_token"
-			url     = "%[2]s"
-			project = "test"
-		}
 	}
 	resource "atlas_migration" "hello" {
 		url = "%[3]s"
@@ -722,6 +720,11 @@ func TestAccMigrationResource_AtlasURL_WithTag(t *testing.T) {
 			migrate_down {
 				allow = true
 			}
+		}
+		cloud {
+			token   = "aci_bearer_token"
+			url     = "%[2]s"
+			project = "test"
 		}
 	}
 	`, devURL, srv.URL, dbURL)
@@ -745,15 +748,15 @@ func TestAccMigrationResource_AtlasURL_WithTag(t *testing.T) {
 	config = fmt.Sprintf(`
 	provider "atlas" {
 		dev_url = "%[1]s"
+	}
+	resource "atlas_migration" "hello" {
+		url = "%[3]s"
+		dir = "atlas://test?tag=latest"
 		cloud {
 			token   = "aci_bearer_token"
 			url     = "%[2]s"
 			project = "test"
 		}
-	}
-	resource "atlas_migration" "hello" {
-		url = "%[3]s"
-		dir = "atlas://test?tag=latest"
 	}`, devURL, srv.URL, dbURL)
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -889,15 +892,15 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 				Config: fmt.Sprintf(`
 				provider "atlas" {
 					dev_url = "%[1]s"
+				}
+				resource "atlas_migration" "hello" {
+					url = "%[3]s"
+					dir = "atlas://test?tag=latest"
 					cloud {
 						token   = "aci_bearer_token"
 						url     = "%[2]s"
 						project = "test"
 					}
-				}
-				resource "atlas_migration" "hello" {
-					url = "%[3]s"
-					dir = "atlas://test?tag=latest"
 				}`, devURL, srv.URL, dbURL),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("atlas_migration.hello", "id", "remote_dir://test"),
@@ -917,15 +920,15 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 				Config: fmt.Sprintf(`
 				provider "atlas" {
 					dev_url = "%[1]s"
+				}
+				resource "atlas_migration" "hello" {
+					url = "%[3]s"
+					dir = "atlas://test?tag=tag3"
 					cloud {
 						token   = "aci_bearer_token"
 						url     = "%[2]s"
 						project = "test"
 					}
-				}
-				resource "atlas_migration" "hello" {
-					url = "%[3]s"
-					dir = "atlas://test?tag=tag3"
 				}`, devURL, srv.URL, dbURL),
 				ExpectError: regexp.MustCompile("migrate down is not allowed, set `migrate_down.allow` to true to allow"),
 			},
@@ -939,15 +942,15 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 				Config: fmt.Sprintf(`
 				provider "atlas" {
 					dev_url = "%[1]s"
+				}
+				resource "atlas_migration" "hello" {
+					url = "%[3]s"
+					dir = "atlas://test?tag=tag3"
 					cloud {
 						token   = "aci_bearer_token"
 						url     = "%[2]s"
 						project = "test"
 					}
-				}
-				resource "atlas_migration" "hello" {
-					url = "%[3]s"
-					dir = "atlas://test?tag=tag3"
 					protected_flows {
 						migrate_down {
 							allow        = true
@@ -970,15 +973,15 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 				Config: fmt.Sprintf(`
 				provider "atlas" {
 					dev_url = "%[1]s"
+				}
+				resource "atlas_migration" "hello" {
+					url = "%[3]s"
+					dir = "atlas://test?tag=tag3"
 					cloud {
 						token   = "aci_bearer_token"
 						url     = "%[2]s"
 						project = "test"
 					}
-				}
-				resource "atlas_migration" "hello" {
-					url = "%[3]s"
-					dir = "atlas://test?tag=tag3"
 					protected_flows {
 						migrate_down {
 							allow = true
@@ -1004,15 +1007,15 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 				Config: fmt.Sprintf(`
 				provider "atlas" {
 					dev_url = "%[1]s"
+				}
+				resource "atlas_migration" "hello" {
+					url = "%[3]s"
+					dir = "atlas://test?tag=tag2"
 					cloud {
 						token   = "aci_bearer_token"
 						url     = "%[2]s"
 						project = "test"
 					}
-				}
-				resource "atlas_migration" "hello" {
-					url = "%[3]s"
-					dir = "atlas://test?tag=tag2"
 					protected_flows {
 						migrate_down {
 							allow = true
