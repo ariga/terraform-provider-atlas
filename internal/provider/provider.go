@@ -166,14 +166,6 @@ func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureReq
 		resp.Diagnostics.AddError("Failed to create client", err.Error())
 		return
 	}
-	if model != nil && model.Cloud != nil && model.Cloud.Token.ValueString() != "" {
-		if err := c.Login(ctx, &atlas.LoginParams{
-			Token: model.Cloud.Token.ValueString(),
-		}); err != nil {
-			resp.Diagnostics.AddError("Login failure", err.Error())
-			return
-		}
-	}
 	v, err := c.Version(ctx)
 	if err != nil {
 		resp.Diagnostics.AddError("Check atlas version failure", err.Error())
@@ -186,6 +178,14 @@ func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureReq
 	tflog.Debug(ctx, "found atlas-cli", map[string]any{
 		"version": version,
 	})
+	if model != nil && model.Cloud != nil && model.Cloud.Token.ValueString() != "" {
+		if err := c.Login(ctx, &atlas.LoginParams{
+			Token: model.Cloud.Token.ValueString(),
+		}); err != nil {
+			resp.Diagnostics.AddError("Login failure", err.Error())
+			return
+		}
+	}
 	p.data = providerData{client: fnClient, cloud: model.Cloud, version: p.version}
 	if model != nil {
 		p.data.devURL = model.DevURL.ValueString()
