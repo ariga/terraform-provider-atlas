@@ -1,7 +1,5 @@
-ariga.io/atlas v0.25.1-0.20240725062027-d43199a66f6e h1:iplLa9n+wAZLPrYwCfhVb0XzY5bQI+rPf9gol73USMA=
-ariga.io/atlas v0.25.1-0.20240725062027-d43199a66f6e/go.mod h1:KPLc7Zj+nzoXfWshrcY1RwlOh94dsATQEy4UPrF2RkM=
-ariga.io/atlas-go-sdk v0.5.8-0.20240724040154-54fd5f09583c h1:19hIly8NuHPzYmQSu+0MO7AhtjZDnD2vme2BOhkzi0A=
-ariga.io/atlas-go-sdk v0.5.8-0.20240724040154-54fd5f09583c/go.mod h1:9Q+/04PVyJHUse1lEE9Kp6E18xj/6mIzaUTcWYSjSnQ=
+ariga.io/atlas v0.26.1 h1:UwLn9sXgcuoo9/A3sxXhDqnOImXUcaYb2JqVP0FQciw=
+ariga.io/atlas v0.26.1/go.mod h1:KPLc7Zj+nzoXfWshrcY1RwlOh94dsATQEy4UPrF2RkM=
 ariga.io/atlas-go-sdk v0.5.8-0.20240806151605-4999cdd98524 h1:7Jr3S8416WoySZQZKKxzHE2CmJ+VuYMo9QscAoHN7z0=
 ariga.io/atlas-go-sdk v0.5.8-0.20240806151605-4999cdd98524/go.mod h1:9Q+/04PVyJHUse1lEE9Kp6E18xj/6mIzaUTcWYSjSnQ=
 dario.cat/mergo v1.0.0 h1:AGCNq9Evsj31mOgNPcLyXc+4PNABt905YmuqPYYpBWk=
