@@ -385,4 +385,4 @@ jobs:
           terraform init > /dev/null
           terraform apply --auto-approve
         env:
-          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
+          TF_VAR_atlas_token : ${{ secrets.ATLAS_TOKEN }}
