@@ -1,27 +1,24 @@
 # Atlas Terraform Provider
 
-[![Discord](https://img.shields.io/discord/930720389120794674?label=discord&logo=discord&style=flat-square&logoColor=white)](https://discord.gg/zZ6sWVg6NT)
+[![Twitter](https://img.shields.io/twitter/url.svg?label=Follow%20%40ariga%2Fatlas&style=social&url=https%3A%2F%2Ftwitter.com%2Fatlasgo_io)](https://twitter.com/atlasgo_io)
+[![Discord](https://img.shields.io/discord/930720389120794674?label=discord&logo=discord&style=flat-square&logoColor=white)](https://discord.com/invite/zZ6sWVg6NT)
 
-<a href="https://atlasgo.io">
-  <img width="50%" align="right" style="display: block; margin:40px auto;" src="https://atlasgo.io/uploads/images/gopher.png"/>
-</a>
+<p>
+  <a href="https://atlasgo.io" target="_blank">
+  <img alt="image" src="https://github.com/ariga/atlas/assets/7413593/2e27cb81-bad6-491a-8d9c-20920995a186">
+  </a>
+</p>
 
-Atlas tools help developers manage their database schemas by applying modern DevOps principles.
-Contrary to existing tools, Atlas intelligently plans schema migrations for you, based on your desired state.
+Atlas is a language-agnostic tool for managing and migrating database schemas using modern DevOps principles.
+It offers two workflows:
 
-### Supported databases: 
-* MySQL
-* MariaDB
-* PostgreSQL
-* SQLite
-* TiDB
-* SQL Server
-* ClickHouse
-* CockroachDB
+- **Declarative**: Similar to Terraform, Atlas compares the current state of the database to the desired state, as
+defined in an [HCL], [SQL], or [ORM] schema. Based on this comparison, it generates and executes a migration plan to 
+transition the database to its desired state.
 
-### Docs
-* [Provider Docs](https://registry.terraform.io/providers/ariga/atlas/latest/docs)
-* [Atlas Docs](https://atlasgo.io)
+- **Versioned**: Unlike other tools, Atlas automatically plans schema migrations for you. Users can describe their desired
+database schema in [HCL], [SQL], or their chosen [ORM], and by utilizing Atlas, they can plan, lint, and apply the
+necessary migrations to the database.
 
 ## Installation
 
@@ -65,3 +62,15 @@ resource "atlas_schema" "example_db" {
 ```
 
 For more advanced examples, check out the examples folder.
+
+### Docs
+* [Provider Docs](https://registry.terraform.io/providers/ariga/atlas/latest/docs)
+* [Atlas Docs](https://atlasgo.io)
+
+### Supported databases: 
+
+MySQL, MariaDB, PostgresSQL, SQLite, TiDB, CockroachDB, SQL Server, ClickHouse, Redshift.
+
+[HCL]: https://atlasgo.io/atlas-schema/hcl
+[SQL]: https://atlasgo.io/atlas-schema/sql
+[ORM]: https://atlasgo.io/atlas-schema/external
