@@ -53,7 +53,7 @@ type (
 )
 
 // we will allow the user configure the base atlas.hcl file
-const baseAtlasHCL = "env {\n}"
+const baseAtlasHCL = "env {\n  name = atlas.env\n}"
 
 // Render writes the atlas config to the given writer.
 func (c *projectConfig) Render(w io.Writer) error {
@@ -83,10 +83,6 @@ func (c *projectConfig) File() *hclwrite.File {
 	}
 	if env := c.Env; env != nil {
 		e := r.AppendNewBlock("env", nil).Body()
-		e.SetAttributeTraversal("name", hcl.Traversal{
-			hcl.TraverseRoot{Name: "atlas"},
-			hcl.TraverseAttr{Name: "env"},
-		})
 		if env.URL != "" {
 			e.SetAttributeValue("url", cty.StringVal(env.URL))
 		}

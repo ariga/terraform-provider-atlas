@@ -78,6 +78,7 @@ locals {
 	db_url = getenv("DB_URL")
 }
 env {
+	name = atlas.env
 	url = urlsetpath(local.db_url, var.schema_name)
 	migration {
 		dir = "this-dir-does-not-exist-and-always-gets-overrides"
