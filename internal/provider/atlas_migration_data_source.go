@@ -30,6 +30,7 @@ type (
 		DirURL    types.String     `tfsdk:"dir"`
 		Cloud     *AtlasCloudBlock `tfsdk:"cloud"`
 		RemoteDir *RemoteDirBlock  `tfsdk:"remote_dir"`
+		EnvName   types.String     `tfsdk:"env_name"`
 
 		Status  types.String `tfsdk:"status"`
 		Current types.String `tfsdk:"current"`
@@ -106,6 +107,10 @@ func (d *MigrationDataSource) Schema(_ context.Context, _ datasource.SchemaReque
 			},
 			"dir": schema.StringAttribute{
 				Description: "Select migration directory using URL format",
+				Optional:    true,
+			},
+			"env_name": schema.StringAttribute{
+				Description: "The name of the environment used for reporting runs to Atlas Cloud. Default: tf",
 				Optional:    true,
 			},
 			"revisions_schema": schema.StringAttribute{
@@ -225,7 +230,7 @@ func (d *MigrationDataSourceModel) projectConfig(cloud *AtlasCloudBlock) (*proje
 	}
 	cfg := projectConfig{
 		Config:  defaultString(d.Config, baseAtlasHCL),
-		EnvName: "tf",
+		EnvName: defaultString(d.EnvName, "tf"),
 		Env: &envConfig{
 			URL: dbURL,
 			Migration: &migrationConfig{
