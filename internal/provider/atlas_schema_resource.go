@@ -390,8 +390,9 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 		return
 	}
 	_, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
-		Env:    cfg.EnvName,
-		TxMode: data.TxMode.ValueString(),
+		Env:         cfg.EnvName,
+		TxMode:      data.TxMode.ValueString(),
+		AutoApprove: true,
 	})
 	if err != nil {
 		diags.AddError("Apply Error",
@@ -425,8 +426,9 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 		return
 	}
 	result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
-		DryRun: true,
-		Env:    cfg.EnvName,
+		DryRun:      true,
+		Env:         cfg.EnvName,
+		AutoApprove: true,
 	})
 	if err != nil {
 		diags.AddError("Atlas Plan Error",
