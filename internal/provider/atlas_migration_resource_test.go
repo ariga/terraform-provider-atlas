@@ -251,6 +251,7 @@ variable "schemas" {
 	type = list(string)
 }
 env {
+	name     = atlas.env
 	for_each = toset(var.schemas)
 	url      = urlsetpath(var.url, each.value)
 	migration {

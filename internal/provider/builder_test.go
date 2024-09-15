@@ -127,8 +127,8 @@ func Test_SchemaTemplate(t *testing.T) {
 	out := &bytes.Buffer{}
 	require.NoError(t, data.Render(out))
 	require.Equal(t, `env {
-  dev  = "mysql://user:pass@localhost:3307/tf-db"
   name = atlas.env
+  dev  = "mysql://user:pass@localhost:3307/tf-db"
   src  = "file://schema.hcl"
   url  = "mysql://user:pass@localhost:3306/tf-db"
   diff {
