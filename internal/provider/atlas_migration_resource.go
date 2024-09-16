@@ -693,10 +693,9 @@ type (
 		migrate.Dir
 		latestIndex int
 	}
-	// memFile implements fs.File.
+	// memFile implements the File interface for a file in memory.
 	memFile struct {
-		io.Reader
-		fs.FileInfo
+		io.ReadCloser
 	}
 )
 
@@ -707,11 +706,20 @@ var (
 
 // NewMemFile returns a new in-memory file.
 func NewMemFile(f io.Reader) fs.File {
-	return &memFile{Reader: f}
+	if c, ok := f.(io.ReadCloser); ok {
+		return &memFile{ReadCloser: c}
+	}
+	return &memFile{ReadCloser: io.NopCloser(f)}
 }
 
-func (f *memFile) Close() error               { return nil }
-func (f *memFile) Stat() (fs.FileInfo, error) { return f.FileInfo, nil }
+// Stat returns a zero FileInfo.
+func (m *memFile) Stat() (fs.FileInfo, error) { return m, nil }
+func (m *memFile) Name() string               { return "" }
+func (m *memFile) Size() int64                { return 0 }
+func (m *memFile) Mode() fs.FileMode          { return 0 }
+func (m *memFile) ModTime() time.Time         { return time.Time{} }
+func (m *memFile) IsDir() bool                { return false }
+func (m *memFile) Sys() interface{}           { return nil }
 
 // NewChunkedDir returns a new Dir that only contains migrations up to the
 // given version. (inclusive)
