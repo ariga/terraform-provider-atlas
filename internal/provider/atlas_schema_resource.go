@@ -283,11 +283,11 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 			return
 		}
 	}
-	resp.Diagnostics.Append(PrintPlanSQL(ctx, r.client, r.getDevURL(plan.DevURL), plan)...)
+	resp.Diagnostics.Append(PrintPlanSQL(ctx, r.cloud, r.client, r.getDevURL(plan.DevURL), plan)...)
 }
 
-func PrintPlanSQL(ctx context.Context, fn func(string) (AtlasExec, error), devURL string, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	cfg, wd, err := data.projectConfig(devURL)
+func PrintPlanSQL(ctx context.Context, cloud *AtlasCloudBlock, fn func(string) (AtlasExec, error), devURL string, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+	cfg, wd, err := data.projectConfig(cloud, devURL)
 	if err != nil {
 		diags.AddError("HCL Error",
 			fmt.Sprintf("Unable to create working directory, got error: %s", err),
@@ -332,7 +332,7 @@ func PrintPlanSQL(ctx context.Context, fn func(string) (AtlasExec, error), devUR
 }
 
 func (r *AtlasSchemaResource) readSchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	cfg, wd, err := data.projectConfig(r.devURL)
+	cfg, wd, err := data.projectConfig(r.cloud, r.devURL)
 	if err != nil {
 		diags.AddError("HCL Error",
 			fmt.Sprintf("Unable to create working directory, got error: %s", err),
@@ -368,7 +368,7 @@ func (r *AtlasSchemaResource) readSchema(ctx context.Context, data *AtlasSchemaR
 }
 
 func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	cfg, wd, err := data.projectConfig(r.devURL)
+	cfg, wd, err := data.projectConfig(r.cloud, r.devURL)
 	if err != nil {
 		diags.AddError("HCL Error",
 			fmt.Sprintf("Unable to create working directory, got error: %s", err),
@@ -404,7 +404,7 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 }
 
 func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	cfg, wd, err := data.projectConfig(r.devURL)
+	cfg, wd, err := data.projectConfig(r.cloud, r.devURL)
 	if err != nil {
 		diags.AddError("HCL Error",
 			fmt.Sprintf("Unable to create working directory, got error: %s", err),
@@ -453,7 +453,7 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 	return
 }
 
-func (data *AtlasSchemaResourceModel) projectConfig(devdb string) (*projectConfig, *atlas.WorkingDir, error) {
+func (data *AtlasSchemaResourceModel) projectConfig(cloud *AtlasCloudBlock, devdb string) (*projectConfig, *atlas.WorkingDir, error) {
 	dbURL, err := absoluteSqliteURL(data.URL.ValueString())
 	if err != nil {
 		return nil, nil, err
@@ -467,6 +467,11 @@ func (data *AtlasSchemaResourceModel) projectConfig(devdb string) (*projectConfi
 			Source: "file://schema.hcl",
 			Diff:   data.Diff,
 		},
+	}
+	if cloud.Valid() {
+		cfg.Cloud = &cloudConfig{
+			Token: cloud.Token.ValueString(),
+		}
 	}
 	diags := data.Exclude.ElementsAs(context.Background(), &cfg.Env.Exclude, false)
 	if diags.HasError() {

@@ -275,8 +275,13 @@ func (d *providerData) validateConfig(ctx context.Context, cfg tfsdk.Config) (di
 	return diags
 }
 
+// Valid returns true if the cloud block is valid.
+func (c *AtlasCloudBlock) Valid() bool {
+	return c != nil && c.Token.ValueString() != ""
+}
+
 // checkForUpdate checks for version updates and security advisories for Atlas.
-func checkForUpdate(ctx context.Context, version string) (string, error) {
+func checkForUpdate(_ context.Context, version string) (string, error) {
 	// Users may skip update checking behavior.
 	if v := os.Getenv(envNoUpdate); v != "" {
 		return "", nil
