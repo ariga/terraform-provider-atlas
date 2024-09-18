@@ -238,11 +238,11 @@ func (d *MigrationDataSourceModel) projectConfig(cloud *AtlasCloudBlock) (*proje
 			},
 		},
 	}
-	if d.Cloud != nil && d.Cloud.Token.ValueString() != "" {
+	if d.Cloud.Valid() {
 		// Use the data source cloud block if it is set
 		cloud = d.Cloud
 	}
-	if cloud != nil {
+	if cloud.Valid() {
 		cfg.Cloud = &cloudConfig{
 			Token:   cloud.Token.ValueString(),
 			Project: cloud.Project.ValueStringPointer(),

@@ -120,7 +120,7 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 			vars[k] = v
 		}
 	}
-	cfg, wd, err := data.projectConfig(d.devURL)
+	cfg, wd, err := data.projectConfig(d.cloud, d.devURL)
 	if err != nil {
 		resp.Diagnostics.AddError("HCL Error",
 			fmt.Sprintf("Unable to create working directory, got error: %s", err),
@@ -156,7 +156,7 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (d *AtlasSchemaDataSourceModel) projectConfig(devURL string) (*projectConfig, *atlas.WorkingDir, error) {
+func (d *AtlasSchemaDataSourceModel) projectConfig(cloud *AtlasCloudBlock, devURL string) (*projectConfig, *atlas.WorkingDir, error) {
 	cfg := &projectConfig{
 		Config:  baseAtlasHCL,
 		EnvName: "tf",
@@ -164,6 +164,11 @@ func (d *AtlasSchemaDataSourceModel) projectConfig(devURL string) (*projectConfi
 			URL:    "file://schema.hcl",
 			DevURL: defaultString(d.DevURL, devURL),
 		},
+	}
+	if cloud.Valid() {
+		cfg.Cloud = &cloudConfig{
+			Token: cloud.Token.ValueString(),
+		}
 	}
 	opts := []atlas.Option{atlas.WithAtlasHCL(cfg.Render)}
 	u, err := url.Parse(filepath.ToSlash(d.Src.ValueString()))
