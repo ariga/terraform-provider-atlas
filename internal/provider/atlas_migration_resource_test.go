@@ -272,6 +272,7 @@ HCL
 		# can't be supplied from the atlas.hcl
 		dir       = "file://migrations"
 		config    = local.config
+		env_name  = "tf"
 		variables = local.vars
 	}
 	resource "atlas_migration" "testdb" {
@@ -279,6 +280,7 @@ HCL
 		# can't be supplied from the atlas.hcl
 		dir       = "file://migrations"
 		version   = data.atlas_migration.hello.next
+		env_name  = "tf"
 		config    = local.config
 		variables = local.vars
 	}`, mysqlURL)
@@ -551,23 +553,23 @@ func TestAccMigrationResource_AtlasURL(t *testing.T) {
 		}))
 		config = fmt.Sprintf(`
 		data "atlas_migration" "hello" {
-			url = "%[2]s"
-			dir = "atlas://test"
-			cloud {
-				token   = "aci_bearer_token"
-				url     = "%[1]s"
-				project = "test"
-			}
+			url      = "%[2]s"
+			dir      = "atlas://test"
+			env_name = "tf"
+			config   = <<-HCL
+atlas {
+  cloud {
+    token = "aci_bearer_token"
+    url   = "%[1]s"
+  }
+}
+HCL
 		}
 		resource "atlas_migration" "testdb" {
 			url     = "%[2]s"
 			version = data.atlas_migration.hello.next
 			dir     = data.atlas_migration.hello.dir
-			cloud {
-				token   = "aci_bearer_token"
-				url     = "%[1]s"
-				project = "test"
-			}
+			config  = data.atlas_migration.hello.config
 		}
 		`, srv.URL, dbURL)
 	)
@@ -684,13 +686,17 @@ func TestAccMigrationResource_AtlasURL_WithTag(t *testing.T) {
 		dev_url = "%[1]s"
 	}
 	resource "atlas_migration" "hello" {
-		url = "%[3]s"
-		dir = "atlas://test"
-		cloud {
-			token   = "aci_bearer_token"
-			url     = "%[2]s"
-			project = "test"
-		}
+		url      = "%[3]s"
+		dir      = "atlas://test"
+		env_name = "tf"
+		config   = <<-HCL
+atlas {
+  cloud {
+    token = "aci_bearer_token"
+    url   = "%[2]s"
+  }
+}
+HCL
 	}
 	`, devURL, srv.URL, dbURL)
 	resource.Test(t, resource.TestCase{
@@ -715,17 +721,21 @@ func TestAccMigrationResource_AtlasURL_WithTag(t *testing.T) {
 		dev_url = "%[1]s"
 	}
 	resource "atlas_migration" "hello" {
-		url = "%[3]s"
-		dir = "atlas://test?tag=one-down"
+		url      = "%[3]s"
+		dir      = "atlas://test?tag=one-down"
+		env_name = "tf"
+		config   = <<-HCL
+atlas {
+  cloud {
+    token = "aci_bearer_token"
+    url   = "%[2]s"
+  }
+}
+HCL
 		protected_flows {
 			migrate_down {
 				allow = true
 			}
-		}
-		cloud {
-			token   = "aci_bearer_token"
-			url     = "%[2]s"
-			project = "test"
 		}
 	}
 	`, devURL, srv.URL, dbURL)
@@ -751,13 +761,17 @@ func TestAccMigrationResource_AtlasURL_WithTag(t *testing.T) {
 		dev_url = "%[1]s"
 	}
 	resource "atlas_migration" "hello" {
-		url = "%[3]s"
-		dir = "atlas://test?tag=latest"
-		cloud {
-			token   = "aci_bearer_token"
-			url     = "%[2]s"
-			project = "test"
-		}
+		url      = "%[3]s"
+		dir      = "atlas://test?tag=latest"
+		env_name = "tf"
+		config   = <<-HCL
+atlas {
+  cloud {
+    token = "aci_bearer_token"
+    url   = "%[2]s"
+  }
+}
+HCL
 	}`, devURL, srv.URL, dbURL)
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -895,13 +909,17 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 					dev_url = "%[1]s"
 				}
 				resource "atlas_migration" "hello" {
-					url = "%[3]s"
-					dir = "atlas://test?tag=latest"
-					cloud {
-						token   = "aci_bearer_token"
-						url     = "%[2]s"
-						project = "test"
-					}
+					url      = "%[3]s"
+					dir      = "atlas://test?tag=latest"
+					env_name = "tf"
+					config   = <<-HCL
+atlas {
+  cloud {
+    token = "aci_bearer_token"
+    url   = "%[2]s"
+  }
+}
+HCL
 				}`, devURL, srv.URL, dbURL),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("atlas_migration.hello", "id", "remote_dir://test"),
@@ -923,13 +941,17 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 					dev_url = "%[1]s"
 				}
 				resource "atlas_migration" "hello" {
-					url = "%[3]s"
-					dir = "atlas://test?tag=tag3"
-					cloud {
-						token   = "aci_bearer_token"
-						url     = "%[2]s"
-						project = "test"
-					}
+					url      = "%[3]s"
+					dir      = "atlas://test?tag=tag3"
+					env_name = "tf"
+					config   = <<-HCL
+atlas {
+  cloud {
+    token = "aci_bearer_token"
+    url   = "%[2]s"
+  }
+}
+HCL
 				}`, devURL, srv.URL, dbURL),
 				ExpectError: regexp.MustCompile("migrate down is not allowed, set `migrate_down.allow` to true to allow"),
 			},
@@ -945,13 +967,17 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 					dev_url = "%[1]s"
 				}
 				resource "atlas_migration" "hello" {
-					url = "%[3]s"
-					dir = "atlas://test?tag=tag3"
-					cloud {
-						token   = "aci_bearer_token"
-						url     = "%[2]s"
-						project = "test"
-					}
+					url      = "%[3]s"
+					dir      = "atlas://test?tag=tag3"
+					env_name = "tf"
+					config   = <<-HCL
+atlas {
+  cloud {
+    token = "aci_bearer_token"
+    url   = "%[2]s"
+  }
+}
+HCL
 					protected_flows {
 						migrate_down {
 							allow        = true
@@ -976,13 +1002,17 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 					dev_url = "%[1]s"
 				}
 				resource "atlas_migration" "hello" {
-					url = "%[3]s"
-					dir = "atlas://test?tag=tag3"
-					cloud {
-						token   = "aci_bearer_token"
-						url     = "%[2]s"
-						project = "test"
-					}
+					url      = "%[3]s"
+					dir      = "atlas://test?tag=tag3"
+					env_name = "tf"
+					config   = <<-HCL
+atlas {
+  cloud {
+    token = "aci_bearer_token"
+    url   = "%[2]s"
+  }
+}
+HCL
 					protected_flows {
 						migrate_down {
 							allow = true
@@ -1010,13 +1040,17 @@ func TestAccMigrationResource_RequireApproval(t *testing.T) {
 					dev_url = "%[1]s"
 				}
 				resource "atlas_migration" "hello" {
-					url = "%[3]s"
-					dir = "atlas://test?tag=tag2"
-					cloud {
-						token   = "aci_bearer_token"
-						url     = "%[2]s"
-						project = "test"
-					}
+					url      = "%[3]s"
+					dir      = "atlas://test?tag=tag2"
+					env_name = "tf"
+					config   = <<-HCL
+atlas {
+  cloud {
+    token = "aci_bearer_token"
+    url   = "%[2]s"
+  }
+}
+HCL
 					protected_flows {
 						migrate_down {
 							allow = true

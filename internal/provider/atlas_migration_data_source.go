@@ -46,8 +46,9 @@ type (
 
 // Ensure provider defined types fully satisfy framework interfaces
 var (
-	_ datasource.DataSource              = &MigrationDataSource{}
-	_ datasource.DataSourceWithConfigure = &MigrationDataSource{}
+	_ datasource.DataSource                   = &MigrationDataSource{}
+	_ datasource.DataSourceWithConfigure      = &MigrationDataSource{}
+	_ datasource.DataSourceWithValidateConfig = &MigrationDataSource{}
 )
 var (
 	latestVersion  = "Already at latest version"
@@ -80,6 +81,21 @@ func (d *MigrationDataSource) Metadata(ctx context.Context, req datasource.Metad
 // Configure implements datasource.DataSourceWithConfigure.
 func (d *MigrationDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	resp.Diagnostics.Append(d.configure(req.ProviderData)...)
+}
+
+// Validate implements resource.ResourceWithValidateConfig.
+func (r MigrationDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var data MigrationDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Config.ValueString() != "" && !data.EnvName.IsUnknown() && data.EnvName.ValueString() == "" {
+		resp.Diagnostics.AddError(
+			"env_name is empty",
+			"env_name is required when config is set",
+		)
+	}
 }
 
 // GetSchema implements datasource.DataSource.
@@ -167,7 +183,7 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 			})
 		}
 	}()
-	c, err := d.client(wd.Path())
+	c, err := d.client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create client", err.Error())
 		return
@@ -228,8 +244,8 @@ func (d *MigrationDataSourceModel) projectConfig(cloud *AtlasCloudBlock) (*proje
 	if err != nil {
 		return nil, err
 	}
-	cfg := projectConfig{
-		Config:  defaultString(d.Config, baseAtlasHCL),
+	cfg := &projectConfig{
+		Config:  defaultString(d.Config, ""),
 		EnvName: defaultString(d.EnvName, "tf"),
 		Env: &envConfig{
 			URL: dbURL,
@@ -243,16 +259,11 @@ func (d *MigrationDataSourceModel) projectConfig(cloud *AtlasCloudBlock) (*proje
 		cloud = d.Cloud
 	}
 	if cloud.Valid() {
-		cfg.Cloud = &cloudConfig{
-			Token:   cloud.Token.ValueString(),
-			Project: cloud.Project.ValueStringPointer(),
-			URL:     cloud.URL.ValueStringPointer(),
+		cfg.Cloud = &CloudConfig{
+			Token: cloud.Token.ValueString(),
 		}
 	}
 	if rd := d.RemoteDir; rd != nil {
-		if cfg.Cloud == nil {
-			return nil, fmt.Errorf("cloud configuration is not set")
-		}
 		cfg.Env.Migration.DirURL, err = rd.AtlasURL()
 	} else {
 		cfg.Env.Migration.DirURL, err = absoluteFileURL(
@@ -266,7 +277,7 @@ func (d *MigrationDataSourceModel) projectConfig(cloud *AtlasCloudBlock) (*proje
 			return nil, fmt.Errorf("failed to parse variables: %w", err)
 		}
 	}
-	return &cfg, nil
+	return cfg, nil
 }
 
 // AtlasURL returns the atlas URL for the remote directory.

@@ -307,13 +307,6 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 		resp.Diagnostics.AddError("url is invalid", err.Error())
 		return
 	case u.Scheme == SchemaTypeAtlas:
-		// Remote dir, validate config for cloud
-		// providerData.client is set when the provider is configured
-		if data.Cloud == nil && (r.cloud == nil && r.providerData.client != nil) {
-			resp.Diagnostics.AddError(
-				"cloud is unset", "cloud is required when using atlas:// URL",
-			)
-		}
 		if f := data.ProtectedFlows; f != nil {
 			if d := f.MigrateDown; d != nil {
 				if d.Allow.ValueBool() && d.AutoApprove.ValueBool() {
@@ -385,6 +378,12 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 				"`atlas_migration.next` or `atlas_migration.latest`\n",
 		)
 	}
+	if data.Config.ValueString() != "" && !data.EnvName.IsUnknown() && data.EnvName.ValueString() == "" {
+		resp.Diagnostics.AddError(
+			"env_name is empty",
+			"env_name is required when config is set",
+		)
+	}
 }
 
 // ModifyPlan implements resource.ResourceWithModifyPlan.
@@ -416,7 +415,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			})
 		}
 	}()
-	c, err := r.client(wd.Path())
+	c, err := r.client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create client", err.Error())
 		return
@@ -513,7 +512,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
 		return
 	}
-	c, err := r.client(wd.Path())
+	c, err := r.client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		diags.AddError("Failed to create client", err.Error())
 		return
@@ -629,7 +628,7 @@ func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationReso
 			})
 		}
 	}()
-	c, err := r.client(wd.Path())
+	c, err := r.client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		diags.AddError("Failed to create client", err.Error())
 		return
@@ -814,8 +813,8 @@ func (d *MigrationResourceModel) projectConfig(cloud *AtlasCloudBlock, devURL st
 	if err != nil {
 		return nil, err
 	}
-	cfg := projectConfig{
-		Config:  defaultString(d.Config, baseAtlasHCL),
+	cfg := &projectConfig{
+		Config:  defaultString(d.Config, ""),
 		EnvName: defaultString(d.EnvName, "tf"),
 		Env: &envConfig{
 			URL:    dbURL,
@@ -832,16 +831,11 @@ func (d *MigrationResourceModel) projectConfig(cloud *AtlasCloudBlock, devURL st
 		cloud = d.Cloud
 	}
 	if cloud.Valid() {
-		cfg.Cloud = &cloudConfig{
-			Token:   cloud.Token.ValueString(),
-			Project: cloud.Project.ValueStringPointer(),
-			URL:     cloud.URL.ValueStringPointer(),
+		cfg.Cloud = &CloudConfig{
+			Token: cloud.Token.ValueString(),
 		}
 	}
 	if rd := d.RemoteDir; rd != nil {
-		if cfg.Cloud == nil {
-			return nil, fmt.Errorf("cloud configuration is not set")
-		}
 		cfg.Env.Migration.DirURL, err = rd.AtlasURL()
 	} else {
 		cfg.Env.Migration.DirURL, err = absoluteFileURL(
@@ -869,5 +863,5 @@ func (d *MigrationResourceModel) projectConfig(cloud *AtlasCloudBlock, devURL st
 			return nil, fmt.Errorf("failed to parse variables: %w", err)
 		}
 	}
-	return &cfg, nil
+	return cfg, nil
 }

@@ -62,7 +62,7 @@ type (
 	providerData struct {
 		// client is the factory function to create a new AtlasExec client.
 		// It is set during the provider configuration.
-		client func(wd string) (AtlasExec, error)
+		client func(wd string, c *CloudConfig) (AtlasExec, error)
 		// devURL is the URL of the dev-db.
 		devURL string
 		// cloud is the Atlas Cloud configuration.
@@ -149,19 +149,28 @@ func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureReq
 	if s := model.BinaryPath.ValueString(); s != "" {
 		binPath = s
 	}
-	fnClient := func(wd string) (AtlasExec, error) {
+	fnClient := func(wd string, cloud *CloudConfig) (AtlasExec, error) {
 		c, err := atlas.NewClient(wd, binPath)
 		if err != nil {
 			return nil, err
 		}
 		env := atlas.NewOSEnviron()
 		env["ATLAS_INTEGRATION"] = fmt.Sprintf("terraform-provider-atlas/v%s", p.version)
+		if cloud != nil && cloud.Token != "" {
+			env["ATLAS_TOKEN"] = cloud.Token
+		}
 		if err = c.SetEnv(env); err != nil {
 			return nil, err
 		}
 		return c, nil
 	}
-	c, err := fnClient("")
+	var cloud *CloudConfig
+	if model != nil && model.Cloud.Valid() {
+		cloud = &CloudConfig{
+			Token: model.Cloud.Token.ValueString(),
+		}
+	}
+	c, err := fnClient("", cloud)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create client", err.Error())
 		return
@@ -178,14 +187,6 @@ func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureReq
 	tflog.Debug(ctx, "found atlas-cli", map[string]any{
 		"version": version,
 	})
-	if model != nil && model.Cloud != nil && model.Cloud.Token.ValueString() != "" {
-		if err := c.Login(ctx, &atlas.LoginParams{
-			Token: model.Cloud.Token.ValueString(),
-		}); err != nil {
-			resp.Diagnostics.AddError("Login failure", err.Error())
-			return
-		}
-	}
 	p.data = providerData{client: fnClient, cloud: model.Cloud, version: p.version}
 	if model != nil {
 		p.data.devURL = model.DevURL.ValueString()

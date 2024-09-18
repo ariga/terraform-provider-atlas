@@ -69,8 +69,9 @@ func TestAccMigrationDataSource(t *testing.T) {
 data "atlas_migration" "hello" {
 	# The dir attribute is required to be set, and
 	# can't be supplied from the atlas.hcl
-	dir    = "file://migrations?format=atlas"
-	config = <<-HCL
+	dir      = "file://migrations?format=atlas"
+	env_name = "tf"
+	config   = <<-HCL
 variable "schema_name" {
 	type = string
 }
@@ -122,12 +123,17 @@ func TestAccMigrationDataSource_AtlasURL(t *testing.T) {
 		}))
 		config = fmt.Sprintf(`
 data "atlas_migration" "hello" {
-	url = "%s"
-	dir = "atlas://test"
-	cloud {
-		token = "aci_bearer_token"
-		url   = "%s"
-	}
+	url      = "%s"
+	dir      = "atlas://test"
+	env_name = "tf"
+	config   = <<-HCL
+atlas {
+  cloud {
+    token = "aci_bearer_token"
+    url   = "%s"
+  }
+}
+HCL
 }`, dbURL, srv.URL)
 	)
 	t.Cleanup(srv.Close)
@@ -140,13 +146,18 @@ data "atlas_migration" "hello" {
 				{
 					Config: fmt.Sprintf(`
 data "atlas_migration" "hello" {
-	url = "%s"
+	url      = "%s"
+	env_name = "tf"
+	config   = <<-HCL
+atlas {
+  cloud {
+    token = "aci_bearer_token"
+    url   = "%s"
+  }
+}
+HCL
 	remote_dir {
 		name = "test"
-	}
-	cloud {
-		token = "aci_bearer_token"
-		url   = "%s"
 	}
 }`, dbURL, srv.URL),
 					Check: resource.ComposeAggregateTestCheckFunc(
