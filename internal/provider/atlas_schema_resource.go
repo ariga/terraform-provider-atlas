@@ -286,7 +286,7 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 	resp.Diagnostics.Append(PrintPlanSQL(ctx, r.cloud, r.client, r.getDevURL(plan.DevURL), plan)...)
 }
 
-func PrintPlanSQL(ctx context.Context, cloud *AtlasCloudBlock, fn func(string) (AtlasExec, error), devURL string, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+func PrintPlanSQL(ctx context.Context, cloud *AtlasCloudBlock, fn func(string, *CloudConfig) (AtlasExec, error), devURL string, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
 	cfg, wd, err := data.projectConfig(cloud, devURL)
 	if err != nil {
 		diags.AddError("HCL Error",
@@ -301,7 +301,7 @@ func PrintPlanSQL(ctx context.Context, cloud *AtlasCloudBlock, fn func(string) (
 			})
 		}
 	}()
-	c, err := fn(wd.Path())
+	c, err := fn(wd.Path(), cfg.Cloud)
 	if err != nil {
 		diags.AddError("Client Error",
 			fmt.Sprintf("Unable to create client, got error: %s", err),
@@ -346,7 +346,7 @@ func (r *AtlasSchemaResource) readSchema(ctx context.Context, data *AtlasSchemaR
 			})
 		}
 	}()
-	c, err := r.client(wd.Path())
+	c, err := r.client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		diags.AddError("Client Error",
 			fmt.Sprintf("Unable to create client, got error: %s", err),
@@ -382,7 +382,7 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 			})
 		}
 	}()
-	c, err := r.client(wd.Path())
+	c, err := r.client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		diags.AddError("Client Error",
 			fmt.Sprintf("Unable to create client, got error: %s", err),
@@ -418,7 +418,7 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 			})
 		}
 	}()
-	c, err := r.client(wd.Path())
+	c, err := r.client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		diags.AddError("Client Error",
 			fmt.Sprintf("Unable to create client, got error: %s", err),
@@ -459,7 +459,6 @@ func (data *AtlasSchemaResourceModel) projectConfig(cloud *AtlasCloudBlock, devd
 		return nil, nil, err
 	}
 	cfg := &projectConfig{
-		Config:  baseAtlasHCL,
 		EnvName: "tf",
 		Env: &envConfig{
 			URL:    dbURL,
@@ -469,7 +468,7 @@ func (data *AtlasSchemaResourceModel) projectConfig(cloud *AtlasCloudBlock, devd
 		},
 	}
 	if cloud.Valid() {
-		cfg.Cloud = &cloudConfig{
+		cfg.Cloud = &CloudConfig{
 			Token: cloud.Token.ValueString(),
 		}
 	}

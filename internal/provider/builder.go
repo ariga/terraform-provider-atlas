@@ -24,7 +24,7 @@ import (
 type (
 	// projectConfig is the builder for the atlas.hcl file.
 	projectConfig struct {
-		Cloud *cloudConfig
+		Cloud *CloudConfig
 		Env   *envConfig
 
 		Config      string      // The base atlas.hcl to merge with, provided by the user
@@ -41,10 +41,8 @@ type (
 		Diff      *Diff
 		Migration *migrationConfig
 	}
-	cloudConfig struct {
-		Token   string
-		Project *string
-		URL     *string
+	CloudConfig struct {
+		Token string
 	}
 	migrationConfig struct {
 		DirURL          string
@@ -54,97 +52,82 @@ type (
 	}
 )
 
-// we will allow the user configure the base atlas.hcl file
-const baseAtlasHCL = "env {\n  name = atlas.env\n}"
-
 // Render writes the atlas config to the given writer.
 func (c *projectConfig) Render(w io.Writer) error {
 	dst, diags := hclwrite.ParseConfig([]byte(c.Config), "atlas.hcl", hcl.InitialPos)
 	if diags.HasErrors() {
 		return diags
 	}
-	mergeFile(dst, c.File())
+	if err := mergeEnvBlock(dst.Body(), c.Env.AsBlock(), c.EnvName); err != nil {
+		return err
+	}
 	_, err := dst.WriteTo(w)
 	return err
 }
 
-// File returns the HCL file representation of the project config.
-func (c *projectConfig) File() *hclwrite.File {
-	f := hclwrite.NewEmptyFile()
-	r := f.Body()
-	if cloud := c.Cloud; cloud != nil {
-		a := r.AppendNewBlock("atlas", nil).Body()
-		c := a.AppendNewBlock("cloud", nil).Body()
-		c.SetAttributeValue("token", cty.StringVal(cloud.Token))
-		if cloud.Project != nil {
-			c.SetAttributeValue("project", cty.StringVal(*cloud.Project))
+// AsBlock returns the HCL block for the environment configuration.
+func (env *envConfig) AsBlock() *hclwrite.Block {
+	blk := hclwrite.NewBlock("env", nil)
+	e := blk.Body()
+	if env.URL != "" {
+		e.SetAttributeValue("url", cty.StringVal(env.URL))
+	}
+	if env.DevURL != "" {
+		e.SetAttributeValue("dev", cty.StringVal(env.DevURL))
+	}
+	if env.Source != "" {
+		e.SetAttributeValue("src", cty.StringVal(env.Source))
+	}
+	if l := deleteZero(env.Schemas); len(l) > 0 {
+		e.SetAttributeValue("schemas", listStringVal(l))
+	}
+	if l := deleteZero(env.Exclude); len(l) > 0 {
+		e.SetAttributeValue("exclude", listStringVal(l))
+	}
+	if md := env.Migration; md != nil {
+		m := e.AppendNewBlock("migration", nil).Body()
+		if md.DirURL != "" {
+			m.SetAttributeValue("dir", cty.StringVal(md.DirURL))
 		}
-		if cloud.URL != nil {
-			c.SetAttributeValue("url", cty.StringVal(*cloud.URL))
+		if md.Baseline != "" {
+			m.SetAttributeValue("baseline", cty.StringVal(md.Baseline))
+		}
+		if md.ExecOrder != "" {
+			m.SetAttributeTraversal("exec_order", hcl.Traversal{
+				hcl.TraverseRoot{Name: hclValue(md.ExecOrder)},
+			})
+		}
+		if md.RevisionsSchema != "" {
+			m.SetAttributeValue("revisions_schema", cty.StringVal(md.RevisionsSchema))
 		}
 	}
-	if env := c.Env; env != nil {
-		e := r.AppendNewBlock("env", nil).Body()
-		if env.URL != "" {
-			e.SetAttributeValue("url", cty.StringVal(env.URL))
+	if dd := env.Diff; dd != nil {
+		d := e.AppendNewBlock("diff", nil).Body()
+		if v := dd.ConcurrentIndex; v != nil {
+			b := d.AppendNewBlock("concurrent_index", nil).Body()
+			attrBoolPtr(b, v.Create, "create")
+			attrBoolPtr(b, v.Drop, "drop")
 		}
-		if env.DevURL != "" {
-			e.SetAttributeValue("dev", cty.StringVal(env.DevURL))
-		}
-		if env.Source != "" {
-			e.SetAttributeValue("src", cty.StringVal(env.Source))
-		}
-		if l := deleteZero(env.Schemas); len(l) > 0 {
-			e.SetAttributeValue("schemas", listStringVal(l))
-		}
-		if l := deleteZero(env.Exclude); len(l) > 0 {
-			e.SetAttributeValue("exclude", listStringVal(l))
-		}
-		if md := env.Migration; md != nil {
-			m := e.AppendNewBlock("migration", nil).Body()
-			if md.DirURL != "" {
-				m.SetAttributeValue("dir", cty.StringVal(md.DirURL))
-			}
-			if md.Baseline != "" {
-				m.SetAttributeValue("baseline", cty.StringVal(md.Baseline))
-			}
-			if md.ExecOrder != "" {
-				m.SetAttributeTraversal("exec_order", hcl.Traversal{
-					hcl.TraverseRoot{Name: hclValue(md.ExecOrder)},
-				})
-			}
-			if md.RevisionsSchema != "" {
-				m.SetAttributeValue("revisions_schema", cty.StringVal(md.RevisionsSchema))
-			}
-		}
-		if dd := env.Diff; dd != nil {
-			d := e.AppendNewBlock("diff", nil).Body()
-			if v := dd.ConcurrentIndex; v != nil {
-				b := d.AppendNewBlock("concurrent_index", nil).Body()
-				attrBoolPtr(b, v.Create, "create")
-				attrBoolPtr(b, v.Drop, "drop")
-			}
-			if v := dd.Skip; v != nil {
-				b := d.AppendNewBlock("skip", nil).Body()
-				attrBoolPtr(b, v.AddSchema, "add_schema")
-				attrBoolPtr(b, v.DropSchema, "drop_schema")
-				attrBoolPtr(b, v.ModifySchema, "modify_schema")
-				attrBoolPtr(b, v.AddTable, "add_table")
-				attrBoolPtr(b, v.DropTable, "drop_table")
-				attrBoolPtr(b, v.ModifyTable, "modify_table")
-				attrBoolPtr(b, v.AddColumn, "add_column")
-				attrBoolPtr(b, v.DropColumn, "drop_column")
-				attrBoolPtr(b, v.ModifyColumn, "modify_column")
-				attrBoolPtr(b, v.AddIndex, "add_index")
-				attrBoolPtr(b, v.DropIndex, "drop_index")
-				attrBoolPtr(b, v.ModifyIndex, "modify_index")
-				attrBoolPtr(b, v.AddForeignKey, "add_foreign_key")
-				attrBoolPtr(b, v.DropForeignKey, "drop_foreign_key")
-				attrBoolPtr(b, v.ModifyForeignKey, "modify_foreign_key")
-			}
+		if v := dd.Skip; v != nil {
+			b := d.AppendNewBlock("skip", nil).Body()
+			attrBoolPtr(b, v.AddSchema, "add_schema")
+			attrBoolPtr(b, v.DropSchema, "drop_schema")
+			attrBoolPtr(b, v.ModifySchema, "modify_schema")
+			attrBoolPtr(b, v.AddTable, "add_table")
+			attrBoolPtr(b, v.DropTable, "drop_table")
+			attrBoolPtr(b, v.ModifyTable, "modify_table")
+			attrBoolPtr(b, v.AddColumn, "add_column")
+			attrBoolPtr(b, v.DropColumn, "drop_column")
+			attrBoolPtr(b, v.ModifyColumn, "modify_column")
+			attrBoolPtr(b, v.AddIndex, "add_index")
+			attrBoolPtr(b, v.DropIndex, "drop_index")
+			attrBoolPtr(b, v.ModifyIndex, "modify_index")
+			attrBoolPtr(b, v.AddForeignKey, "add_foreign_key")
+			attrBoolPtr(b, v.DropForeignKey, "drop_foreign_key")
+			attrBoolPtr(b, v.ModifyForeignKey, "modify_foreign_key")
 		}
 	}
-	return f
+	return blk
 }
 
 // DirURL returns the URL to the migration directory.
@@ -229,33 +212,36 @@ func hclValue(s string) string {
 	return strings.ReplaceAll(strings.ToUpper(s), "-", "_")
 }
 
-func parseConfig(cfg string) (*hclwrite.File, error) {
-	f, diags := hclwrite.ParseConfig([]byte(cfg), "atlas.hcl", hcl.InitialPos)
-	if diags.HasErrors() {
-		return nil, diags
-	}
-	return f, nil
-}
-
-func mergeFile(dst, src *hclwrite.File) {
-	dstBody, srcBody := dst.Body(), src.Body()
-	dstBlocks := make(map[string]*hclwrite.Block)
-	for _, blk := range dstBody.Blocks() {
-		dstBlocks[address(blk)] = blk
-	}
-	for _, blk := range srcBody.Blocks() {
-		if dstBlk, ok := dstBlocks[address(blk)]; ok {
-			// Merge the blocks if they have the same address.
-			mergeBlock(dstBlk, blk)
-		} else {
-			appendBlock(dstBody, blk)
+func mergeEnvBlock(dst *hclwrite.Body, blk *hclwrite.Block, name string) error {
+	blocks := dst.Blocks()
+	envBlocks := make([]*hclwrite.Block, 0, len(blocks))
+	for _, b := range blocks {
+		if b.Type() == "env" {
+			envBlocks = append(envBlocks, b)
 		}
 	}
-}
-
-func address(block *hclwrite.Block) string {
-	parts := append([]string{block.Type()}, block.Labels()...)
-	return strings.Join(parts, ".")
+	if len(envBlocks) == 0 {
+		// No env blocks found, create a new one.
+		mergeBlock(dst.AppendNewBlock("env", []string{name}), blk)
+		return nil
+	}
+	// Check if there is an env block with the given name.
+	env := slices.IndexFunc(envBlocks, func(b *hclwrite.Block) bool {
+		labels := b.Labels()
+		return len(labels) == 1 && labels[0] == name
+	})
+	if env == -1 {
+		// No block matched, check if there is an unnamed env block.
+		env = slices.IndexFunc(envBlocks, func(b *hclwrite.Block) bool {
+			return len(b.Labels()) == 0
+		})
+		if env == -1 {
+			return fmt.Errorf(`the env block %q was not found in the give config`, name)
+		}
+	}
+	// Found the block to merge with.
+	mergeBlock(envBlocks[env], blk)
+	return nil
 }
 
 func mergeBlock(dst, src *hclwrite.Block) {

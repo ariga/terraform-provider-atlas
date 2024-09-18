@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,10 +20,7 @@ func TestTemplate(t *testing.T) {
 		data projectConfig
 	}{
 		{name: "token", data: projectConfig{
-			Config: baseAtlasHCL,
-			Cloud: &cloudConfig{
-				Token: "token+%=_-",
-			},
+			EnvName: "tf",
 			Env: &envConfig{
 				URL: "mysql://user:pass@localhost:3306/tf-db",
 				Migration: &migrationConfig{
@@ -30,12 +29,7 @@ func TestTemplate(t *testing.T) {
 			},
 		}},
 		{name: "cloud", data: projectConfig{
-			Config: baseAtlasHCL,
-			Cloud: &cloudConfig{
-				Token:   "token",
-				URL:     ptr("url"),
-				Project: ptr("project"),
-			},
+			EnvName: "tf",
 			Env: &envConfig{
 				URL: "mysql://user:pass@localhost:3306/tf-db",
 				Migration: &migrationConfig{
@@ -44,7 +38,7 @@ func TestTemplate(t *testing.T) {
 			},
 		}},
 		{name: "local", data: projectConfig{
-			Config: baseAtlasHCL,
+			EnvName: "tf",
 			Env: &envConfig{
 				URL: "mysql://user:pass@localhost:3306/tf-db",
 				Migration: &migrationConfig{
@@ -53,7 +47,7 @@ func TestTemplate(t *testing.T) {
 			},
 		}},
 		{name: "local-exec-order", data: projectConfig{
-			Config: baseAtlasHCL,
+			EnvName: "tf",
 			Env: &envConfig{
 				URL: "mysql://user:pass@localhost:3306/tf-db",
 				Migration: &migrationConfig{
@@ -63,7 +57,7 @@ func TestTemplate(t *testing.T) {
 			},
 		}},
 		{name: "baseline", data: projectConfig{
-			Config: baseAtlasHCL,
+			EnvName: "tf",
 			Env: &envConfig{
 				URL: "mysql://user:pass@localhost:3306/tf-db",
 				Migration: &migrationConfig{
@@ -73,10 +67,7 @@ func TestTemplate(t *testing.T) {
 			},
 		}},
 		{name: "cloud-tag", data: projectConfig{
-			Config: baseAtlasHCL,
-			Cloud: &cloudConfig{
-				Token: "token",
-			},
+			EnvName: "tf",
 			Env: &envConfig{
 				URL: "mysql://user:pass@localhost:3306/tf-db",
 				Migration: &migrationConfig{
@@ -107,7 +98,8 @@ func TestTemplate(t *testing.T) {
 
 func Test_SchemaTemplate(t *testing.T) {
 	data := &projectConfig{
-		Config: baseAtlasHCL,
+		Config:  "",
+		EnvName: "tf",
 		Env: &envConfig{
 			Source: "file://schema.hcl",
 			URL:    "mysql://user:pass@localhost:3306/tf-db",
@@ -126,11 +118,10 @@ func Test_SchemaTemplate(t *testing.T) {
 
 	out := &bytes.Buffer{}
 	require.NoError(t, data.Render(out))
-	require.Equal(t, `env {
-  name = atlas.env
-  dev  = "mysql://user:pass@localhost:3307/tf-db"
-  src  = "file://schema.hcl"
-  url  = "mysql://user:pass@localhost:3306/tf-db"
+	require.Equal(t, `env "tf" {
+  dev = "mysql://user:pass@localhost:3307/tf-db"
+  src = "file://schema.hcl"
+  url = "mysql://user:pass@localhost:3306/tf-db"
   diff {
     concurrent_index {
       create = true
@@ -140,40 +131,98 @@ func Test_SchemaTemplate(t *testing.T) {
       add_index  = true
     }
   }
-}`, out.String())
+}
+`, out.String())
 }
 
-func Test_mergeFile(t *testing.T) {
+func Test_mergeEnv(t *testing.T) {
+	envBlock := (&envConfig{
+		URL:    "sqlite://file.db",
+		DevURL: "sqlite://file?mode=memory",
+		Migration: &migrationConfig{
+			DirURL: "file://migrations",
+		},
+	}).AsBlock()
+
+	// Merge with existing env block.
 	dst, err := parseConfig(`
-atlas {}
+env "foo" {
+}
+`)
+	require.NoError(t, err)
+	require.NoError(t, mergeEnvBlock(dst.Body(), envBlock, "foo"))
+	require.Equal(t, `
+env "foo" {
+  dev = "sqlite://file?mode=memory"
+  url = "sqlite://file.db"
+  migration {
+    dir = "file://migrations"
+  }
+}
+`, string(dst.Bytes()))
+
+	// Merge with non-existing env block.
+	dst, err = parseConfig(`
+env "bar" {
+}
+`)
+	require.NoError(t, err)
+	require.ErrorContains(t, mergeEnvBlock(dst.Body(), envBlock, "foo"), `the env block "foo" was not found in the give config`)
+
+	// Merge with un-named env block.
+	dst, err = parseConfig(`
 env {
   name = atlas.env
 }
 `)
 	require.NoError(t, err)
-
-	src, err := parseConfig(`
-atlas {
-	cloud {
-  	token = "aci_token"
+	require.NoError(t, mergeEnvBlock(dst.Body(), envBlock, "foo"))
+	require.Equal(t, `
+env {
+  name = atlas.env
+  dev  = "sqlite://file?mode=memory"
+  url  = "sqlite://file.db"
+  migration {
+    dir = "file://migrations"
   }
 }
+`, string(dst.Bytes()))
+
+	// Merge with existing env block and un-named env block.
+	dst, err = parseConfig(`
+env "foo" {
+}
 env {
-  url = "sqlite://file.db"
-  dev = "sqlite://file?mode=memory"
-  migration {
-		dir = "file://migrations"
-	}
+	name = atlas.env
 }
 `)
 	require.NoError(t, err)
-	mergeFile(dst, src)
-
+	require.NoError(t, mergeEnvBlock(dst.Body(), envBlock, "foo"))
 	require.Equal(t, `
-atlas {
-  cloud {
-    token = "aci_token"
+env "foo" {
+  dev = "sqlite://file?mode=memory"
+  url = "sqlite://file.db"
+  migration {
+    dir = "file://migrations"
   }
+}
+env {
+  name = atlas.env
+}
+`, string(dst.Bytes()))
+
+	// Merge with un-named env block.
+	dst, err = parseConfig(`
+env "foo" {
+}
+env {
+	name = atlas.env
+}
+`)
+	require.NoError(t, err)
+	require.NoError(t, mergeEnvBlock(dst.Body(), envBlock, "bar"))
+	require.Equal(t, `
+env "foo" {
 }
 env {
   name = atlas.env
@@ -198,4 +247,12 @@ func checkContent(t *testing.T, actual string, gen func(string) error) {
 
 func ptr[T any](s T) *T {
 	return &s
+}
+
+func parseConfig(cfg string) (*hclwrite.File, error) {
+	f, diags := hclwrite.ParseConfig([]byte(cfg), "atlas.hcl", hcl.InitialPos)
+	if diags.HasErrors() {
+		return nil, diags
+	}
+	return f, nil
 }

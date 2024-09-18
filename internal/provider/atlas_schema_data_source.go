@@ -134,7 +134,7 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 			})
 		}
 	}()
-	c, err := d.client(wd.Path())
+	c, err := d.client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error",
 			fmt.Sprintf("Unable to create client, got error: %s", err),
@@ -158,7 +158,6 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 
 func (d *AtlasSchemaDataSourceModel) projectConfig(cloud *AtlasCloudBlock, devURL string) (*projectConfig, *atlas.WorkingDir, error) {
 	cfg := &projectConfig{
-		Config:  baseAtlasHCL,
 		EnvName: "tf",
 		Env: &envConfig{
 			URL:    "file://schema.hcl",
@@ -166,7 +165,7 @@ func (d *AtlasSchemaDataSourceModel) projectConfig(cloud *AtlasCloudBlock, devUR
 		},
 	}
 	if cloud.Valid() {
-		cfg.Cloud = &cloudConfig{
+		cfg.Cloud = &CloudConfig{
 			Token: cloud.Token.ValueString(),
 		}
 	}
