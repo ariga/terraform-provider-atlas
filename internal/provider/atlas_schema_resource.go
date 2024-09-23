@@ -44,26 +44,26 @@ type (
 		Skip            *SkipChanges     `tfsdk:"skip"`
 	}
 	ConcurrentIndex struct {
-		Create *bool `tfsdk:"create"`
-		Drop   *bool `tfsdk:"drop"`
+		Create types.Bool `tfsdk:"create"`
+		Drop   types.Bool `tfsdk:"drop"`
 	}
 	// SkipChanges represents the skip changes policy.
 	SkipChanges struct {
-		AddSchema        *bool `tfsdk:"add_schema"`
-		DropSchema       *bool `tfsdk:"drop_schema"`
-		ModifySchema     *bool `tfsdk:"modify_schema"`
-		AddTable         *bool `tfsdk:"add_table"`
-		DropTable        *bool `tfsdk:"drop_table"`
-		ModifyTable      *bool `tfsdk:"modify_table"`
-		AddColumn        *bool `tfsdk:"add_column"`
-		DropColumn       *bool `tfsdk:"drop_column"`
-		ModifyColumn     *bool `tfsdk:"modify_column"`
-		AddIndex         *bool `tfsdk:"add_index"`
-		DropIndex        *bool `tfsdk:"drop_index"`
-		ModifyIndex      *bool `tfsdk:"modify_index"`
-		AddForeignKey    *bool `tfsdk:"add_foreign_key"`
-		DropForeignKey   *bool `tfsdk:"drop_foreign_key"`
-		ModifyForeignKey *bool `tfsdk:"modify_foreign_key"`
+		AddSchema        types.Bool `tfsdk:"add_schema"`
+		DropSchema       types.Bool `tfsdk:"drop_schema"`
+		ModifySchema     types.Bool `tfsdk:"modify_schema"`
+		AddTable         types.Bool `tfsdk:"add_table"`
+		DropTable        types.Bool `tfsdk:"drop_table"`
+		ModifyTable      types.Bool `tfsdk:"modify_table"`
+		AddColumn        types.Bool `tfsdk:"add_column"`
+		DropColumn       types.Bool `tfsdk:"drop_column"`
+		ModifyColumn     types.Bool `tfsdk:"modify_column"`
+		AddIndex         types.Bool `tfsdk:"add_index"`
+		DropIndex        types.Bool `tfsdk:"drop_index"`
+		ModifyIndex      types.Bool `tfsdk:"modify_index"`
+		AddForeignKey    types.Bool `tfsdk:"add_foreign_key"`
+		DropForeignKey   types.Bool `tfsdk:"drop_foreign_key"`
+		ModifyForeignKey types.Bool `tfsdk:"modify_foreign_key"`
 	}
 )
 
