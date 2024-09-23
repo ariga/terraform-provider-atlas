@@ -229,13 +229,36 @@ func (r *AtlasSchemaResource) Delete(ctx context.Context, req resource.DeleteReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	// Delete the resource by setting
-	// the HCL to an empty string
-	resp.Diagnostics.Append(emptySchema(ctx, data.URL.ValueString(), &data.HCL)...)
-	if resp.Diagnostics.HasError() {
+	cfg, wd, err := data.Workspace(ctx, &r.ProviderData)
+	if err != nil {
+		resp.Diagnostics.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
-	resp.Diagnostics.Append(r.applySchema(ctx, data)...)
+	defer func() {
+		if err := wd.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
+				"error": err,
+			})
+		}
+	}()
+	c, err := r.Client(wd.Path(), cfg.Cloud)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error",
+			fmt.Sprintf("Unable to create client, got error: %s", err),
+		)
+		return
+	}
+	_, err = c.SchemaClean(ctx, &atlas.SchemaCleanParams{
+		Env:         cfg.EnvName,
+		AutoApprove: true,
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Apply Error",
+			fmt.Sprintf("Unable to apply changes, got error: %s", err),
+		)
+		return
+	}
 }
 
 // ValidateConfig implements resource.ResourceWithValidateConfig.
@@ -273,6 +296,7 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		// drops schema resources by accident
 		resp.Diagnostics.Append(r.firstRunCheck(ctx, plan)...)
 	}
+	var isDelete bool
 	if plan == nil {
 		// This is a delete operation
 		if state == nil {
@@ -281,17 +305,12 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 			return
 		}
 		plan = state.Clone()
-		// Delete the resource by setting
-		// the HCL to an empty string.
-		resp.Diagnostics.Append(emptySchema(ctx, plan.URL.ValueString(), &plan.HCL)...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
+		isDelete = true
 	}
-	resp.Diagnostics.Append(PrintPlanSQL(ctx, &r.ProviderData, plan)...)
+	resp.Diagnostics.Append(PrintPlanSQL(ctx, &r.ProviderData, plan, isDelete)...)
 }
 
-func PrintPlanSQL(ctx context.Context, p *ProviderData, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+func PrintPlanSQL(ctx context.Context, p *ProviderData, data *AtlasSchemaResourceModel, delete bool) (diags diag.Diagnostics) {
 	cfg, wd, err := data.Workspace(ctx, p)
 	if err != nil {
 		diags.AddError("Generate config failure",
@@ -312,20 +331,37 @@ func PrintPlanSQL(ctx context.Context, p *ProviderData, data *AtlasSchemaResourc
 		)
 		return
 	}
-	result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
-		Env:    cfg.EnvName,
-		TxMode: data.TxMode.ValueString(),
-		DryRun: true,
-	})
-	if err != nil {
-		diags.AddError("Atlas Plan Error",
-			fmt.Sprintf("Unable to generate migration plan, got error: %s", err),
-		)
-		return
+	var appliedFile *atlas.AppliedFile
+	if delete {
+		result, err := c.SchemaClean(ctx, &atlas.SchemaCleanParams{
+			Env:    cfg.EnvName,
+			DryRun: true,
+		})
+		if err != nil {
+			diags.AddError("Atlas Plan Error",
+				fmt.Sprintf("Unable to generate migration plan, got error: %s", err),
+			)
+			return
+		}
+		appliedFile = result.Applied
+	} else {
+		result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
+			Env:    cfg.EnvName,
+			TxMode: data.TxMode.ValueString(),
+			DryRun: true,
+		})
+		if err != nil {
+			diags.AddError("Atlas Plan Error",
+				fmt.Sprintf("Unable to generate migration plan, got error: %s", err),
+			)
+			return
+		}
+		appliedFile = result.Applied
+
 	}
-	if len(result.Changes.Pending) > 0 {
+	if appliedFile != nil && len(appliedFile.Applied) > 0 {
 		buf := &strings.Builder{}
-		for _, stmt := range result.Changes.Pending {
+		for _, stmt := range appliedFile.Applied {
 			fmt.Fprintln(buf, stmt)
 		}
 		diags.AddWarning("Atlas Plan",
