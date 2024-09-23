@@ -59,7 +59,10 @@ func (c *projectConfig) Render(w io.Writer) error {
 		return diags
 	}
 	if err := mergeEnvBlock(dst.Body(), c.Env.AsBlock(), c.EnvName); err != nil {
-		return err
+		return fmt.Errorf(`%w:
+
+%s
+`, err, c.Config)
 	}
 	_, err := dst.WriteTo(w)
 	return err

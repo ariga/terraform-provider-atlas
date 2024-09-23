@@ -26,11 +26,7 @@ import (
 type (
 	// AtlasProvider defines the provider implementation.
 	AtlasProvider struct {
-		// version is set to the provider version on release, "dev" when the
-		// provider is built and ran locally, and "test" when running acceptance
-		// testing.
-		version string
-		data    providerData
+		data ProviderData
 	}
 	// AtlasProviderModel describes the provider data model.
 	AtlasProviderModel struct {
@@ -59,16 +55,18 @@ type (
 
 		Login(context.Context, *atlas.LoginParams) error
 	}
-	providerData struct {
-		// client is the factory function to create a new AtlasExec client.
+	ProviderData struct {
+		// DevURL is the URL of the dev-db.
+		DevURL string
+		// Cloud is the Atlas Cloud configuration.
+		Cloud *AtlasCloudBlock
+		// Client is the factory function to create a new AtlasExec Client.
 		// It is set during the provider configuration.
-		client func(wd string, c *CloudConfig) (AtlasExec, error)
-		// devURL is the URL of the dev-db.
-		devURL string
-		// cloud is the Atlas Cloud configuration.
-		cloud *AtlasCloudBlock
-		// version is set to the provider version on release
-		version string
+		Client func(wd string, c *CloudConfig) (AtlasExec, error)
+		// version is set to the provider version on release, "dev" when the
+		// provider is built and ran locally, and "test" when running acceptance
+		// testing.
+		Version string
 	}
 )
 
@@ -104,16 +102,14 @@ const (
 // New returns a new provider.
 func New(address, version, commit string) func() provider.Provider {
 	return func() provider.Provider {
-		return &AtlasProvider{
-			version: version,
-		}
+		return &AtlasProvider{data: ProviderData{Version: version}}
 	}
 }
 
 // Metadata implements provider.ProviderWithMetadata.
 func (p *AtlasProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
 	resp.TypeName = "atlas"
-	resp.Version = p.version
+	resp.Version = p.data.Version
 }
 
 // GetSchema implements provider.Provider.
@@ -155,7 +151,7 @@ func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureReq
 			return nil, err
 		}
 		env := atlas.NewOSEnviron()
-		env["ATLAS_INTEGRATION"] = fmt.Sprintf("terraform-provider-atlas/v%s", p.version)
+		env["ATLAS_INTEGRATION"] = fmt.Sprintf("terraform-provider-atlas/v%s", p.data.Version)
 		if cloud != nil && cloud.Token != "" {
 			env["ATLAS_TOKEN"] = cloud.Token
 		}
@@ -184,12 +180,11 @@ func (p *AtlasProvider) Configure(ctx context.Context, req provider.ConfigureReq
 	if v.Canary {
 		version += "-canary"
 	}
-	tflog.Debug(ctx, "found atlas-cli", map[string]any{
-		"version": version,
-	})
-	p.data = providerData{client: fnClient, cloud: model.Cloud, version: p.version}
+	tflog.Debug(ctx, "found atlas-cli", map[string]any{"version": version})
+	p.data.Client = fnClient
+	p.data.Cloud = model.Cloud
 	if model != nil {
-		p.data.devURL = model.DevURL.ValueString()
+		p.data.DevURL = model.DevURL.ValueString()
 	}
 	resp.DataSourceData = p.data
 	resp.ResourceData = p.data
@@ -213,10 +208,11 @@ func (p *AtlasProvider) Resources(ctx context.Context) []func() resource.Resourc
 
 // ConfigValidators returns a list of functions which will all be performed during validation.
 func (p *AtlasProvider) ValidateConfig(ctx context.Context, req provider.ValidateConfigRequest, resp *provider.ValidateConfigResponse) {
-	if p.version == "dev" || p.version == "test" {
+	v := p.data.Version
+	if v == "dev" || v == "test" {
 		return
 	}
-	msg, err := checkForUpdate(ctx, fmt.Sprintf("v%s", p.version))
+	msg, err := checkForUpdate(ctx, fmt.Sprintf("v%s", p.data.Version))
 	if err != nil {
 		tflog.Error(ctx, "failed to check for update", map[string]interface{}{
 			"error": err,
@@ -224,40 +220,28 @@ func (p *AtlasProvider) ValidateConfig(ctx context.Context, req provider.Validat
 		return
 	}
 	if msg != "" {
-		resp.Diagnostics.AddWarning(
-			"Update Available",
-			msg,
-		)
+		resp.Diagnostics.AddWarning("Update Available", msg)
 	}
 }
 
-func (d *providerData) getDevURL(urls ...types.String) string {
-	for _, u := range urls {
-		if s := u.ValueString(); s != "" {
-			return s
-		}
-	}
-	return d.devURL
-}
-
-func (d *providerData) configure(data any) (diags diag.Diagnostics) {
+func (d *ProviderData) configure(data any) (diags diag.Diagnostics) {
 	// Prevent panic if the provider has not been configured.
 	if data == nil {
 		return
 	}
-	c, ok := data.(providerData)
-	if !ok {
+	if parent, ok := data.(ProviderData); ok {
+		// Copy the parent data to the receiver.
+		*d = parent
+	} else {
 		diags.AddError("Unexpected Configure Type",
 			fmt.Sprintf("Expected ProviderData, got: %T. Please report this issue to the provider developers.", data),
 		)
-		return
 	}
-	*d = c
 	return diags
 }
 
-func (d *providerData) validateConfig(ctx context.Context, cfg tfsdk.Config) (diags diag.Diagnostics) {
-	if d.client == nil {
+func (d *ProviderData) validateConfig(ctx context.Context, cfg tfsdk.Config) (diags diag.Diagnostics) {
+	if d.Client == nil {
 		// TF run validation on resource/data-source before configure,
 		// so we can't validate the config at this point.
 		// If the client is nil, it means that the provider has not been configured.
@@ -268,7 +252,7 @@ func (d *providerData) validateConfig(ctx context.Context, cfg tfsdk.Config) (di
 	if diags.HasError() {
 		return diags
 	}
-	if !devURL.IsUnknown() && devURL.ValueString() == "" && d.devURL == "" {
+	if !devURL.IsUnknown() && devURL.ValueString() == "" && d.DevURL == "" {
 		diags.AddAttributeWarning(tfpath.Root("dev_url"), "dev_url is unset",
 			"It is highly recommended that you use 'dev_url' to specify a dev database.\n"+
 				"to learn more about it, visit: https://atlasgo.io/dev-database")
@@ -279,6 +263,15 @@ func (d *providerData) validateConfig(ctx context.Context, cfg tfsdk.Config) (di
 // Valid returns true if the cloud block is valid.
 func (c *AtlasCloudBlock) Valid() bool {
 	return c != nil && c.Token.ValueString() != ""
+}
+
+func cloudConfig(c ...*AtlasCloudBlock) *CloudConfig {
+	for _, b := range c {
+		if b.Valid() {
+			return &CloudConfig{Token: b.Token.ValueString()}
+		}
+	}
+	return nil
 }
 
 // checkForUpdate checks for version updates and security advisories for Atlas.

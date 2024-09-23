@@ -25,7 +25,7 @@ import (
 type (
 	// AtlasSchemaResource defines the resource implementation.
 	AtlasSchemaResource struct {
-		providerData
+		ProviderData
 	}
 	// AtlasSchemaResourceModel describes the resource data model.
 	AtlasSchemaResourceModel struct {
@@ -283,15 +283,14 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 			return
 		}
 	}
-	resp.Diagnostics.Append(PrintPlanSQL(ctx, r.cloud, r.client, r.getDevURL(plan.DevURL), plan)...)
+	resp.Diagnostics.Append(PrintPlanSQL(ctx, &r.ProviderData, plan)...)
 }
 
-func PrintPlanSQL(ctx context.Context, cloud *AtlasCloudBlock, fn func(string, *CloudConfig) (AtlasExec, error), devURL string, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	cfg, wd, err := data.projectConfig(cloud, devURL)
+func PrintPlanSQL(ctx context.Context, p *ProviderData, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+	cfg, wd, err := data.Workspace(ctx, p)
 	if err != nil {
-		diags.AddError("HCL Error",
-			fmt.Sprintf("Unable to create working directory, got error: %s", err),
-		)
+		diags.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
 	defer func() {
@@ -301,7 +300,7 @@ func PrintPlanSQL(ctx context.Context, cloud *AtlasCloudBlock, fn func(string, *
 			})
 		}
 	}()
-	c, err := fn(wd.Path(), cfg.Cloud)
+	c, err := p.Client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		diags.AddError("Client Error",
 			fmt.Sprintf("Unable to create client, got error: %s", err),
@@ -332,11 +331,10 @@ func PrintPlanSQL(ctx context.Context, cloud *AtlasCloudBlock, fn func(string, *
 }
 
 func (r *AtlasSchemaResource) readSchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	cfg, wd, err := data.projectConfig(r.cloud, r.devURL)
+	cfg, wd, err := data.Workspace(ctx, &r.ProviderData)
 	if err != nil {
-		diags.AddError("HCL Error",
-			fmt.Sprintf("Unable to create working directory, got error: %s", err),
-		)
+		diags.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
 	defer func() {
@@ -346,7 +344,7 @@ func (r *AtlasSchemaResource) readSchema(ctx context.Context, data *AtlasSchemaR
 			})
 		}
 	}()
-	c, err := r.client(wd.Path(), cfg.Cloud)
+	c, err := r.Client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		diags.AddError("Client Error",
 			fmt.Sprintf("Unable to create client, got error: %s", err),
@@ -368,11 +366,10 @@ func (r *AtlasSchemaResource) readSchema(ctx context.Context, data *AtlasSchemaR
 }
 
 func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	cfg, wd, err := data.projectConfig(r.cloud, r.devURL)
+	cfg, wd, err := data.Workspace(ctx, &r.ProviderData)
 	if err != nil {
-		diags.AddError("HCL Error",
-			fmt.Sprintf("Unable to create working directory, got error: %s", err),
-		)
+		diags.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
 	defer func() {
@@ -382,7 +379,7 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 			})
 		}
 	}()
-	c, err := r.client(wd.Path(), cfg.Cloud)
+	c, err := r.Client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		diags.AddError("Client Error",
 			fmt.Sprintf("Unable to create client, got error: %s", err),
@@ -404,11 +401,10 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 }
 
 func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	cfg, wd, err := data.projectConfig(r.cloud, r.devURL)
+	cfg, wd, err := data.Workspace(ctx, &r.ProviderData)
 	if err != nil {
-		diags.AddError("HCL Error",
-			fmt.Sprintf("Unable to create working directory, got error: %s", err),
-		)
+		diags.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
 	defer func() {
@@ -418,7 +414,7 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 			})
 		}
 	}()
-	c, err := r.client(wd.Path(), cfg.Cloud)
+	c, err := r.Client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		diags.AddError("Client Error",
 			fmt.Sprintf("Unable to create client, got error: %s", err),
@@ -453,38 +449,39 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 	return
 }
 
-func (data *AtlasSchemaResourceModel) projectConfig(cloud *AtlasCloudBlock, devdb string) (*projectConfig, *atlas.WorkingDir, error) {
-	dbURL, err := absoluteSqliteURL(data.URL.ValueString())
+func (d *AtlasSchemaResourceModel) Workspace(ctx context.Context, p *ProviderData) (*projectConfig, *atlas.WorkingDir, error) {
+	dbURL, err := absoluteSqliteURL(d.URL.ValueString())
 	if err != nil {
 		return nil, nil, err
 	}
 	cfg := &projectConfig{
+		Cloud:   cloudConfig(p.Cloud),
 		EnvName: "tf",
 		Env: &envConfig{
 			URL:    dbURL,
-			DevURL: defaultString(data.DevURL, devdb),
+			DevURL: defaultString(d.DevURL, p.DevURL),
 			Source: "file://schema.hcl",
-			Diff:   data.Diff,
+			Diff:   d.Diff,
 		},
 	}
-	if cloud.Valid() {
+	if cloud := p.Cloud; cloud.Valid() {
 		cfg.Cloud = &CloudConfig{
 			Token: cloud.Token.ValueString(),
 		}
 	}
-	diags := data.Exclude.ElementsAs(context.Background(), &cfg.Env.Exclude, false)
+	diags := d.Exclude.ElementsAs(ctx, &cfg.Env.Exclude, false)
 	if diags.HasError() {
 		return nil, nil, errors.New(diags.Errors()[0].Summary())
 	}
 	wd, err := atlas.NewWorkingDir(
 		atlas.WithAtlasHCL(cfg.Render),
 		func(ce *atlas.WorkingDir) error {
-			_, err = ce.WriteFile("schema.hcl", []byte(data.HCL.ValueString()))
+			_, err = ce.WriteFile("schema.hcl", []byte(d.HCL.ValueString()))
 			return err
 		},
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 	return cfg, wd, nil
 }

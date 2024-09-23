@@ -19,7 +19,7 @@ import (
 type (
 	// AtlasSchemaDataSource defines the data source implementation.
 	AtlasSchemaDataSource struct {
-		providerData
+		ProviderData
 	}
 	// AtlasSchemaDataSourceModel describes the data source data model.
 	AtlasSchemaDataSourceModel struct {
@@ -120,11 +120,10 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 			vars[k] = v
 		}
 	}
-	cfg, wd, err := data.projectConfig(d.cloud, d.devURL)
+	cfg, wd, err := data.Workspace(ctx, &d.ProviderData)
 	if err != nil {
-		resp.Diagnostics.AddError("HCL Error",
-			fmt.Sprintf("Unable to create working directory, got error: %s", err),
-		)
+		resp.Diagnostics.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
 	defer func() {
@@ -134,7 +133,7 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 			})
 		}
 	}()
-	c, err := d.client(wd.Path(), cfg.Cloud)
+	c, err := d.Client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error",
 			fmt.Sprintf("Unable to create client, got error: %s", err),
@@ -156,18 +155,14 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (d *AtlasSchemaDataSourceModel) projectConfig(cloud *AtlasCloudBlock, devURL string) (*projectConfig, *atlas.WorkingDir, error) {
+func (d *AtlasSchemaDataSourceModel) Workspace(_ context.Context, p *ProviderData) (*projectConfig, *atlas.WorkingDir, error) {
 	cfg := &projectConfig{
+		Cloud:   cloudConfig(p.Cloud),
 		EnvName: "tf",
 		Env: &envConfig{
 			URL:    "file://schema.hcl",
-			DevURL: defaultString(d.DevURL, devURL),
+			DevURL: defaultString(d.DevURL, p.DevURL),
 		},
-	}
-	if cloud.Valid() {
-		cfg.Cloud = &CloudConfig{
-			Token: cloud.Token.ValueString(),
-		}
 	}
 	opts := []atlas.Option{atlas.WithAtlasHCL(cfg.Render)}
 	u, err := url.Parse(filepath.ToSlash(d.Src.ValueString()))
@@ -190,7 +185,7 @@ func (d *AtlasSchemaDataSourceModel) projectConfig(cloud *AtlasCloudBlock, devUR
 	}
 	wd, err := atlas.NewWorkingDir(opts...)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 	return cfg, wd, nil
 }

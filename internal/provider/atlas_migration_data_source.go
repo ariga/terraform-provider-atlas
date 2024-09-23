@@ -18,7 +18,7 @@ import (
 type (
 	// MigrationDataSource defines the data source implementation.
 	MigrationDataSource struct {
-		providerData
+		ProviderData
 	}
 	// MigrationDataSourceModel describes the data source data model.
 	MigrationDataSourceModel struct {
@@ -165,15 +165,10 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	cfg, err := data.projectConfig(d.cloud)
-	if err != nil {
-		resp.Diagnostics.AddError("Generate config failure", err.Error())
-		return
-	}
-	wd, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(cfg.Render))
+	cfg, wd, err := data.Workspace(ctx, &d.ProviderData)
 	if err != nil {
 		resp.Diagnostics.AddError("Generate config failure",
-			fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
+			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
 	defer func() {
@@ -183,7 +178,7 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 			})
 		}
 	}()
-	c, err := d.client(wd.Path(), cfg.Cloud)
+	c, err := d.Client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create client", err.Error())
 		return
@@ -239,29 +234,22 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (d *MigrationDataSourceModel) projectConfig(cloud *AtlasCloudBlock) (*projectConfig, error) {
+func (d *MigrationDataSourceModel) Workspace(_ context.Context, p *ProviderData) (*projectConfig, *atlas.WorkingDir, error) {
 	dbURL, err := absoluteSqliteURL(d.URL.ValueString())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	cfg := &projectConfig{
 		Config:  defaultString(d.Config, ""),
+		Cloud:   cloudConfig(d.Cloud, p.Cloud),
 		EnvName: defaultString(d.EnvName, "tf"),
 		Env: &envConfig{
-			URL: dbURL,
+			URL:    dbURL,
+			DevURL: p.DevURL,
 			Migration: &migrationConfig{
 				RevisionsSchema: d.RevisionsSchema.ValueString(),
 			},
 		},
-	}
-	if d.Cloud.Valid() {
-		// Use the data source cloud block if it is set
-		cloud = d.Cloud
-	}
-	if cloud.Valid() {
-		cfg.Cloud = &CloudConfig{
-			Token: cloud.Token.ValueString(),
-		}
 	}
 	if rd := d.RemoteDir; rd != nil {
 		cfg.Env.Migration.DirURL, err = rd.AtlasURL()
@@ -270,14 +258,18 @@ func (d *MigrationDataSourceModel) projectConfig(cloud *AtlasCloudBlock) (*proje
 			defaultString(d.DirURL, "migrations"))
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if vars := d.Vars.ValueString(); vars != "" {
 		if err = json.Unmarshal([]byte(vars), &cfg.Vars); err != nil {
-			return nil, fmt.Errorf("failed to parse variables: %w", err)
+			return nil, nil, fmt.Errorf("failed to parse variables: %w", err)
 		}
 	}
-	return cfg, nil
+	wd, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(cfg.Render))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+	return cfg, wd, nil
 }
 
 // AtlasURL returns the atlas URL for the remote directory.
