@@ -213,35 +213,49 @@ func hclValue(s string) string {
 }
 
 func mergeEnvBlock(dst *hclwrite.Body, blk *hclwrite.Block, name string) error {
-	blocks := dst.Blocks()
-	envBlocks := make([]*hclwrite.Block, 0, len(blocks))
-	for _, b := range blocks {
-		if b.Type() == "env" {
-			envBlocks = append(envBlocks, b)
-		}
-	}
-	if len(envBlocks) == 0 {
+	env, err := searchBlock(dst, "env", name)
+	switch {
+	case err != nil:
+		return err
+	case env == nil:
 		// No env blocks found, create a new one.
 		mergeBlock(dst.AppendNewBlock("env", []string{name}), blk)
 		return nil
+	default:
+		// Found the block to merge with.
+		mergeBlock(env, blk)
+		return nil
 	}
-	// Check if there is an env block with the given name.
-	env := slices.IndexFunc(envBlocks, func(b *hclwrite.Block) bool {
+}
+
+func searchBlock(parent *hclwrite.Body, typ, name string) (*hclwrite.Block, error) {
+	blocks := parent.Blocks()
+	typBlocks := make([]*hclwrite.Block, 0, len(blocks))
+	for _, b := range blocks {
+		if b.Type() == typ {
+			typBlocks = append(typBlocks, b)
+		}
+	}
+	if len(typBlocks) == 0 {
+		// No things here, return nil.
+		return nil, nil
+	}
+	// Check if there is a block with the given name.
+	idx := slices.IndexFunc(typBlocks, func(b *hclwrite.Block) bool {
 		labels := b.Labels()
 		return len(labels) == 1 && labels[0] == name
 	})
-	if env == -1 {
+	if idx == -1 {
 		// No block matched, check if there is an unnamed env block.
-		env = slices.IndexFunc(envBlocks, func(b *hclwrite.Block) bool {
+		idx = slices.IndexFunc(typBlocks, func(b *hclwrite.Block) bool {
 			return len(b.Labels()) == 0
 		})
-		if env == -1 {
-			return fmt.Errorf(`the env block %q was not found in the give config`, name)
+		if idx == -1 {
+			// Has blocks but none matched.
+			return nil, fmt.Errorf(`the %s block %q was not found in the give config`, typ, name)
 		}
 	}
-	// Found the block to merge with.
-	mergeBlock(envBlocks[env], blk)
-	return nil
+	return typBlocks[idx], nil
 }
 
 func mergeBlock(dst, src *hclwrite.Block) {
