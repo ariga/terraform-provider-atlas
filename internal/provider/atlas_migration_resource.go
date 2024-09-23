@@ -34,7 +34,7 @@ import (
 type (
 	// MigrationResource defines the resource implementation.
 	MigrationResource struct {
-		providerData
+		ProviderData
 	}
 	// DeploymentFlow defines the flow of a deployment.
 	DeploymentFlow struct {
@@ -396,16 +396,10 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 	if plan == nil || plan.DirURL.IsUnknown() || plan.URL.IsUnknown() {
 		return
 	}
-	cfg, err := plan.projectConfig(r.cloud, r.devURL)
+	cfg, wd, err := plan.Workspace(ctx, &r.ProviderData)
 	if err != nil {
 		resp.Diagnostics.AddError("Generate config failure",
-			fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
-		return
-	}
-	wd, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(cfg.Render))
-	if err != nil {
-		resp.Diagnostics.AddError("Generate config failure",
-			fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
+			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
 	defer func() {
@@ -415,7 +409,7 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			})
 		}
 	}()
-	c, err := r.client(wd.Path(), cfg.Cloud)
+	c, err := r.Client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create client", err.Error())
 		return
@@ -486,16 +480,10 @@ const (
 )
 
 func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResourceModel) (diags diag.Diagnostics) {
-	cfg, err := data.projectConfig(r.cloud, r.devURL)
+	cfg, wd, err := data.Workspace(ctx, &r.ProviderData)
 	if err != nil {
 		diags.AddError("Generate config failure",
-			fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
-		return
-	}
-	wd, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(cfg.Render))
-	if err != nil {
-		diags.AddError("Generate config failure",
-			fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
+			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
 	defer func() {
@@ -512,7 +500,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
 		return
 	}
-	c, err := r.client(wd.Path(), cfg.Cloud)
+	c, err := r.Client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		diags.AddError("Failed to create client", err.Error())
 		return
@@ -541,7 +529,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			ToVersion: status.Available[len(status.Available)-1].Version,
 			Context: &atlas.DeployRunContext{
 				TriggerType:    atlas.TriggerTypeTerraform,
-				TriggerVersion: r.version,
+				TriggerVersion: r.Version,
 			},
 		}
 		params.DirURL, err = cfg.Env.DirURLLatest()
@@ -594,7 +582,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 				Amount: amount,
 				Context: &atlas.DeployRunContext{
 					TriggerType:    atlas.TriggerTypeTerraform,
-					TriggerVersion: r.version,
+					TriggerVersion: r.Version,
 				},
 			})
 			if err != nil {
@@ -609,16 +597,10 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 
 func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationResourceModel) (obj types.Object, diags diag.Diagnostics) {
 	obj = types.ObjectNull(statusObjectAttrs)
-	cfg, err := data.projectConfig(r.cloud, r.devURL)
+	cfg, wd, err := data.Workspace(ctx, &r.ProviderData)
 	if err != nil {
 		diags.AddError("Generate config failure",
-			fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
-		return
-	}
-	wd, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(cfg.Render))
-	if err != nil {
-		diags.AddError("Generate config failure",
-			fmt.Sprintf("Failed to create temporary directory: %s", err.Error()))
+			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
 	defer func() {
@@ -628,7 +610,7 @@ func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationReso
 			})
 		}
 	}()
-	c, err := r.client(wd.Path(), cfg.Cloud)
+	c, err := r.Client(wd.Path(), cfg.Cloud)
 	if err != nil {
 		diags.AddError("Failed to create client", err.Error())
 		return
@@ -808,32 +790,24 @@ const (
 	SchemaTypeSQLite = "sqlite"
 )
 
-func (d *MigrationResourceModel) projectConfig(cloud *AtlasCloudBlock, devURL string) (*projectConfig, error) {
+func (d *MigrationResourceModel) Workspace(_ context.Context, p *ProviderData) (*projectConfig, *atlas.WorkingDir, error) {
 	dbURL, err := absoluteSqliteURL(d.URL.ValueString())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	cfg := &projectConfig{
 		Config:  defaultString(d.Config, ""),
+		Cloud:   cloudConfig(d.Cloud, p.Cloud),
 		EnvName: defaultString(d.EnvName, "tf"),
 		Env: &envConfig{
 			URL:    dbURL,
-			DevURL: defaultString(d.DevURL, devURL),
+			DevURL: defaultString(d.DevURL, p.DevURL),
 			Migration: &migrationConfig{
 				Baseline:        d.Baseline.ValueString(),
 				RevisionsSchema: d.RevisionsSchema.ValueString(),
 				ExecOrder:       d.ExecOrder.ValueString(),
 			},
 		},
-	}
-	if d.Cloud.Valid() {
-		// Use the resource's cloud block if it is set
-		cloud = d.Cloud
-	}
-	if cloud.Valid() {
-		cfg.Cloud = &CloudConfig{
-			Token: cloud.Token.ValueString(),
-		}
 	}
 	if rd := d.RemoteDir; rd != nil {
 		cfg.Env.Migration.DirURL, err = rd.AtlasURL()
@@ -842,17 +816,17 @@ func (d *MigrationResourceModel) projectConfig(cloud *AtlasCloudBlock, devURL st
 			defaultString(d.DirURL, "migrations"))
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if f := d.ProtectedFlows; f != nil {
 		if d := f.MigrateDown; d != nil && d.Allow.ValueBool() {
 			if strings.HasPrefix(cfg.Env.Migration.DirURL, "atlas://") {
 				if d.AutoApprove.ValueBool() {
-					return nil, fmt.Errorf("auto_approve is not allowed for a remote directory")
+					return nil, nil, fmt.Errorf("auto_approve is not allowed for a remote directory")
 				}
 			} else {
 				if !d.AutoApprove.ValueBool() {
-					return nil, fmt.Errorf("allow cannot be true without auto_approve for local migration directory")
+					return nil, nil, fmt.Errorf("allow cannot be true without auto_approve for local migration directory")
 				}
 			}
 			cfg.MigrateDown = true
@@ -860,8 +834,12 @@ func (d *MigrationResourceModel) projectConfig(cloud *AtlasCloudBlock, devURL st
 	}
 	if vars := d.Vars.ValueString(); vars != "" {
 		if err = json.Unmarshal([]byte(vars), &cfg.Vars); err != nil {
-			return nil, fmt.Errorf("failed to parse variables: %w", err)
+			return nil, nil, fmt.Errorf("failed to parse variables: %w", err)
 		}
 	}
-	return cfg, nil
+	wd, err := atlas.NewWorkingDir(atlas.WithAtlasHCL(cfg.Render))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+	return cfg, wd, nil
 }
