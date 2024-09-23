@@ -8,13 +8,14 @@ import (
 
 	"github.com/mitchellh/go-homedir"
 
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	tfpath "github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"golang.org/x/mod/semver"
@@ -240,22 +241,64 @@ func (d *ProviderData) configure(data any) (diags diag.Diagnostics) {
 	return diags
 }
 
-func (d *ProviderData) validateConfig(ctx context.Context, cfg tfsdk.Config) (diags diag.Diagnostics) {
+type atlasWorkspace interface {
+	Workspace(context.Context, *ProviderData) (*projectConfig, *atlas.WorkingDir, error)
+}
+
+func (d *ProviderData) validate(ctx context.Context, data atlasWorkspace) (diags diag.Diagnostics) {
 	if d.Client == nil {
 		// TF run validation on resource/data-source before configure,
 		// so we can't validate the config at this point.
 		// If the client is nil, it means that the provider has not been configured.
 		return
 	}
-	var devURL types.String
-	diags.Append(cfg.GetAttribute(ctx, tfpath.Root("dev_url"), &devURL)...)
-	if diags.HasError() {
-		return diags
+	cfg, wd, err := data.Workspace(ctx, d)
+	if err != nil {
+		diags.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
+		return
 	}
-	if !devURL.IsUnknown() && devURL.ValueString() == "" && d.DevURL == "" {
-		diags.AddAttributeWarning(tfpath.Root("dev_url"), "dev_url is unset",
-			"It is highly recommended that you use 'dev_url' to specify a dev database.\n"+
-				"to learn more about it, visit: https://atlasgo.io/dev-database")
+	defer func() {
+		if err := wd.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
+				"error": err,
+			})
+		}
+	}()
+	// The atlas.hcl file is required to be present in the working directory.
+	raw, err := os.ReadFile(wd.Path("atlas.hcl"))
+	if err != nil {
+		diags.AddError("Read atlas.hcl failure", err.Error())
+		return
+	}
+	tflog.Debug(ctx, "atlas.hcl", map[string]any{"content": string(raw)})
+	f, wdiags := hclwrite.ParseConfig(raw, "atlas.hcl", hcl.InitialPos)
+	if wdiags.HasErrors() {
+		return
+	}
+	// Check if the env block exists.
+	blk, err := searchBlock(f.Body(), "env", cfg.EnvName)
+	switch {
+	case err != nil:
+		diags.AddError("Invalid atlas.hcl config", fmt.Sprintf(`
+%s
+
+the atlas.hcl content:
+
+%s
+`, err.Error(), string(raw)))
+		return
+	case blk == nil:
+		diags.AddError("Invalid atlas.hcl config", "No env blocks found")
+		return
+	default:
+		// Just check if the dev_url is set.
+		// We can't check the attributes' value because it require EvalContext.
+		if _, found := blk.Body().Attributes()["dev"]; !found {
+			diags.AddAttributeWarning(tfpath.Root("dev_url"), "dev_url is unset",
+				"It is highly recommended that you use 'dev_url' to specify a dev database.\n"+
+					"to learn more about it, visit: https://atlasgo.io/dev-database")
+		}
 	}
 	return diags
 }

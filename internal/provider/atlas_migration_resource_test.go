@@ -566,10 +566,11 @@ atlas {
 HCL
 		}
 		resource "atlas_migration" "testdb" {
-			url     = "%[2]s"
-			version = data.atlas_migration.hello.next
-			dir     = data.atlas_migration.hello.dir
-			config  = data.atlas_migration.hello.config
+			url      = "%[2]s"
+			version  = data.atlas_migration.hello.next
+			dir      = data.atlas_migration.hello.dir
+			config   = data.atlas_migration.hello.config
+			env_name = "tf"
 		}
 		`, srv.URL, dbURL)
 	)

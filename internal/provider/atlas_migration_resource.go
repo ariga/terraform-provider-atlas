@@ -302,6 +302,13 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	if data.Config.ValueString() != "" && !data.EnvName.IsUnknown() && data.EnvName.ValueString() == "" {
+		resp.Diagnostics.AddError(
+			"env_name is empty",
+			"env_name is required when config is set",
+		)
+		return
+	}
 	switch u, err := url.Parse(filepath.ToSlash(data.DirURL.ValueString())); {
 	case err != nil:
 		resp.Diagnostics.AddError("url is invalid", err.Error())
@@ -321,7 +328,7 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 		return
 	default:
 		// Local dir, validate config for dev-url
-		resp.Diagnostics.Append(r.validateConfig(ctx, req.Config)...)
+		resp.Diagnostics.Append(r.validate(ctx, &data)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -378,12 +385,7 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 				"`atlas_migration.next` or `atlas_migration.latest`\n",
 		)
 	}
-	if data.Config.ValueString() != "" && !data.EnvName.IsUnknown() && data.EnvName.ValueString() == "" {
-		resp.Diagnostics.AddError(
-			"env_name is empty",
-			"env_name is required when config is set",
-		)
-	}
+
 }
 
 // ModifyPlan implements resource.ResourceWithModifyPlan.

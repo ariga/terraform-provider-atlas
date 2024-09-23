@@ -10,6 +10,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclwrite"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -106,11 +107,11 @@ func Test_SchemaTemplate(t *testing.T) {
 			DevURL: "mysql://user:pass@localhost:3307/tf-db",
 			Diff: &Diff{
 				ConcurrentIndex: &ConcurrentIndex{
-					Create: ptr(true),
+					Create: types.BoolValue(true),
 				},
 				Skip: &SkipChanges{
-					AddIndex:  ptr(true),
-					DropTable: ptr(false),
+					AddIndex:  types.BoolValue(true),
+					DropTable: types.BoolValue(false),
 				},
 			},
 		},
@@ -243,10 +244,6 @@ func checkContent(t *testing.T, actual string, gen func(string) error) {
 	e, err := os.ReadFile(expected)
 	require.NoError(t, err)
 	require.Equal(t, string(e), actual)
-}
-
-func ptr[T any](s T) *T {
-	return &s
 }
 
 func parseConfig(cfg string) (*hclwrite.File, error) {

@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/zclconf/go-cty/cty"
 
 	atlas "ariga.io/atlas-go-sdk/atlasexec"
@@ -191,10 +192,11 @@ func (c *envConfig) DirURLLatest() (string, error) {
 	}
 }
 
-func attrBoolPtr(b *hclwrite.Body, v *bool, n string) {
-	if v != nil {
-		b.SetAttributeValue(n, cty.BoolVal(*v))
+func attrBoolPtr(b *hclwrite.Body, v types.Bool, n string) {
+	if v.IsUnknown() || v.IsNull() {
+		return
 	}
+	b.SetAttributeValue(n, cty.BoolVal(v.ValueBool()))
 }
 
 func listStringVal(s []string) cty.Value {
