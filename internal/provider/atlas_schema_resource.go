@@ -240,7 +240,12 @@ func (r *AtlasSchemaResource) Delete(ctx context.Context, req resource.DeleteReq
 
 // ValidateConfig implements resource.ResourceWithValidateConfig.
 func (r AtlasSchemaResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
-	resp.Diagnostics.Append(r.validateConfig(ctx, req.Config)...)
+	var plan AtlasSchemaResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(r.validate(ctx, &plan)...)
 }
 
 // ModifyPlan implements resource.ResourceWithModifyPlan.

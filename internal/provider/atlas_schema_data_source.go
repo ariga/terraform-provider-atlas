@@ -89,7 +89,12 @@ func (d *AtlasSchemaDataSource) Configure(ctx context.Context, req datasource.Co
 
 // ValidateConfig implements datasource.DataSourceWithValidateConfig.
 func (d *AtlasSchemaDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
-	resp.Diagnostics.Append(d.validateConfig(ctx, req.Config)...)
+	var data AtlasSchemaDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(d.validate(ctx, &data)...)
 }
 
 // Read implements datasource.DataSource.

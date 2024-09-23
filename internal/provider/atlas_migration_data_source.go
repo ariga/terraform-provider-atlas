@@ -95,7 +95,9 @@ func (r MigrationDataSource) ValidateConfig(ctx context.Context, req datasource.
 			"env_name is empty",
 			"env_name is required when config is set",
 		)
+		return
 	}
+	resp.Diagnostics.Append(r.validate(ctx, &data)...)
 }
 
 // GetSchema implements datasource.DataSource.
