@@ -3,7 +3,7 @@ module ariga.io/ariga/terraform-provider-atlas
 go 1.23
 
 require (
-	ariga.io/atlas v0.27.0
+	ariga.io/atlas v0.28.1
 	ariga.io/atlas-go-sdk v0.6.2
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/hashicorp/hcl/v2 v2.21.0
@@ -29,6 +29,7 @@ require (
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/bgentry/speakeasy v0.1.0 // indirect
+	github.com/bmatcuk/doublestar v1.3.4 // indirect
 	github.com/cloudflare/circl v1.3.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.13.0 // indirect
