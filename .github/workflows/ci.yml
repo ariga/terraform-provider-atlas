@@ -112,7 +112,7 @@ jobs:
           args: release --clean --skip=validate,publish,sign
         env:
           GORELEASER_CURRENT_TAG: v0.0.0-pre.0
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: atlas-provider
           path: ./dist/terraform-provider-atlas_0.0.0-pre.0_linux_amd64.zip
@@ -134,7 +134,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: './go.mod'
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: atlas-provider
           path: ./dist
@@ -221,7 +221,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: './go.mod'
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: atlas-provider
           path: ./dist
@@ -294,7 +294,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: './go.mod'
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: atlas-provider
           path: ./dist
@@ -356,7 +356,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: './go.mod'
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: atlas-provider
           path: ./dist
