@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"ariga.io/atlas/sql/migrate"
+	"ariga.io/atlas/sql/sqlclient"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
@@ -336,7 +337,7 @@ func absoluteSqliteURL(s string) (string, error) {
 		// No URL to parse.
 		return "", nil
 	}
-	switch u, err := url.Parse(filepath.ToSlash(s)); {
+	switch u, err := sqlclient.ParseURL(filepath.ToSlash(s)); {
 	case err != nil:
 		return "", err
 	case SchemaTypeSQLite != u.Scheme:
