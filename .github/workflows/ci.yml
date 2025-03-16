@@ -18,6 +18,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: './go.mod'
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.11.2'
+          terraform_wrapper: false
       - name: Run linters
         uses: golangci/golangci-lint-action@v3
         with:
