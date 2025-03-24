@@ -37,6 +37,7 @@ resource "atlas_schema" "market" {
 - `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `diff` (Block, Optional) (see [below for nested schema](#nestedblock--diff))
 - `exclude` (List of String) Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude-schemas
+- `lint` (Block, Optional) The lint policy (see [below for nested schema](#nestedblock--lint))
 - `tx_mode` (String) The transaction mode to use when applying the schema. See https://atlasgo.io/versioned/apply#transaction-configuration
 
 ### Read-Only
@@ -80,3 +81,12 @@ Optional:
 - `modify_index` (Boolean) Whether to skip modifying indexes
 - `modify_schema` (Boolean) Whether to skip modifying schemas
 - `modify_table` (Boolean) Whether to skip modifying tables
+
+
+
+<a id="nestedblock--lint"></a>
+### Nested Schema for `lint`
+
+Optional:
+
+- `review` (String) The review policy

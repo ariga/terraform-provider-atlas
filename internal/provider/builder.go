@@ -41,6 +41,7 @@ type (
 		Schemas   []string
 		Exclude   []string
 		Diff      *Diff
+		Lint      *Lint
 		Migration *migrationConfig
 	}
 	CloudConfig struct {
@@ -130,6 +131,12 @@ func (env *envConfig) AsBlock() *hclwrite.Block {
 			attrBoolPtr(b, v.AddForeignKey, "add_foreign_key")
 			attrBoolPtr(b, v.DropForeignKey, "drop_foreign_key")
 			attrBoolPtr(b, v.ModifyForeignKey, "modify_foreign_key")
+		}
+	}
+	if ld := env.Lint; ld != nil {
+		l := e.AppendNewBlock("lint", nil).Body()
+		if r := ld.Review; !r.IsNull() {
+			l.SetAttributeValue("review", cty.StringVal(r.ValueString()))
 		}
 	}
 	return blk
