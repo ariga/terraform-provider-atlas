@@ -98,28 +98,46 @@ func TestTemplate(t *testing.T) {
 }
 
 func Test_SchemaTemplate(t *testing.T) {
-	data := &projectConfig{
-		Config:  "",
-		EnvName: "tf",
-		Env: &envConfig{
-			Source: "file://schema.hcl",
-			URL:    "mysql://user:pass@localhost:3306/tf-db",
-			DevURL: "mysql://user:pass@localhost:3307/tf-db",
-			Diff: &Diff{
-				ConcurrentIndex: &ConcurrentIndex{
-					Create: types.BoolValue(true),
-				},
-				Skip: &SkipChanges{
-					AddIndex:  types.BoolValue(true),
-					DropTable: types.BoolValue(false),
+	tests := []struct {
+		name     string
+		data     *projectConfig
+		expected string
+	}{
+		{
+			name: "empty env",
+			data: &projectConfig{
+				Config:  "",
+				EnvName: "tf",
+				Env:     &envConfig{},
+			},
+			expected: `env "tf" {
+}
+`,
+		},
+		{
+			name: "default",
+			data: &projectConfig{
+				Config:  "",
+				EnvName: "tf",
+				Env: &envConfig{
+					Source: "file://schema.hcl",
+					URL:    "mysql://user:pass@localhost:3306/tf-db",
+					DevURL: "mysql://user:pass@localhost:3307/tf-db",
+					Diff: &Diff{
+						ConcurrentIndex: &ConcurrentIndex{
+							Create: types.BoolValue(true),
+						},
+						Skip: &SkipChanges{
+							AddIndex:  types.BoolValue(true),
+							DropTable: types.BoolValue(false),
+						},
+					},
+					Lint: &Lint{
+						Review: types.StringValue("ALWAYS"),
+					},
 				},
 			},
-		},
-	}
-
-	out := &bytes.Buffer{}
-	require.NoError(t, data.Render(out))
-	require.Equal(t, `env "tf" {
+			expected: `env "tf" {
   dev = "mysql://user:pass@localhost:3307/tf-db"
   src = "file://schema.hcl"
   url = "mysql://user:pass@localhost:3306/tf-db"
@@ -132,8 +150,21 @@ func Test_SchemaTemplate(t *testing.T) {
       add_index  = true
     }
   }
+  lint {
+    review = "ALWAYS"
+  }
 }
-`, out.String())
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := &bytes.Buffer{}
+			require.NoError(t, tt.data.Render(out))
+			require.Equal(t, tt.expected, out.String())
+		})
+	}
 }
 
 func Test_mergeEnv(t *testing.T) {

@@ -37,11 +37,16 @@ type (
 		TxMode  types.String `tfsdk:"tx_mode"`
 		// Policies
 		Diff *Diff `tfsdk:"diff"`
+		Lint *Lint `tfsdk:"lint"`
 	}
 	// Diff defines the diff policies to apply when planning schema changes.
 	Diff struct {
 		ConcurrentIndex *ConcurrentIndex `tfsdk:"concurrent_index"`
 		Skip            *SkipChanges     `tfsdk:"skip"`
+	}
+	// Lint defines the lint policies to apply when planning schema changes.
+	Lint struct {
+		Review types.String `tfsdk:"review"`
 	}
 	ConcurrentIndex struct {
 		Create types.Bool `tfsdk:"create"`
@@ -107,6 +112,18 @@ var (
 			},
 		},
 	}
+	lintBlock = schema.SingleNestedBlock{
+		Description: "The lint policy",
+		Attributes: map[string]schema.Attribute{
+			"review": schema.StringAttribute{
+				Description: "The review policy",
+				Optional:    true,
+				Validators: []validator.String{
+					stringvalidator.OneOf("ALWAYS", "WARNING", "ERROR"),
+				},
+			},
+		},
+	}
 )
 
 func (m AtlasSchemaResourceModel) Clone() *AtlasSchemaResourceModel {
@@ -135,6 +152,7 @@ func (r *AtlasSchemaResource) Schema(ctx context.Context, _ resource.SchemaReque
 			"See https://atlasgo.io/",
 		Blocks: map[string]schema.Block{
 			"diff": diffBlock,
+			"lint": lintBlock,
 		},
 		Attributes: map[string]schema.Attribute{
 			"hcl": schema.StringAttribute{
@@ -503,6 +521,7 @@ func (d *AtlasSchemaResourceModel) Workspace(ctx context.Context, p *ProviderDat
 			DevURL: defaultString(d.DevURL, p.DevURL),
 			Source: "file://schema.hcl",
 			Diff:   d.Diff,
+			Lint:   d.Lint,
 		},
 	}
 	if cloud := p.Cloud; cloud.Valid() {
