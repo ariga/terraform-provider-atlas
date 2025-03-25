@@ -477,7 +477,7 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 		Env:         cfg.EnvName,
 		Vars:        cfg.Vars,
 		TxMode:      data.TxMode.ValueString(),
-		AutoApprove: true,
+		AutoApprove: !data.ShouldReview(),
 	})
 	if err != nil {
 		diags.AddError("Apply Error",
@@ -513,7 +513,7 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 		DryRun:      true,
 		Env:         cfg.EnvName,
 		Vars:        cfg.Vars,
-		AutoApprove: true,
+		AutoApprove: !data.ShouldReview(),
 	})
 	if err != nil {
 		diags.AddError("Atlas Plan Error",
@@ -580,6 +580,11 @@ func (d *AtlasSchemaResourceModel) Workspace(ctx context.Context, p *ProviderDat
 		return nil, nil, fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 	return cfg, wd, nil
+}
+
+// ShouldReview returns true if the `review` attribute in the lint block is set.
+func (d *AtlasSchemaResourceModel) ShouldReview() bool {
+	return d.Lint != nil && d.Lint.Review.ValueString() != ""
 }
 
 func boolOptional(desc string) schema.Attribute {
