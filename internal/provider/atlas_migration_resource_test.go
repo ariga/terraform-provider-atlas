@@ -601,7 +601,6 @@ HCL
 					Config:             config,
 					ExpectNonEmptyPlan: true,
 					Check: resource.ComposeAggregateTestCheckFunc(
-						resource.TestCheckResourceAttr("atlas_migration.testdb", "id", "remote_dir://test"),
 						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "1"),
 						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.latest", "2"),
 						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.next", "2"),
@@ -611,7 +610,6 @@ HCL
 					Config:             config,
 					ExpectNonEmptyPlan: true,
 					Check: resource.ComposeAggregateTestCheckFunc(
-						resource.TestCheckResourceAttr("atlas_migration.testdb", "id", "remote_dir://test"),
 						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "2"),
 						resource.TestCheckResourceAttr("atlas_migration.testdb", "status.latest", "2"),
 						resource.TestCheckNoResourceAttr("atlas_migration.testdb", "status.next"),
@@ -707,7 +705,6 @@ HCL
 			{
 				Config: config,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_migration.hello", "id", "remote_dir://test"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "dir", "atlas://test"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.current", "2"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.latest", "2"),
@@ -747,7 +744,6 @@ HCL
 			{
 				Config: config,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_migration.hello", "id", "remote_dir://test"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "dir", "atlas://test?tag=one-down"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.current", "1"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.latest", "1"),
@@ -781,7 +777,6 @@ HCL
 			{
 				Config: config,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_migration.hello", "id", "remote_dir://test"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "dir", "atlas://test?tag=latest"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.current", "2"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.latest", "2"),
@@ -923,7 +918,6 @@ atlas {
 HCL
 				}`, devURL, srv.URL, dbURL),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_migration.hello", "id", "remote_dir://test"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.current", "4"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.latest", "4"),
 					resource.TestCheckNoResourceAttr("atlas_migration.hello", "status.next"),
@@ -1021,7 +1015,6 @@ HCL
 					}
 				}`, devURL, srv.URL, dbURL),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("atlas_migration.hello", "id", "remote_dir://test"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.current", "3"),
 					resource.TestCheckResourceAttr("atlas_migration.hello", "status.latest", "3"),
 					resource.TestCheckNoResourceAttr("atlas_migration.hello", "status.next"),

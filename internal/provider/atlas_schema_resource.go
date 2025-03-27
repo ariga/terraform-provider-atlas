@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"slices"
 	"strings"
 
+	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -207,7 +207,14 @@ func (r *AtlasSchemaResource) Create(ctx context.Context, req resource.CreateReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	data.ID = types.StringValue(urlToID(data.URL))
+	id, err := uuid.GenerateUUID()
+	if err != nil {
+		resp.Diagnostics.AddError("UUID Error",
+			fmt.Sprintf("Unable to generate UUID, got error: %s", err),
+		)
+		return
+	}
+	data.ID = types.StringValue(id)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -222,7 +229,6 @@ func (r *AtlasSchemaResource) Read(ctx context.Context, req resource.ReadRequest
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	data.ID = types.StringValue(urlToID(data.URL))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -544,15 +550,6 @@ func (d *AtlasSchemaResourceModel) Workspace(ctx context.Context, p *ProviderDat
 		return nil, nil, fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 	return cfg, wd, nil
-}
-
-func urlToID(u types.String) string {
-	uu, err := url.Parse(u.ValueString())
-	if err != nil {
-		return u.ValueString()
-	}
-	uu.User = nil
-	return uu.String()
 }
 
 func boolOptional(desc string) schema.Attribute {
