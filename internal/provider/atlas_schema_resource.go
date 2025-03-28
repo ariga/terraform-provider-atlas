@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -38,6 +39,10 @@ type (
 		// Policies
 		Diff *Diff `tfsdk:"diff"`
 		Lint *Lint `tfsdk:"lint"`
+		// Project config
+		Config  types.String `tfsdk:"config"`
+		Vars    types.String `tfsdk:"variables"`
+		EnvName types.String `tfsdk:"env_name"`
 	}
 	// Diff defines the diff policies to apply when planning schema changes.
 	Diff struct {
@@ -165,7 +170,7 @@ func (r *AtlasSchemaResource) Schema(ctx context.Context, _ resource.SchemaReque
 			},
 			"url": schema.StringAttribute{
 				Description: "The url of the database see https://atlasgo.io/cli/url",
-				Required:    true,
+				Optional:    true,
 				Sensitive:   true,
 			},
 			"dev_url": schema.StringAttribute{
@@ -191,6 +196,19 @@ func (r *AtlasSchemaResource) Schema(ctx context.Context, _ resource.SchemaReque
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
+			},
+			"config": schema.StringAttribute{
+				Description: "The content of atlas.hcl config",
+				Optional:    true,
+				Sensitive:   false,
+			},
+			"variables": schema.StringAttribute{
+				Description: "Stringify JSON object containing variables to be used inside the Atlas configuration file.",
+				Optional:    true,
+			},
+			"env_name": schema.StringAttribute{
+				Description: "The name of the environment used for reporting runs to Atlas Cloud. Default: tf",
+				Optional:    true,
 			},
 		},
 	}
@@ -275,6 +293,7 @@ func (r *AtlasSchemaResource) Delete(ctx context.Context, req resource.DeleteReq
 	}
 	_, err = c.SchemaClean(ctx, &atlas.SchemaCleanParams{
 		Env:         cfg.EnvName,
+		Vars:        cfg.Vars,
 		AutoApprove: true,
 	})
 	if err != nil {
@@ -359,6 +378,7 @@ func PrintPlanSQL(ctx context.Context, p *ProviderData, data *AtlasSchemaResourc
 	if delete {
 		result, err := c.SchemaClean(ctx, &atlas.SchemaCleanParams{
 			Env:    cfg.EnvName,
+			Vars:   cfg.Vars,
 			DryRun: true,
 		})
 		if err != nil {
@@ -371,6 +391,7 @@ func PrintPlanSQL(ctx context.Context, p *ProviderData, data *AtlasSchemaResourc
 	} else {
 		result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
 			Env:    cfg.EnvName,
+			Vars:   cfg.Vars,
 			TxMode: data.TxMode.ValueString(),
 			DryRun: true,
 		})
@@ -417,7 +438,8 @@ func (r *AtlasSchemaResource) readSchema(ctx context.Context, data *AtlasSchemaR
 		return
 	}
 	hcl, err := c.SchemaInspect(ctx, &atlas.SchemaInspectParams{
-		Env: cfg.EnvName,
+		Env:  cfg.EnvName,
+		Vars: cfg.Vars,
 	})
 	if err != nil {
 		diags.AddError("Inspect Error",
@@ -453,6 +475,7 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 	}
 	_, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
 		Env:         cfg.EnvName,
+		Vars:        cfg.Vars,
 		TxMode:      data.TxMode.ValueString(),
 		AutoApprove: true,
 	})
@@ -489,6 +512,7 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 	result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
 		DryRun:      true,
 		Env:         cfg.EnvName,
+		Vars:        cfg.Vars,
 		AutoApprove: true,
 	})
 	if err != nil {
@@ -520,8 +544,9 @@ func (d *AtlasSchemaResourceModel) Workspace(ctx context.Context, p *ProviderDat
 		return nil, nil, err
 	}
 	cfg := &projectConfig{
+		Config:  defaultString(d.Config, ""),
 		Cloud:   cloudConfig(p.Cloud),
-		EnvName: "tf",
+		EnvName: defaultString(d.EnvName, "tf"),
 		Env: &envConfig{
 			URL:    dbURL,
 			DevURL: defaultString(d.DevURL, p.DevURL),
@@ -538,6 +563,11 @@ func (d *AtlasSchemaResourceModel) Workspace(ctx context.Context, p *ProviderDat
 	diags := d.Exclude.ElementsAs(ctx, &cfg.Env.Exclude, false)
 	if diags.HasError() {
 		return nil, nil, errors.New(diags.Errors()[0].Summary())
+	}
+	if vars := d.Vars.ValueString(); vars != "" {
+		if err = json.Unmarshal([]byte(vars), &cfg.Vars); err != nil {
+			return nil, nil, fmt.Errorf("failed to parse variables: %w", err)
+		}
 	}
 	wd, err := atlas.NewWorkingDir(
 		atlas.WithAtlasHCL(cfg.Render),

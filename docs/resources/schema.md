@@ -30,15 +30,18 @@ resource "atlas_schema" "market" {
 ### Required
 
 - `hcl` (String) The schema definition for the database (preferably normalized - see `atlas_schema` data source)
-- `url` (String, Sensitive) The url of the database see https://atlasgo.io/cli/url
 
 ### Optional
 
+- `config` (String) The content of atlas.hcl config
 - `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `diff` (Block, Optional) (see [below for nested schema](#nestedblock--diff))
+- `env_name` (String) The name of the environment used for reporting runs to Atlas Cloud. Default: tf
 - `exclude` (List of String) Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude-schemas
 - `lint` (Block, Optional) The lint policy (see [below for nested schema](#nestedblock--lint))
 - `tx_mode` (String) The transaction mode to use when applying the schema. See https://atlasgo.io/versioned/apply#transaction-configuration
+- `url` (String, Sensitive) The url of the database see https://atlasgo.io/cli/url
+- `variables` (String) Stringify JSON object containing variables to be used inside the Atlas configuration file.
 
 ### Read-Only
 
