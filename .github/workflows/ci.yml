@@ -90,6 +90,8 @@ jobs:
           terraform_wrapper: false
       - name: Install Atlas CLI
         uses: ariga/setup-atlas@v0
+        with:
+          cloud-token: ${{ secrets.ATLAS_TOKEN }}
         env:
           ATLAS_DEBUG: "true"
       - run: go test -v -cover ./...
