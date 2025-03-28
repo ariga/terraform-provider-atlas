@@ -156,6 +156,7 @@ func (r *MigrationResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Description: "The url of the database see https://atlasgo.io/cli/url",
 				Optional:    true,
 				Sensitive:   true,
+				WriteOnly:   true,
 			},
 			"dev_url": schema.StringAttribute{
 				Description: "The url of the dev-db see https://atlasgo.io/cli/url",

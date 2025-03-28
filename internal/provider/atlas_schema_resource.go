@@ -167,6 +167,7 @@ func (r *AtlasSchemaResource) Schema(ctx context.Context, _ resource.SchemaReque
 				Description: "The url of the database see https://atlasgo.io/cli/url",
 				Required:    true,
 				Sensitive:   true,
+				WriteOnly:   true,
 			},
 			"dev_url": schema.StringAttribute{
 				Description: "The url of the dev-db see https://atlasgo.io/cli/url",
