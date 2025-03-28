@@ -3,6 +3,8 @@ package provider_test
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -491,49 +493,6 @@ func TestAccMultipleSchemas(t *testing.T) {
 		},
 	})
 }
-
-func tempSchemas(t *testing.T, url string, schemas ...string) *sqlclient.Client {
-	t.Helper()
-	c, err := sqlclient.Open(context.Background(), url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, s := range schemas {
-		_, err := c.ExecContext(context.Background(), fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", s))
-		if err != nil {
-			t.Errorf("failed creating schema: %s", err)
-		}
-	}
-	drop(t, c, schemas...)
-	return c
-}
-
-func createTables(t *testing.T, c *sqlclient.Client, tables ...string) {
-	for _, tableDDL := range tables {
-		_, err := c.ExecContext(context.Background(), tableDDL)
-		if err != nil {
-			t.Errorf("failed creating schema: %s", err)
-		}
-	}
-}
-
-func drop(t *testing.T, c *sqlclient.Client, schemas ...string) {
-	t.Helper()
-	t.Cleanup(func() {
-		t.Helper()
-		t.Log("Dropping all schemas")
-		for _, s := range schemas {
-			_, err := c.ExecContext(context.Background(), fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", s))
-			if err != nil {
-				t.Errorf("failed dropping schema: %s", err)
-			}
-		}
-		if err := c.Close(); err != nil {
-			t.Errorf("failed closing client: %s", err)
-		}
-	})
-}
-
 func TestPrintPlanSQL(t *testing.T) {
 	type args struct {
 		ctx  context.Context
@@ -596,4 +555,136 @@ table "orders" {
 			require.Equal(t, tt.wantDiags, gotDiags)
 		})
 	}
+}
+
+func TestAccSchemaResource_AtlasHCL_Variables(t *testing.T) {
+	url := tmpDB(t)
+	devURL := "sqlite://file.db?mode=memory"
+	config := fmt.Sprintf(`
+locals {
+	config = <<-HCL
+		variable "db_url" {
+			type = string
+		}
+		variable "dev_db_url" {
+			type = string
+		}
+		env "test" {
+			url = var.db_url
+			dev = var.dev_db_url
+		}
+	HCL
+	vars = jsonencode({
+		db_url: "%s",
+		dev_db_url: "%s",
+	})
+}
+
+resource "atlas_schema" "example" {
+	config = local.config
+	variables = local.vars
+	env_name = "test"
+	hcl = <<-EOT
+		schema "main" {}
+		table "t1" {
+			schema = schema.main
+			column "c1" {
+				null = false
+				type = int
+			}
+		}
+	EOT
+}
+`, url, devURL)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:             config,
+				ExpectNonEmptyPlan: true,
+				Check: resource.ComposeTestCheckFunc(
+					func(s *terraform.State) error {
+						cli, err := sqlclient.Open(context.Background(), url)
+						if err != nil {
+							return err
+						}
+						defer cli.Close()
+						realm, err := cli.InspectRealm(context.Background(), nil)
+						if err != nil {
+							return err
+						}
+						if realm.Schemas[0].Name != "main" {
+							return fmt.Errorf("expected schema name to be 'main' but got: %s", realm.Schemas[0].Name)
+						}
+						if realm.Schemas[0].Tables[0].Name != "t1" {
+							return fmt.Errorf("expected table name to be 't1' but got: %s", realm.Schemas[0].Tables[0].Name)
+						}
+						if realm.Schemas[0].Tables[0].Columns[0].Name != "c1" {
+							return fmt.Errorf("expected column name to be 'c1' but got: %s", realm.Schemas[0].Tables[0].Columns[0].Name)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+// New temporary sqlite database for testing.
+// Returns uri to the database.
+func tmpDB(t *testing.T) string {
+	td, err := os.MkdirTemp("", "terraform-provider-atlas-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(td); err != nil {
+			t.Fatal(err)
+		}
+	})
+	return "sqlite://" + filepath.Join(td, "test.db")
+}
+
+func tempSchemas(t *testing.T, url string, schemas ...string) *sqlclient.Client {
+	t.Helper()
+	c, err := sqlclient.Open(context.Background(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range schemas {
+		_, err := c.ExecContext(context.Background(), fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", s))
+		if err != nil {
+			t.Errorf("failed creating schema: %s", err)
+		}
+	}
+	drop(t, c, schemas...)
+	return c
+}
+
+func createTables(t *testing.T, c *sqlclient.Client, tables ...string) {
+	for _, tableDDL := range tables {
+		_, err := c.ExecContext(context.Background(), tableDDL)
+		if err != nil {
+			t.Errorf("failed creating schema: %s", err)
+		}
+	}
+}
+
+func drop(t *testing.T, c *sqlclient.Client, schemas ...string) {
+	t.Helper()
+	t.Cleanup(func() {
+		t.Helper()
+		t.Log("Dropping all schemas")
+		for _, s := range schemas {
+			_, err := c.ExecContext(context.Background(), fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", s))
+			if err != nil {
+				t.Errorf("failed dropping schema: %s", err)
+			}
+		}
+		if err := c.Close(); err != nil {
+			t.Errorf("failed closing client: %s", err)
+		}
+	})
 }

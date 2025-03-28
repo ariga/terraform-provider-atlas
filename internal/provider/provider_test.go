@@ -4,7 +4,9 @@ import (
 	"testing"
 
 	_ "ariga.io/atlas/sql/mysql"
+	_ "ariga.io/atlas/sql/sqlite"
 	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
