@@ -57,18 +57,49 @@ type (
 
 // Render writes the atlas config to the given writer.
 func (c *projectConfig) Render(w io.Writer) error {
+	file, err := c.AsFile()
+	if err != nil {
+		return err
+	}
+	_, err = file.WriteTo(w)
+	return err
+}
+
+// AsFile returns the merged atlas.hcl file as a *hclwrite.File.
+func (c *projectConfig) AsFile() (*hclwrite.File, error) {
 	dst, diags := hclwrite.ParseConfig([]byte(c.Config), "atlas.hcl", hcl.InitialPos)
 	if diags.HasErrors() {
-		return diags
+		return nil, diags
 	}
 	if err := mergeEnvBlock(dst.Body(), c.Env.AsBlock(), c.EnvName); err != nil {
-		return fmt.Errorf(`%w:
+		return nil, fmt.Errorf(`%w:
 
 %s
 `, err, c.Config)
 	}
-	_, err := dst.WriteTo(w)
-	return err
+	return dst, nil
+}
+
+// LintReview returns the review attribute from the lint block in the env block.
+func (c *projectConfig) LintReview() (*string, error) {
+	file, err := c.AsFile()
+	if err != nil {
+		return nil, err
+	}
+	envBlk, err := searchBlock(file.Body(), "env", c.EnvName)
+	if err != nil || envBlk == nil {
+		return nil, err
+	}
+	lintBlk, err := searchBlock(envBlk.Body(), "lint", "")
+	if err != nil || lintBlk == nil {
+		return nil, err
+	}
+	if reviewAttr := lintBlk.Body().GetAttribute("review"); reviewAttr != nil {
+		review := string(reviewAttr.Expr().BuildTokens(nil).Bytes())
+		trimmed := strings.Trim(review, `"`)
+		return &trimmed, nil
+	}
+	return nil, nil
 }
 
 // AsBlock returns the HCL block for the environment configuration.

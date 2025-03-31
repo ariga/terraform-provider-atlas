@@ -473,11 +473,19 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 		)
 		return
 	}
+	review, err := cfg.LintReview()
+	if err != nil {
+		diags.AddError("Configuration Error",
+			fmt.Sprintf("Unable to parse configuration, got error: %s", err),
+		)
+		return
+	}
+	autoApprove := review == nil
 	_, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
 		Env:         cfg.EnvName,
 		Vars:        cfg.Vars,
 		TxMode:      data.TxMode.ValueString(),
-		AutoApprove: !data.ShouldReview(),
+		AutoApprove: autoApprove,
 	})
 	if err != nil {
 		diags.AddError("Apply Error",
@@ -509,11 +517,19 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 		)
 		return
 	}
+	review, err := cfg.LintReview()
+	if err != nil {
+		diags.AddError("Configuration Error",
+			fmt.Sprintf("Unable to parse configuration, got error: %s", err),
+		)
+		return
+	}
+	autoApprove := review == nil
 	result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
 		DryRun:      true,
 		Env:         cfg.EnvName,
 		Vars:        cfg.Vars,
-		AutoApprove: !data.ShouldReview(),
+		AutoApprove: autoApprove,
 	})
 	if err != nil {
 		diags.AddError("Atlas Plan Error",
@@ -580,11 +596,6 @@ func (d *AtlasSchemaResourceModel) Workspace(ctx context.Context, p *ProviderDat
 		return nil, nil, fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 	return cfg, wd, nil
-}
-
-// ShouldReview returns true if the `review` attribute in the lint block is set.
-func (d *AtlasSchemaResourceModel) ShouldReview() bool {
-	return d.Lint != nil && d.Lint.Review.ValueString() != ""
 }
 
 func boolOptional(desc string) schema.Attribute {
