@@ -761,6 +761,158 @@ resource "atlas_schema" "example" {
 	})
 }
 
+// TestLintPolicy_AtlasHCL tests scenarios when specifying lint policy in the "atlas.hcl".
+// Expect `auto_approve` flag will be set to false when `lint.review` is specified in the config.
+func TestLintPolicy_AtlasHCL(t *testing.T) {
+	url := tmpDB(t)
+	cli, err := sqlclient.Open(context.Background(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	// lint.review = "INVALID", should fail due to invalid option
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "atlas_schema" "example" {
+	hcl = <<-EOT
+		schema "main" {}
+	EOT
+	config = <<-HCL
+		env {
+			name = atlas.env
+			lint {
+				review = "INVALID"
+			}
+		}
+	HCL
+	url = "%s"
+	env_name = "test"
+}`, url),
+				Destroy: false,
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+				ExpectError:        regexp.MustCompile(".*failed parsing atlas*"),
+			},
+		},
+	})
+	// lint.review = "ALWAYS", should show an interactive error
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "atlas_schema" "example" {
+	hcl = <<-EOT
+		schema "main" {}
+		table "t1" {
+			schema = schema.main
+			column "c1" {
+				type = int
+			}
+		}
+	EOT
+	config = <<-HCL
+		env {
+			name = atlas.env
+			lint {
+				review = "ALWAYS"
+			}
+		}
+	HCL
+	url = "%s"
+}`, url),
+				Destroy: false,
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+				ExpectError:        regexp.MustCompile("Conditional approval, enabled when review policy is set to WARNING or ERROR"),
+			},
+		},
+	})
+	// lint.review = "ERROR", should fail due to lint error when having destructive changes.
+	// This test depends on the previous test which successfully applied  the schema.
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "atlas_schema" "example" {
+	hcl = <<-EOT
+		schema "main" {}
+		table "t1" {
+			schema = schema.main
+			column "c1" {
+				type = int
+			}
+		}
+	EOT
+	config = <<-HCL
+		env {
+			name = atlas.env
+			lint {
+				review = "WARNING"
+			}
+		}
+	HCL
+	url = "%s"
+	dev_url = "%s"
+}`, url, "sqlite://file.db?mode=memory"),
+				Destroy: false,
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+				Check: func(s *terraform.State) error {
+					cli, err := sqlclient.Open(context.Background(), url)
+					if err != nil {
+						return err
+					}
+					realm, err := cli.InspectRealm(context.Background(), nil)
+					if err != nil {
+						return err
+					}
+					schema, ok := realm.Schema("main")
+					if !ok {
+						return fmt.Errorf("schema 'main' does not exist.")
+					}
+					if _, ok := schema.Table("t1"); !ok {
+						return fmt.Errorf("table 'c1' does not exist.")
+					}
+					return nil
+				},
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "atlas_schema" "example" {
+	hcl = <<-EOT
+		schema "main" {}
+	EOT
+	config = <<-HCL
+		env {
+			name = atlas.env
+			lint {
+				review = "ERROR"
+			}
+		}
+	HCL
+	url = "%s"
+	dev_url = "%s"
+}`, url, "sqlite://file.db?mode=memory"),
+				Destroy: false,
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+				ExpectError:        regexp.MustCompile("Rejected by review policy"),
+			},
+		},
+	})
+}
+
 // New temporary sqlite database for testing.
 // Returns uri to the database.
 func tmpDB(t *testing.T) string {
