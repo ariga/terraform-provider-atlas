@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/path"
+	tfpath "github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -321,7 +322,7 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 			return
 		}
 		if plan.URL.IsUnknown() {
-			resp.RequiresReplace = append(resp.RequiresReplace, path.Root("url"))
+			resp.RequiresReplace = append(resp.RequiresReplace, tfpath.Root("url"))
 			return
 		}
 		// New terraform resource will be create,
@@ -431,20 +432,153 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 		)
 		return
 	}
-	autoApprove := review == nil
-	_, err = w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
-		Env:         w.Project.EnvName,
-		Vars:        w.Project.Vars,
-		TxMode:      data.TxMode.ValueString(),
-		AutoApprove: autoApprove,
-	})
+	repoURL, err := w.Project.RepoURL()
 	if err != nil {
-		diags.AddError("Apply Error",
-			fmt.Sprintf("Unable to apply changes, got error: %s", err),
+		diags.AddError("Failed to retrieve repo URL",
+			fmt.Sprintf("Error getting repo URL: %s", err),
 		)
 		return
 	}
-	return diags
+	// Repo is required for review workflow,
+	// if not set we run the apply command directly
+	if repoURL == nil || review == nil {
+		if _, err = w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
+			Env:         w.Project.EnvName,
+			Vars:        w.Project.Vars,
+			TxMode:      data.TxMode.ValueString(),
+			AutoApprove: review == nil,
+		}); err != nil {
+			diags.AddError("Apply Error",
+				fmt.Sprintf("Unable to apply changes, got error: %s", err),
+			)
+			return
+		}
+		return
+	}
+	// ====================================================
+	//	BELOW THIS LINE BELONGS TO REVIEW WORKFLOW
+	// ====================================================
+	targetURL, err := w.Project.TargetURL()
+	if err != nil {
+		diags.AddError("Failed to retrieve target URL",
+			fmt.Sprintf("Error getting target URL: %s", err),
+		)
+		return
+	}
+	// This function waits for a plan to be approved in Atlas Cloud and then applies it
+	// It continuously polls the plan status every 1 second until approval is detected
+	waitAndApplyPlan := func(plan *atlas.SchemaPlanFile) (*atlas.SchemaApply, error) {
+		for isApproved := false; !isApproved; {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(1 * time.Second):
+				plans, err := w.Exec.SchemaPlanList(ctx, &atlas.SchemaPlanListParams{
+					Env:  w.Project.EnvName,
+					Vars: w.Project.Vars,
+					Repo: repoURL.String(),
+					From: []string{"env://url"},
+					To:   []string{targetURL},
+				})
+				if err != nil {
+					return nil, err
+				}
+				// Look for the specific plan and check if it's been approved
+				for _, p := range plans {
+					if p.URL == plan.URL && p.Status == "APPROVED" {
+						isApproved = true
+						break
+					}
+				}
+				if !isApproved {
+					diags.AddWarning("Waiting for plan approval",
+						fmt.Sprintf("Waiting for plan to be approved: %s", plan.URL),
+					)
+				}
+			}
+		}
+		return w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
+			Env:     w.Project.EnvName,
+			Vars:    w.Project.Vars,
+			TxMode:  data.TxMode.ValueString(),
+			PlanURL: plan.URL,
+		})
+	}
+	// Creates a plan for manual approval and waits for it to be approved before applying
+	createApprovalPlan := func() (*atlas.SchemaApply, error) {
+		plan, err := w.Exec.SchemaPlan(ctx, &atlas.SchemaPlanParams{
+			Env:     w.Project.EnvName,
+			Vars:    w.Project.Vars,
+			Repo:    repoURL.String(),
+			From:    []string{"env://url"},
+			To:      []string{targetURL},
+			Pending: true,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("unable to create plan, got error: %w", err)
+		}
+		return waitAndApplyPlan(plan.File)
+	}
+	switch plans, err := w.Exec.SchemaPlanList(ctx, &atlas.SchemaPlanListParams{
+		Env:  w.Project.EnvName,
+		Vars: w.Project.Vars,
+		Repo: repoURL.String(),
+		From: []string{"env://url"},
+		To:   []string{targetURL},
+	}); {
+	case err != nil:
+		diags.AddError("Failed to list schema plans",
+			fmt.Sprintf("Couldn't retrieve schema plans: %s", err),
+		)
+	// Review policy "ALWAYS": Always require manual approval regardless of changes
+	case len(plans) == 0 && *review == "ALWAYS":
+		if _, err := createApprovalPlan(); err != nil {
+			diags.AddError("Failed to create approval plan",
+				fmt.Sprintf("Couldn't create a schema plan for approval: %s", err),
+			)
+		}
+	// Review policies "WARNING" or "ERROR": Try direct apply first, but if rejected by policy,
+	// create a plan for manual approval instead
+	case len(plans) == 0 && (*review == "WARNING" || *review == "ERROR"):
+		_, err = w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
+			Env:    w.Project.EnvName,
+			Vars:   w.Project.Vars,
+			TxMode: data.TxMode.ValueString(),
+		})
+		if err != nil {
+			if !strings.HasPrefix(err.Error(), "Rejected by review policy") {
+				diags.AddError("Failed to apply schema changes",
+					fmt.Sprintf("Encountered an error applying schema changes: %s", err),
+				)
+				return
+			}
+			_, err := createApprovalPlan()
+			if err != nil {
+				diags.AddError("Failed to create approval plan",
+					fmt.Sprintf("Couldn't create a schema plan for approval after review policy rejection: %s", err),
+				)
+				return
+			}
+		}
+	// If there's a single pending plan, wait for it to be approved and then apply it
+	case len(plans) == 1:
+		if _, err := waitAndApplyPlan(&plans[0]); err != nil {
+			diags.AddError("Failed to apply approved plan",
+				fmt.Sprintf("Couldn't apply the approved plan: %s", err),
+			)
+		}
+	// Multiple plans for the same change detected - this is an error state
+	case len(plans) > 1:
+		planURLs := make([]string, 0, len(plans))
+		for _, p := range plans {
+			planURLs = append(planURLs, p.URL)
+		}
+		diags.AddError("Multiple schema plans detected",
+			fmt.Sprintf("Found multiple plans for the same schema changes. Please remove old plans before applying:\n\n- %s",
+				strings.Join(planURLs, "\n- ")),
+		)
+	}
+	return
 }
 
 func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
@@ -462,12 +596,11 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 		)
 		return
 	}
-	autoApprove := review == nil
 	result, err := w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
 		DryRun:      true,
 		Env:         w.Project.EnvName,
 		Vars:        w.Project.Vars,
-		AutoApprove: autoApprove,
+		AutoApprove: review == nil,
 	})
 	if err != nil {
 		diags.AddError("Atlas Plan Error",
