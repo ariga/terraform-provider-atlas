@@ -271,29 +271,16 @@ func (r *AtlasSchemaResource) Delete(ctx context.Context, req resource.DeleteReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	cfg, wd, err := data.Workspace(ctx, &r.ProviderData)
+	w, cleanup, err := data.Workspace(ctx, &r.ProviderData)
 	if err != nil {
 		resp.Diagnostics.AddError("Generate config failure",
 			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
-	defer func() {
-		if err := wd.Close(); err != nil {
-			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
-				"error": err,
-			})
-		}
-	}()
-	c, err := r.Client(wd.Path(), cfg.Cloud)
-	if err != nil {
-		resp.Diagnostics.AddError("Client Error",
-			fmt.Sprintf("Unable to create client, got error: %s", err),
-		)
-		return
-	}
-	_, err = c.SchemaClean(ctx, &atlas.SchemaCleanParams{
-		Env:         cfg.EnvName,
-		Vars:        cfg.Vars,
+	defer cleanup()
+	_, err = w.Exec.SchemaClean(ctx, &atlas.SchemaCleanParams{
+		Env:         w.Project.EnvName,
+		Vars:        w.Project.Vars,
 		AutoApprove: true,
 	})
 	if err != nil {
@@ -354,31 +341,18 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 }
 
 func PrintPlanSQL(ctx context.Context, p *ProviderData, data *AtlasSchemaResourceModel, delete bool) (diags diag.Diagnostics) {
-	cfg, wd, err := data.Workspace(ctx, p)
+	w, cleanup, err := data.Workspace(ctx, p)
 	if err != nil {
 		diags.AddError("Generate config failure",
 			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
-	defer func() {
-		if err := wd.Close(); err != nil {
-			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
-				"error": err,
-			})
-		}
-	}()
-	c, err := p.Client(wd.Path(), cfg.Cloud)
-	if err != nil {
-		diags.AddError("Client Error",
-			fmt.Sprintf("Unable to create client, got error: %s", err),
-		)
-		return
-	}
+	defer cleanup()
 	var appliedFile *atlas.AppliedFile
 	if delete {
-		result, err := c.SchemaClean(ctx, &atlas.SchemaCleanParams{
-			Env:    cfg.EnvName,
-			Vars:   cfg.Vars,
+		result, err := w.Exec.SchemaClean(ctx, &atlas.SchemaCleanParams{
+			Env:    w.Project.EnvName,
+			Vars:   w.Project.Vars,
 			DryRun: true,
 		})
 		if err != nil {
@@ -389,9 +363,9 @@ func PrintPlanSQL(ctx context.Context, p *ProviderData, data *AtlasSchemaResourc
 		}
 		appliedFile = result.Applied
 	} else {
-		result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
-			Env:    cfg.EnvName,
-			Vars:   cfg.Vars,
+		result, err := w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
+			Env:    w.Project.EnvName,
+			Vars:   w.Project.Vars,
 			TxMode: data.TxMode.ValueString(),
 			DryRun: true,
 		})
@@ -417,29 +391,16 @@ func PrintPlanSQL(ctx context.Context, p *ProviderData, data *AtlasSchemaResourc
 }
 
 func (r *AtlasSchemaResource) readSchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	cfg, wd, err := data.Workspace(ctx, &r.ProviderData)
+	w, cleanup, err := data.Workspace(ctx, &r.ProviderData)
 	if err != nil {
 		diags.AddError("Generate config failure",
 			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
-	defer func() {
-		if err := wd.Close(); err != nil {
-			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
-				"error": err,
-			})
-		}
-	}()
-	c, err := r.Client(wd.Path(), cfg.Cloud)
-	if err != nil {
-		diags.AddError("Client Error",
-			fmt.Sprintf("Unable to create client, got error: %s", err),
-		)
-		return
-	}
-	hcl, err := c.SchemaInspect(ctx, &atlas.SchemaInspectParams{
-		Env:  cfg.EnvName,
-		Vars: cfg.Vars,
+	defer cleanup()
+	hcl, err := w.Exec.SchemaInspect(ctx, &atlas.SchemaInspectParams{
+		Env:  w.Project.EnvName,
+		Vars: w.Project.Vars,
 	})
 	if err != nil {
 		diags.AddError("Inspect Error",
@@ -453,27 +414,14 @@ func (r *AtlasSchemaResource) readSchema(ctx context.Context, data *AtlasSchemaR
 }
 
 func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	cfg, wd, err := data.Workspace(ctx, &r.ProviderData)
+	w, cleanup, err := data.Workspace(ctx, &r.ProviderData)
 	if err != nil {
 		diags.AddError("Generate config failure",
 			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
-	defer func() {
-		if err := wd.Close(); err != nil {
-			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
-				"error": err,
-			})
-		}
-	}()
-	c, err := r.Client(wd.Path(), cfg.Cloud)
-	if err != nil {
-		diags.AddError("Client Error",
-			fmt.Sprintf("Unable to create client, got error: %s", err),
-		)
-		return
-	}
-	review, err := cfg.LintReview()
+	defer cleanup()
+	review, err := w.Project.LintReview()
 	if err != nil {
 		diags.AddError("Configuration Error",
 			fmt.Sprintf("Unable to parse configuration, got error: %s", err),
@@ -481,9 +429,9 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 		return
 	}
 	autoApprove := review == nil
-	_, err = c.SchemaApply(ctx, &atlas.SchemaApplyParams{
-		Env:         cfg.EnvName,
-		Vars:        cfg.Vars,
+	_, err = w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
+		Env:         w.Project.EnvName,
+		Vars:        w.Project.Vars,
 		TxMode:      data.TxMode.ValueString(),
 		AutoApprove: autoApprove,
 	})
@@ -497,27 +445,14 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 }
 
 func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
-	cfg, wd, err := data.Workspace(ctx, &r.ProviderData)
+	w, cleanup, err := data.Workspace(ctx, &r.ProviderData)
 	if err != nil {
 		diags.AddError("Generate config failure",
 			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
-	defer func() {
-		if err := wd.Close(); err != nil {
-			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
-				"error": err,
-			})
-		}
-	}()
-	c, err := r.Client(wd.Path(), cfg.Cloud)
-	if err != nil {
-		diags.AddError("Client Error",
-			fmt.Sprintf("Unable to create client, got error: %s", err),
-		)
-		return
-	}
-	review, err := cfg.LintReview()
+	defer cleanup()
+	review, err := w.Project.LintReview()
 	if err != nil {
 		diags.AddError("Configuration Error",
 			fmt.Sprintf("Unable to parse configuration, got error: %s", err),
@@ -525,10 +460,10 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 		return
 	}
 	autoApprove := review == nil
-	result, err := c.SchemaApply(ctx, &atlas.SchemaApplyParams{
+	result, err := w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
 		DryRun:      true,
-		Env:         cfg.EnvName,
-		Vars:        cfg.Vars,
+		Env:         w.Project.EnvName,
+		Vars:        w.Project.Vars,
 		AutoApprove: autoApprove,
 	})
 	if err != nil {
@@ -554,7 +489,7 @@ func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSche
 	return
 }
 
-func (d *AtlasSchemaResourceModel) Workspace(ctx context.Context, p *ProviderData) (*projectConfig, *atlas.WorkingDir, error) {
+func (d *AtlasSchemaResourceModel) Workspace(ctx context.Context, p *ProviderData) (*Workspace, func(), error) {
 	dbURL, err := absoluteSqliteURL(d.URL.ValueString())
 	if err != nil {
 		return nil, nil, err
@@ -595,7 +530,23 @@ func (d *AtlasSchemaResourceModel) Workspace(ctx context.Context, p *ProviderDat
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create temporary directory: %w", err)
 	}
-	return cfg, wd, nil
+	cleanup := func() {
+		if err := wd.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
+				"error": err,
+			})
+		}
+	}
+	c, err := p.Client(wd.Path(), cfg.Cloud)
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("failed to create client: %w", err)
+	}
+	return &Workspace{
+		Dir:     wd,
+		Exec:    c,
+		Project: cfg,
+	}, cleanup, nil
 }
 
 func boolOptional(desc string) schema.Attribute {

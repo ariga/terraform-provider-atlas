@@ -167,27 +167,16 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	cfg, wd, err := data.Workspace(ctx, &d.ProviderData)
+	w, cleanup, err := data.Workspace(ctx, &d.ProviderData)
 	if err != nil {
 		resp.Diagnostics.AddError("Generate config failure",
 			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
-	defer func() {
-		if err := wd.Close(); err != nil {
-			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
-				"error": err,
-			})
-		}
-	}()
-	c, err := d.Client(wd.Path(), cfg.Cloud)
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to create client", err.Error())
-		return
-	}
-	r, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-		Env:  cfg.EnvName,
-		Vars: cfg.Vars,
+	defer cleanup()
+	r, err := w.Exec.MigrateStatus(ctx, &atlas.MigrateStatusParams{
+		Env:  w.Project.EnvName,
+		Vars: w.Project.Vars,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read migration status", err.Error())
@@ -236,7 +225,7 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (d *MigrationDataSourceModel) Workspace(_ context.Context, p *ProviderData) (*projectConfig, *atlas.WorkingDir, error) {
+func (d *MigrationDataSourceModel) Workspace(ctx context.Context, p *ProviderData) (*Workspace, func(), error) {
 	dbURL, err := absoluteSqliteURL(d.URL.ValueString())
 	if err != nil {
 		return nil, nil, err
@@ -271,7 +260,23 @@ func (d *MigrationDataSourceModel) Workspace(_ context.Context, p *ProviderData)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create temporary directory: %w", err)
 	}
-	return cfg, wd, nil
+	cleanup := func() {
+		if err := wd.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
+				"error": err,
+			})
+		}
+	}
+	c, err := p.Client(wd.Path(), cfg.Cloud)
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("failed to create client: %w", err)
+	}
+	return &Workspace{
+		Dir:     wd,
+		Exec:    c,
+		Project: cfg,
+	}, cleanup, nil
 }
 
 // AtlasURL returns the atlas URL for the remote directory.

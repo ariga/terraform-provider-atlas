@@ -71,6 +71,12 @@ type (
 		// testing.
 		Version string
 	}
+	// Workspace represents the working directory and client for the resource.
+	Workspace struct {
+		Project *projectConfig
+		Dir     *atlas.WorkingDir
+		Exec    AtlasExec
+	}
 )
 
 var (
@@ -244,7 +250,7 @@ func (d *ProviderData) configure(data any) (diags diag.Diagnostics) {
 }
 
 type atlasWorkspace interface {
-	Workspace(context.Context, *ProviderData) (*projectConfig, *atlas.WorkingDir, error)
+	Workspace(context.Context, *ProviderData) (*Workspace, func(), error)
 }
 
 func (d *ProviderData) validate(ctx context.Context, data atlasWorkspace) (diags diag.Diagnostics) {
@@ -254,21 +260,15 @@ func (d *ProviderData) validate(ctx context.Context, data atlasWorkspace) (diags
 		// If the client is nil, it means that the provider has not been configured.
 		return
 	}
-	cfg, wd, err := data.Workspace(ctx, d)
+	w, cleanup, err := data.Workspace(ctx, d)
 	if err != nil {
 		diags.AddError("Generate config failure",
 			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
-	defer func() {
-		if err := wd.Close(); err != nil {
-			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
-				"error": err,
-			})
-		}
-	}()
+	defer cleanup()
 	// The atlas.hcl file is required to be present in the working directory.
-	raw, err := os.ReadFile(wd.Path("atlas.hcl"))
+	raw, err := os.ReadFile(w.Dir.Path("atlas.hcl"))
 	if err != nil {
 		diags.AddError("Read atlas.hcl failure", err.Error())
 		return
@@ -279,7 +279,7 @@ func (d *ProviderData) validate(ctx context.Context, data atlasWorkspace) (diags
 		return
 	}
 	// Check if the env block exists.
-	blk, err := searchBlock(f.Body(), "env", cfg.EnvName)
+	blk, err := searchBlock(f.Body(), "env", w.Project.EnvName)
 	switch {
 	case err != nil:
 		diags.AddError("Invalid atlas.hcl config", fmt.Sprintf(`
