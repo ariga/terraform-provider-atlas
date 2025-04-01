@@ -125,28 +125,15 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 			vars[k] = v
 		}
 	}
-	cfg, wd, err := data.Workspace(ctx, &d.ProviderData)
+	w, cleanup, err := data.Workspace(ctx, &d.ProviderData)
 	if err != nil {
 		resp.Diagnostics.AddError("Generate config failure",
 			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
-	defer func() {
-		if err := wd.Close(); err != nil {
-			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
-				"error": err,
-			})
-		}
-	}()
-	c, err := d.Client(wd.Path(), cfg.Cloud)
-	if err != nil {
-		resp.Diagnostics.AddError("Client Error",
-			fmt.Sprintf("Unable to create client, got error: %s", err),
-		)
-		return
-	}
-	hcl, err := c.SchemaInspect(ctx, &atlas.SchemaInspectParams{
-		Env:  cfg.EnvName,
+	defer cleanup()
+	hcl, err := w.Exec.SchemaInspect(ctx, &atlas.SchemaInspectParams{
+		Env:  w.Project.EnvName,
 		Vars: vars,
 	})
 	if err != nil {
@@ -160,7 +147,7 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (d *AtlasSchemaDataSourceModel) Workspace(_ context.Context, p *ProviderData) (*projectConfig, *atlas.WorkingDir, error) {
+func (d *AtlasSchemaDataSourceModel) Workspace(ctx context.Context, p *ProviderData) (*Workspace, func(), error) {
 	cfg := &projectConfig{
 		Cloud:   cloudConfig(p.Cloud),
 		EnvName: "tf",
@@ -192,7 +179,23 @@ func (d *AtlasSchemaDataSourceModel) Workspace(_ context.Context, p *ProviderDat
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create temporary directory: %w", err)
 	}
-	return cfg, wd, nil
+	cleanup := func() {
+		if err := wd.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
+				"error": err,
+			})
+		}
+	}
+	c, err := p.Client(wd.Path(), cfg.Cloud)
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("failed to create client: %w", err)
+	}
+	return &Workspace{
+		Dir:     wd,
+		Exec:    c,
+		Project: cfg,
+	}, cleanup, nil
 }
 
 func hclID(hcl []byte) string {

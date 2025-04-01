@@ -398,27 +398,16 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 	if plan == nil || plan.DirURL.IsUnknown() || plan.URL.IsUnknown() {
 		return
 	}
-	cfg, wd, err := plan.Workspace(ctx, &r.ProviderData)
+	w, cleanup, err := plan.Workspace(ctx, &r.ProviderData)
 	if err != nil {
 		resp.Diagnostics.AddError("Generate config failure",
 			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
-	defer func() {
-		if err := wd.Close(); err != nil {
-			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
-				"error": err,
-			})
-		}
-	}()
-	c, err := r.Client(wd.Path(), cfg.Cloud)
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to create client", err.Error())
-		return
-	}
-	report, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-		Env:  cfg.EnvName,
-		Vars: cfg.Vars,
+	defer cleanup()
+	report, err := w.Exec.MigrateStatus(ctx, &atlas.MigrateStatusParams{
+		Env:  w.Project.EnvName,
+		Vars: w.Project.Vars,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read migration status", err.Error())
@@ -441,13 +430,13 @@ func (r *MigrationResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 	if pendingCount == 0 {
 		return
 	}
-	if cfg.Env.DevURL == "" {
+	if w.Project.Env.DevURL == "" {
 		// We don't have a dev URL, so we can't lint the migration
 		return
 	}
-	lint, err := c.MigrateLint(ctx, &atlas.MigrateLintParams{
-		Env:    cfg.EnvName,
-		Vars:   cfg.Vars,
+	lint, err := w.Exec.MigrateLint(ctx, &atlas.MigrateLintParams{
+		Env:    w.Project.EnvName,
+		Vars:   w.Project.Vars,
 		Latest: pendingCount,
 	})
 	if err != nil {
@@ -482,34 +471,23 @@ const (
 )
 
 func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResourceModel) (diags diag.Diagnostics) {
-	cfg, wd, err := data.Workspace(ctx, &r.ProviderData)
+	w, cleanup, err := data.Workspace(ctx, &r.ProviderData)
 	if err != nil {
 		diags.AddError("Generate config failure",
 			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
-	defer func() {
-		if err := wd.Close(); err != nil {
-			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
-				"error": err,
-			})
-		}
-	}()
+	defer cleanup()
 	toVersion := data.Version.ValueString()
-	dirURL, err := cfg.Env.DirURL(wd, toVersion)
+	dirURL, err := w.Project.Env.DirURL(w.Dir, toVersion)
 	if err != nil {
 		diags.AddError("Generate config failure",
 			fmt.Sprintf("Failed to create atlas.hcl: %s", err.Error()))
 		return
 	}
-	c, err := r.Client(wd.Path(), cfg.Cloud)
-	if err != nil {
-		diags.AddError("Failed to create client", err.Error())
-		return
-	}
-	status, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-		Env:    cfg.EnvName,
-		Vars:   cfg.Vars,
+	status, err := w.Exec.MigrateStatus(ctx, &atlas.MigrateStatusParams{
+		Env:    w.Project.EnvName,
+		Vars:   w.Project.Vars,
 		DirURL: dirURL,
 	})
 	if err != nil {
@@ -518,7 +496,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 	}
 	switch {
 	case len(status.Pending) == 0 && len(status.Applied) > 0 && len(status.Applied) > len(status.Available):
-		if !cfg.MigrateDown {
+		if !w.Project.MigrateDown {
 			diags.AddError(
 				"Protected flow error",
 				"migrate down is not allowed, set `migrate_down.allow` to true to allow downgrade",
@@ -526,15 +504,15 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			return
 		}
 		params := &atlas.MigrateDownParams{
-			Env:       cfg.EnvName,
-			Vars:      cfg.Vars,
+			Env:       w.Project.EnvName,
+			Vars:      w.Project.Vars,
 			ToVersion: status.Available[len(status.Available)-1].Version,
 			Context: &atlas.DeployRunContext{
 				TriggerType:    atlas.TriggerTypeTerraform,
 				TriggerVersion: r.Version,
 			},
 		}
-		params.DirURL, err = cfg.Env.DirURLLatest()
+		params.DirURL, err = w.Project.Env.DirURLLatest()
 		if err != nil {
 			diags.AddError("Generate config failure",
 				fmt.Sprintf("Failed to parse migration directory URL: %s", err.Error()))
@@ -546,7 +524,7 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 			case <-ctx.Done():
 				return nil
 			case <-time.After(1 * time.Second):
-				run, err := c.MigrateDown(ctx, params)
+				run, err := w.Exec.MigrateDown(ctx, params)
 				if err != nil {
 					diags.AddError("Failed to down migration", err.Error())
 					return
@@ -578,9 +556,9 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 				)
 				return nil
 			}
-			_, err := c.MigrateApply(ctx, &atlas.MigrateApplyParams{
-				Env:    cfg.EnvName,
-				Vars:   cfg.Vars,
+			_, err := w.Exec.MigrateApply(ctx, &atlas.MigrateApplyParams{
+				Env:    w.Project.EnvName,
+				Vars:   w.Project.Vars,
 				Amount: amount,
 				Context: &atlas.DeployRunContext{
 					TriggerType:    atlas.TriggerTypeTerraform,
@@ -599,27 +577,16 @@ func (r *MigrationResource) migrate(ctx context.Context, data *MigrationResource
 
 func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationResourceModel) (obj types.Object, diags diag.Diagnostics) {
 	obj = types.ObjectNull(statusObjectAttrs)
-	cfg, wd, err := data.Workspace(ctx, &r.ProviderData)
+	w, cleanup, err := data.Workspace(ctx, &r.ProviderData)
 	if err != nil {
 		diags.AddError("Generate config failure",
 			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
 		return
 	}
-	defer func() {
-		if err := wd.Close(); err != nil {
-			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
-				"error": err,
-			})
-		}
-	}()
-	c, err := r.Client(wd.Path(), cfg.Cloud)
-	if err != nil {
-		diags.AddError("Failed to create client", err.Error())
-		return
-	}
-	report, err := c.MigrateStatus(ctx, &atlas.MigrateStatusParams{
-		Env:  cfg.EnvName,
-		Vars: cfg.Vars,
+	defer cleanup()
+	report, err := w.Exec.MigrateStatus(ctx, &atlas.MigrateStatusParams{
+		Env:  w.Project.EnvName,
+		Vars: w.Project.Vars,
 	})
 	if err != nil {
 		diags.AddError("Failed to read migration status", err.Error())
@@ -792,7 +759,7 @@ const (
 	SchemaTypeSQLite = "sqlite"
 )
 
-func (d *MigrationResourceModel) Workspace(_ context.Context, p *ProviderData) (*projectConfig, *atlas.WorkingDir, error) {
+func (d *MigrationResourceModel) Workspace(ctx context.Context, p *ProviderData) (*Workspace, func(), error) {
 	dbURL, err := absoluteSqliteURL(d.URL.ValueString())
 	if err != nil {
 		return nil, nil, err
@@ -843,5 +810,21 @@ func (d *MigrationResourceModel) Workspace(_ context.Context, p *ProviderData) (
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create temporary directory: %w", err)
 	}
-	return cfg, wd, nil
+	cleanup := func() {
+		if err := wd.Close(); err != nil {
+			tflog.Debug(ctx, "Failed to cleanup working directory", map[string]any{
+				"error": err,
+			})
+		}
+	}
+	c, err := p.Client(wd.Path(), cfg.Cloud)
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("failed to create client: %w", err)
+	}
+	return &Workspace{
+		Dir:     wd,
+		Exec:    c,
+		Project: cfg,
+	}, cleanup, nil
 }
