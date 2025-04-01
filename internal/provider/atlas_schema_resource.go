@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/path"
+	tfpath "github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -321,7 +321,7 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 			return
 		}
 		if plan.URL.IsUnknown() {
-			resp.RequiresReplace = append(resp.RequiresReplace, path.Root("url"))
+			resp.RequiresReplace = append(resp.RequiresReplace, tfpath.Root("url"))
 			return
 		}
 		// New terraform resource will be create,
@@ -431,20 +431,130 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 		)
 		return
 	}
-	autoApprove := review == nil
-	_, err = w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
-		Env:         w.Project.EnvName,
-		Vars:        w.Project.Vars,
-		TxMode:      data.TxMode.ValueString(),
-		AutoApprove: autoApprove,
-	})
+	repoURL, err := w.Project.RepoURL()
 	if err != nil {
-		diags.AddError("Apply Error",
-			fmt.Sprintf("Unable to apply changes, got error: %s", err),
+		diags.AddError("Failed to retrieve repo URL",
+			fmt.Sprintf("Error getting repo URL: %s", err),
 		)
 		return
 	}
-	return diags
+	// If the repository URL is not set, apply the schema changes directly.
+	if repoURL == nil {
+		if _, err = w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
+			Env:         w.Project.EnvName,
+			Vars:        w.Project.Vars,
+			TxMode:      data.TxMode.ValueString(),
+			AutoApprove: review == nil,
+		}); err != nil {
+			diags.AddError("Apply Error",
+				fmt.Sprintf("Unable to apply changes, got error: %s", err),
+			)
+			return
+		}
+		return
+	}
+	targetURL, err := w.Project.TargetURL()
+	if err != nil {
+		diags.AddError("Failed to retrieve target URL",
+			fmt.Sprintf("Error getting target URL: %s", err),
+		)
+		return
+	}
+	createApprovalPlan := func() (*atlas.SchemaPlanFile, error) {
+		plan, err := w.Exec.SchemaPlan(ctx, &atlas.SchemaPlanParams{
+			Env:     w.Project.EnvName,
+			Vars:    w.Project.Vars,
+			Repo:    repoURL.String(),
+			From:    []string{"env://url"},
+			To:      []string{targetURL},
+			Pending: true,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("unable to create plan, got error: %w", err)
+		}
+		return plan.File, nil
+	}
+	// List all existing plans for this schema change
+	var plan *atlas.SchemaPlanFile
+	plans, err := w.Exec.SchemaPlanList(ctx, &atlas.SchemaPlanListParams{
+		Env:  w.Project.EnvName,
+		Vars: w.Project.Vars,
+		Repo: repoURL.String(),
+		From: []string{"env://url"},
+		To:   []string{targetURL},
+	})
+	switch {
+	case err != nil:
+		diags.AddError("Failed to list schema plans",
+			fmt.Sprintf("Couldn't retrieve schema plans: %s", err),
+		)
+		return
+	// Review policy "ALWAYS": Always require manual approval regardless of changes
+	case len(plans) == 0 && *review == "ALWAYS":
+		plan, err = createApprovalPlan()
+		if err != nil {
+			diags.AddError("Failed to create approval plan",
+				fmt.Sprintf("Couldn't create a schema plan for approval: %s", err),
+			)
+			return
+		}
+	// Review policies "WARNING" or "ERROR": Try direct apply first, but if rejected by policy,
+	// create a plan for manual approval instead
+	case len(plans) == 0 && (*review == "WARNING" || *review == "ERROR"):
+		_, err = w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
+			Env:    w.Project.EnvName,
+			Vars:   w.Project.Vars,
+			TxMode: data.TxMode.ValueString(),
+		})
+		if err != nil {
+			if !strings.HasPrefix(err.Error(), "Rejected by review policy") {
+				diags.AddError("Failed to apply schema changes",
+					fmt.Sprintf("Encountered an error applying schema changes: %s", err),
+				)
+				return
+			}
+			plan, err = createApprovalPlan()
+			if err != nil {
+				diags.AddError("Failed to create approval plan",
+					fmt.Sprintf("Couldn't create a schema plan for approval after review policy rejection: %s", err),
+				)
+				return
+			}
+		}
+	case len(plans) == 1:
+		plan = &plans[0]
+	// Multiple plans for the same change detected - this is an error state
+	case len(plans) > 1:
+		planURLs := make([]string, 0, len(plans))
+		for _, p := range plans {
+			planURLs = append(planURLs, p.URL)
+		}
+		diags.AddError("Multiple schema plans detected",
+			fmt.Sprintf("Found multiple plans for the same schema changes. Please remove old plans before applying:\n\n- %s",
+				strings.Join(planURLs, "\n- ")),
+		)
+	}
+	if plan != nil {
+		if plan.Status == "PENDING" {
+			diags.AddError("Plan Pending Approval",
+				fmt.Sprintf("The schema plan is awaiting approval. Please review and approve it before proceeding:\n\n%s", plan.Link),
+			)
+			return
+		}
+		_, err = w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
+			Env:     w.Project.EnvName,
+			Vars:    w.Project.Vars,
+			TxMode:  data.TxMode.ValueString(),
+			PlanURL: plan.URL,
+		})
+		if err != nil {
+			diags.AddError("Failed to apply schema changes",
+				fmt.Sprintf("Encountered an error applying schema changes: %s", err),
+			)
+			return
+		}
+	}
+	return
 }
 
 func (r *AtlasSchemaResource) firstRunCheck(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
