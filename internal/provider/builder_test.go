@@ -173,7 +173,9 @@ func Test_SchemaTemplate(t *testing.T) {
   src = "file://schema.hcl"
   url = "mysql://user:pass@localhost:3306/tf-db"
   migration {
-    repo = "test"
+    repo {
+      name = "test"
+    }
   }
 }
 `,
@@ -195,7 +197,9 @@ func Test_SchemaTemplate(t *testing.T) {
   src = "file://schema.hcl"
   url = "mysql://user:pass@localhost:3306/tf-db"
   schema {
-    repo = "test"
+    repo {
+      name = "test"
+    }
   }
 }
 `,
