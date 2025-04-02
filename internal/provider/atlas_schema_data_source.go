@@ -154,13 +154,13 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 
 func (d *AtlasSchemaDataSourceModel) Workspace(ctx context.Context, p *ProviderData) (*Workspace, func(), error) {
 	cfg := &projectConfig{
-		Cloud:   cloudConfig(p.Cloud),
+		Cloud:   cloudConfig(d.Cloud, p.Cloud),
 		EnvName: "tf",
 		Env: &envConfig{
 			URL:    "file://schema.hcl",
 			DevURL: defaultString(d.DevURL, p.DevURL),
 			Schema: &schemaConfig{
-				Repo: repoConfig(p.Cloud),
+				Repo: repoConfig(d.Cloud, p.Cloud),
 			},
 		},
 	}

@@ -499,7 +499,7 @@ func (d *AtlasSchemaResourceModel) Workspace(ctx context.Context, p *ProviderDat
 	}
 	cfg := &projectConfig{
 		Config:  defaultString(d.Config, ""),
-		Cloud:   cloudConfig(p.Cloud),
+		Cloud:   cloudConfig(d.Cloud, p.Cloud),
 		EnvName: defaultString(d.EnvName, "tf"),
 		Env: &envConfig{
 			URL:    dbURL,
@@ -508,14 +508,9 @@ func (d *AtlasSchemaResourceModel) Workspace(ctx context.Context, p *ProviderDat
 			Diff:   d.Diff,
 			Lint:   d.Lint,
 			Schema: &schemaConfig{
-				Repo: repoConfig(p.Cloud),
+				Repo: repoConfig(d.Cloud, p.Cloud),
 			},
 		},
-	}
-	if cloud := p.Cloud; cloud.Valid() {
-		cfg.Cloud = &CloudConfig{
-			Token: cloud.Token.ValueString(),
-		}
 	}
 	diags := d.Exclude.ElementsAs(ctx, &cfg.Env.Exclude, false)
 	if diags.HasError() {

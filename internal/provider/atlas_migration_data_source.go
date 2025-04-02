@@ -239,7 +239,7 @@ func (d *MigrationDataSourceModel) Workspace(ctx context.Context, p *ProviderDat
 			DevURL: p.DevURL,
 			Migration: &migrationConfig{
 				RevisionsSchema: d.RevisionsSchema.ValueString(),
-				Repo:            repoConfig(p.Cloud),
+				Repo:            repoConfig(d.Cloud, p.Cloud),
 			},
 		},
 	}

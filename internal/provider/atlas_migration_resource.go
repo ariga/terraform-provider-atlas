@@ -775,7 +775,7 @@ func (d *MigrationResourceModel) Workspace(ctx context.Context, p *ProviderData)
 				Baseline:        d.Baseline.ValueString(),
 				RevisionsSchema: d.RevisionsSchema.ValueString(),
 				ExecOrder:       d.ExecOrder.ValueString(),
-				Repo:            repoConfig(p.Cloud),
+				Repo:            repoConfig(d.Cloud, p.Cloud),
 			},
 		},
 	}

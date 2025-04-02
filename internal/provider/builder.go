@@ -143,13 +143,15 @@ func (env *envConfig) AsBlock() *hclwrite.Block {
 			m.SetAttributeValue("revisions_schema", cty.StringVal(md.RevisionsSchema))
 		}
 		if md.Repo != "" {
-			m.SetAttributeValue("repo", cty.StringVal(md.Repo))
+			repo := m.AppendNewBlock("repo", nil).Body()
+			repo.SetAttributeValue("name", cty.StringVal(md.Repo))
 		}
 	}
 	if sc := env.Schema; sc != nil {
 		if sc.Repo != "" {
 			schema := e.AppendNewBlock("schema", nil).Body()
-			schema.SetAttributeValue("repo", cty.StringVal(sc.Repo))
+			repo := schema.AppendNewBlock("repo", nil).Body()
+			repo.SetAttributeValue("name", cty.StringVal(sc.Repo))
 		}
 	}
 	if dd := env.Diff; dd != nil {
