@@ -28,6 +28,8 @@ type (
 		HCL       types.String `tfsdk:"hcl"`
 		ID        types.String `tfsdk:"id"`
 		Variables types.Map    `tfsdk:"variables"`
+		// Cloud config
+		Cloud *AtlasCloudBlock `tfsdk:"cloud"`
 	}
 )
 
@@ -54,6 +56,9 @@ func (d *AtlasSchemaDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 		// This description is used by the documentation generator and the language server.
 		Description: "atlas_schema data source uses dev-db to normalize the HCL schema " +
 			"in order to create better terraform diffs",
+		Blocks: map[string]schema.Block{
+			"cloud": cloudBlock,
+		},
 		Attributes: map[string]schema.Attribute{
 			"dev_url": schema.StringAttribute{
 				Description: "The url of the dev-db see https://atlasgo.io/cli/url",
@@ -154,6 +159,9 @@ func (d *AtlasSchemaDataSourceModel) Workspace(ctx context.Context, p *ProviderD
 		Env: &envConfig{
 			URL:    "file://schema.hcl",
 			DevURL: defaultString(d.DevURL, p.DevURL),
+			Schema: &schemaConfig{
+				Repo: repoConfig(p.Cloud),
+			},
 		},
 	}
 	opts := []atlas.Option{atlas.WithAtlasHCL(cfg.Render)}

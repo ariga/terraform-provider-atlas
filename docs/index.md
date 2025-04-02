@@ -44,6 +44,7 @@ resource "atlas_schema" "market" {
 
 Optional:
 
-- `project` (String)
+- `project` (String, Deprecated)
+- `repo` (String)
 - `token` (String)
 - `url` (String)

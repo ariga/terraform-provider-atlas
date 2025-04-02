@@ -43,6 +43,8 @@ type (
 		Config  types.String `tfsdk:"config"`
 		Vars    types.String `tfsdk:"variables"`
 		EnvName types.String `tfsdk:"env_name"`
+		// Cloud config
+		Cloud *AtlasCloudBlock `tfsdk:"cloud"`
 	}
 	// Diff defines the diff policies to apply when planning schema changes.
 	Diff struct {
@@ -156,8 +158,9 @@ func (r *AtlasSchemaResource) Schema(ctx context.Context, _ resource.SchemaReque
 			"using an HCL file describing the wanted state of the database. " +
 			"See https://atlasgo.io/",
 		Blocks: map[string]schema.Block{
-			"diff": diffBlock,
-			"lint": lintBlock,
+			"diff":  diffBlock,
+			"lint":  lintBlock,
+			"cloud": cloudBlock,
 		},
 		Attributes: map[string]schema.Attribute{
 			"hcl": schema.StringAttribute{
@@ -504,6 +507,9 @@ func (d *AtlasSchemaResourceModel) Workspace(ctx context.Context, p *ProviderDat
 			Source: "file://schema.hcl",
 			Diff:   d.Diff,
 			Lint:   d.Lint,
+			Schema: &schemaConfig{
+				Repo: repoConfig(p.Cloud),
+			},
 		},
 	}
 	if cloud := p.Cloud; cloud.Valid() {

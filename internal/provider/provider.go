@@ -42,6 +42,7 @@ type (
 		Token   types.String `tfsdk:"token"`
 		URL     types.String `tfsdk:"url"`
 		Project types.String `tfsdk:"project"`
+		Repo    types.String `tfsdk:"repo"`
 	}
 	AtlasExec interface {
 		MigrateApply(context.Context, *atlas.MigrateApplyParams) (*atlas.MigrateApply, error)
@@ -89,6 +90,10 @@ var (
 				Optional: true,
 			},
 			"project": schema.StringAttribute{
+				Optional:           true,
+				DeprecationMessage: "Use the repo attribute instead. The project attribute will be removed in a future version.",
+			},
+			"repo": schema.StringAttribute{
 				Optional: true,
 			},
 		},
@@ -313,10 +318,25 @@ func (c *AtlasCloudBlock) Valid() bool {
 func cloudConfig(c ...*AtlasCloudBlock) *CloudConfig {
 	for _, b := range c {
 		if b.Valid() {
-			return &CloudConfig{Token: b.Token.ValueString()}
+			return &CloudConfig{
+				Token: b.Token.ValueString(),
+			}
 		}
 	}
 	return nil
+}
+
+func repoConfig(c ...*AtlasCloudBlock) string {
+	for _, b := range c {
+		if b.Valid() {
+			// Backward compatibility with the project attribute.
+			if b.Repo.ValueString() == "" {
+				return b.Project.ValueString()
+			}
+			return b.Repo.ValueString()
+		}
+	}
+	return ""
 }
 
 // checkForUpdate checks for version updates and security advisories for Atlas.
