@@ -46,7 +46,8 @@ data "atlas_migration" "hello" {
 
 Optional:
 
-- `project` (String)
+- `project` (String, Deprecated)
+- `repo` (String)
 - `token` (String)
 - `url` (String)
 

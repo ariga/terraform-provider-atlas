@@ -43,6 +43,7 @@ type (
 		Diff      *Diff
 		Lint      *Lint
 		Migration *migrationConfig
+		Schema    *schemaConfig
 	}
 	CloudConfig struct {
 		Token string
@@ -52,6 +53,10 @@ type (
 		Baseline        string
 		ExecOrder       string
 		RevisionsSchema string
+		Repo            string
+	}
+	schemaConfig struct {
+		Repo string
 	}
 )
 
@@ -136,6 +141,15 @@ func (env *envConfig) AsBlock() *hclwrite.Block {
 		}
 		if md.RevisionsSchema != "" {
 			m.SetAttributeValue("revisions_schema", cty.StringVal(md.RevisionsSchema))
+		}
+		if md.Repo != "" {
+			m.SetAttributeValue("repo", cty.StringVal(md.Repo))
+		}
+	}
+	if sc := env.Schema; sc != nil {
+		if sc.Repo != "" {
+			schema := e.AppendNewBlock("schema", nil).Body()
+			schema.SetAttributeValue("repo", cty.StringVal(sc.Repo))
 		}
 	}
 	if dd := env.Diff; dd != nil {

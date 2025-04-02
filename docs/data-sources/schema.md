@@ -44,9 +44,20 @@ resource "atlas_schema" "hello" {
 
 ### Optional
 
+- `cloud` (Block, Optional) (see [below for nested schema](#nestedblock--cloud))
 - `variables` (Map of String) The map of variables used in the HCL.
 
 ### Read-Only
 
 - `hcl` (String) The normalized form of the HCL
 - `id` (String) The ID of this resource
+
+<a id="nestedblock--cloud"></a>
+### Nested Schema for `cloud`
+
+Optional:
+
+- `project` (String, Deprecated)
+- `repo` (String)
+- `token` (String)
+- `url` (String)

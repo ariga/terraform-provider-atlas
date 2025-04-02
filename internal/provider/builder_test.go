@@ -156,6 +156,50 @@ func Test_SchemaTemplate(t *testing.T) {
 }
 `,
 		},
+		{
+			name: "migration-repo",
+			data: &projectConfig{
+				Config:  "",
+				EnvName: "tf",
+				Env: &envConfig{
+					Source: "file://schema.hcl",
+					URL:    "mysql://user:pass@localhost:3306/tf-db",
+					Migration: &migrationConfig{
+						Repo: "test",
+					},
+				},
+			},
+			expected: `env "tf" {
+  src = "file://schema.hcl"
+  url = "mysql://user:pass@localhost:3306/tf-db"
+  migration {
+    repo = "test"
+  }
+}
+`,
+		},
+		{
+			name: "schema-repo",
+			data: &projectConfig{
+				Config:  "",
+				EnvName: "tf",
+				Env: &envConfig{
+					Source: "file://schema.hcl",
+					URL:    "mysql://user:pass@localhost:3306/tf-db",
+					Schema: &schemaConfig{
+						Repo: "test",
+					},
+				},
+			},
+			expected: `env "tf" {
+  src = "file://schema.hcl"
+  url = "mysql://user:pass@localhost:3306/tf-db"
+  schema {
+    repo = "test"
+  }
+}
+`,
+		},
 	}
 
 	for _, tt := range tests {

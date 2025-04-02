@@ -33,6 +33,7 @@ resource "atlas_schema" "market" {
 
 ### Optional
 
+- `cloud` (Block, Optional) (see [below for nested schema](#nestedblock--cloud))
 - `config` (String) The content of atlas.hcl config
 - `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `diff` (Block, Optional) (see [below for nested schema](#nestedblock--diff))
@@ -46,6 +47,17 @@ resource "atlas_schema" "market" {
 ### Read-Only
 
 - `id` (String) The ID of this resource
+
+<a id="nestedblock--cloud"></a>
+### Nested Schema for `cloud`
+
+Optional:
+
+- `project` (String, Deprecated)
+- `repo` (String)
+- `token` (String)
+- `url` (String)
+
 
 <a id="nestedblock--diff"></a>
 ### Nested Schema for `diff`
