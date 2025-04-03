@@ -319,27 +319,28 @@ func (c *AtlasCloudBlock) Valid() bool {
 }
 
 func cloudConfig(c ...*AtlasCloudBlock) *CloudConfig {
+	var cloud CloudConfig
 	for _, b := range c {
-		if b.Valid() {
-			return &CloudConfig{
-				Token: b.Token.ValueString(),
-			}
+		if b.Valid() && cloud.Token == "" {
+			cloud.Token = b.Token.ValueString()
 		}
 	}
-	return nil
+	return &cloud
 }
 
 func repoConfig(c ...*AtlasCloudBlock) string {
+	repo := ""
 	for _, b := range c {
-		if b.Valid() {
+		if b.Valid() && repo == "" {
 			// Backward compatibility with the project attribute.
 			if b.Repo.ValueString() == "" {
-				return b.Project.ValueString()
+				repo = b.Project.ValueString()
+				continue
 			}
-			return b.Repo.ValueString()
+			repo = b.Repo.ValueString()
 		}
 	}
-	return ""
+	return repo
 }
 
 // checkForUpdate checks for version updates and security advisories for Atlas.
