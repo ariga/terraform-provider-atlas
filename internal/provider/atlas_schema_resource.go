@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -54,6 +56,8 @@ type (
 	// Lint defines the lint policies to apply when planning schema changes.
 	Lint struct {
 		Review types.String `tfsdk:"review"`
+		// ReviewTimeout defines the wait time for the review to be approved.
+		ReviewTimeout types.String `tfsdk:"review_timeout"`
 	}
 	ConcurrentIndex struct {
 		Create types.Bool `tfsdk:"create"`
@@ -127,6 +131,13 @@ var (
 				Optional:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOf("ALWAYS", "WARNING", "ERROR"),
+				},
+			},
+			"review_timeout": schema.StringAttribute{
+				Description: "The review timeout",
+				Optional:    true,
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(regexp.MustCompile(`^\d+[smhd]$`), "Must be a valid duration (e.g. 1m, 2h)"),
 				},
 			},
 		},
@@ -305,6 +316,25 @@ func (r AtlasSchemaResource) ValidateConfig(ctx context.Context, req resource.Va
 }
 
 // ModifyPlan implements resource.ResourceWithModifyPlan.
+// ModifyPlan is a method of AtlasSchemaResource that modifies the Terraform resource plan
+// before it is applied. It performs various checks and adjustments to ensure the plan is
+// valid and safe to execute.
+//
+// Parameters:
+// - ctx: The context for the operation, used for cancellation and deadlines.
+// - req: The ModifyPlanRequest containing the current state and desired plan of the resource.
+// - resp: The ModifyPlanResponse used to append diagnostics and indicate required changes.
+//
+// Behavior:
+//   - Retrieves the desired plan and current state of the resource.
+//   - If the current state is nil or the HCL field is empty, it checks if the plan requires
+//     replacement or performs a first-run check to prevent accidental schema drops.
+//   - Handles delete operations by cloning the state into the plan and marking it as a delete operation.
+//   - Calls PrintPlanSQL to generate and log the SQL representation of the plan, appending any diagnostics.
+//   - If warnings are detected in the diagnostics, it triggers a schema review process.
+//
+// This method ensures that the resource plan is consistent, safe, and adheres to the expected
+// behavior of the Terraform provider.
 func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	var plan *AtlasSchemaResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -341,6 +371,7 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		isDelete = true
 	}
 	resp.Diagnostics.Append(PrintPlanSQL(ctx, &r.ProviderData, plan, isDelete)...)
+	resp.Diagnostics.Append(r.reviewSchema(ctx, plan)...)
 }
 
 func PrintPlanSQL(ctx context.Context, p *ProviderData, data *AtlasSchemaResourceModel, delete bool) (diags diag.Diagnostics) {
@@ -438,25 +469,135 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 		)
 		return
 	}
-	// If the repository URL is not set, apply the schema changes directly.
-	if repoURL == nil {
-		if _, err = w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
-			Env:         w.Project.EnvName,
-			Vars:        w.Project.Vars,
-			TxMode:      data.TxMode.ValueString(),
-			AutoApprove: review == nil,
-		}); err != nil {
-			diags.AddError("Apply Error",
-				fmt.Sprintf("Unable to apply changes, got error: %s", err),
+	var planURL string
+	// The approval flow is only enabled when repoURL is configured to connect to Atlas Cloud.
+	// If repoURL is not set, the flow is disabled, and changes are applied directly.
+	if review != nil && repoURL != nil {
+		targetURL, err := w.Project.TargetURL()
+		if err != nil {
+			diags.AddError("Failed to retrieve target URL",
+				fmt.Sprintf("Error getting target URL: %s", err),
 			)
 			return
 		}
+		timeout := time.Duration(0)
+		if data.Lint != nil && data.Lint.ReviewTimeout.ValueString() != "" {
+			timeoutStr := data.Lint.ReviewTimeout.ValueString()
+			timeout, err = time.ParseDuration(timeoutStr)
+			if err != nil {
+				diags.AddError("Invalid review timeout format",
+					fmt.Sprintf("Invalid review timeout format '%s': %s", timeoutStr, err),
+				)
+				return
+			}
+		}
+		now := time.Now()
+		for {
+			// Check context cancellation
+			if ctx.Err() != nil {
+				diags.AddError("Waiting for plan approval",
+					fmt.Sprintf("Context was cancelled: %s", ctx.Err()),
+				)
+				return
+			}
+			plans, err := w.Exec.SchemaPlanList(ctx, &atlas.SchemaPlanListParams{
+				Env:  w.Project.EnvName,
+				Vars: w.Project.Vars,
+				Repo: repoURL.String(),
+				From: []string{"env://url"},
+				To:   []string{targetURL},
+			})
+			if err != nil {
+				diags.AddError("Failed to list schema plans",
+					fmt.Sprintf("Couldn't retrieve schema plans: %s", err),
+				)
+				return
+			} else if len(plans) != 1 {
+				break
+			} else if len(plans) == 1 && plans[0].Status == "APPROVED" {
+				planURL = plans[0].URL
+				break
+			} else if len(plans) == 1 && plans[0].Status == "PENDING" {
+				if timeout == 0 {
+					diags.AddError("Plan Pending Approval",
+						fmt.Sprintf("The schema plan is awaiting approval. Please review and approve it before proceeding:\n\n%s", plans[0].Link),
+					)
+					return
+				}
+				if time.Since(now) > timeout {
+					diags.AddError("Plan Approval Timeout",
+						fmt.Sprintf("The schema plan is pending approval for too long. Please approve it before proceeding:\n\n%s", plans[0].Link),
+					)
+					return
+				}
+			}
+			// Sleep for a second before checking again
+			time.Sleep(1 * time.Second)
+		}
+	}
+	if _, err = w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
+		Env:         w.Project.EnvName,
+		Vars:        w.Project.Vars,
+		TxMode:      data.TxMode.ValueString(),
+		AutoApprove: review == nil,
+		PlanURL:     planURL,
+	}); err != nil {
+		diags.AddError("Apply Error",
+			fmt.Sprintf("Unable to apply changes, got error: %s", err),
+		)
+		return
+	}
+	return
+}
+
+func (r *AtlasSchemaResource) reviewSchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {
+	w, cleanup, err := data.Workspace(ctx, &r.ProviderData)
+	if err != nil {
+		diags.AddError("Generate config failure",
+			fmt.Sprintf("Failed to create workspace: %s", err.Error()))
+		return
+	}
+	defer cleanup()
+	review, err := w.Project.LintReview()
+	if err != nil {
+		diags.AddError("Configuration Error",
+			fmt.Sprintf("Unable to parse configuration, got error: %s", err),
+		)
+		return
+	}
+	repoURL, err := w.Project.RepoURL()
+	if err != nil {
+		diags.AddError("Failed to retrieve repo URL",
+			fmt.Sprintf("Error getting repo URL: %s", err),
+		)
+		return
+	}
+	if review == nil || repoURL == nil {
 		return
 	}
 	targetURL, err := w.Project.TargetURL()
 	if err != nil {
 		diags.AddError("Failed to retrieve target URL",
 			fmt.Sprintf("Error getting target URL: %s", err),
+		)
+		return
+	}
+	// Only run the review flow if there have a detected change
+	result, err := w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
+		Env:    w.Project.EnvName,
+		Vars:   w.Project.Vars,
+		TxMode: data.TxMode.ValueString(),
+		DryRun: true,
+	})
+	if err != nil {
+		diags.AddError("Atlas Plan Error",
+			fmt.Sprintf("Unable to generate migration plan, got error: %s", err),
+		)
+		return
+	}
+	if result.Applied == nil || (result.Applied != nil && len(result.Applied.Applied) == 0) {
+		diags.AddWarning("No changes detected",
+			"The schema has no changes to apply.",
 		)
 		return
 	}
@@ -534,25 +675,11 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 				strings.Join(planURLs, "\n- ")),
 		)
 	}
-	if plan != nil {
-		if plan.Status == "PENDING" {
-			diags.AddError("Plan Pending Approval",
-				fmt.Sprintf("The schema plan is awaiting approval. Please review and approve it before proceeding:\n\n%s", plan.Link),
-			)
-			return
-		}
-		_, err = w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
-			Env:     w.Project.EnvName,
-			Vars:    w.Project.Vars,
-			TxMode:  data.TxMode.ValueString(),
-			PlanURL: plan.URL,
-		})
-		if err != nil {
-			diags.AddError("Failed to apply schema changes",
-				fmt.Sprintf("Encountered an error applying schema changes: %s", err),
-			)
-			return
-		}
+	if plan != nil && plan.Status == "PENDING" {
+		diags.AddWarning("Plan Pending Approval",
+			fmt.Sprintf("The schema plan is awaiting approval. Please review and approve it before proceeding:\n\n%s", plan.Link),
+		)
+		return
 	}
 	return
 }

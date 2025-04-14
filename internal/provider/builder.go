@@ -256,11 +256,9 @@ func (env *envConfig) AsBlock() *hclwrite.Block {
 			attrBoolPtr(b, v.ModifyForeignKey, "modify_foreign_key")
 		}
 	}
-	if ld := env.Lint; ld != nil {
+	if ld := env.Lint; ld != nil && !ld.Review.IsNull() {
 		l := e.AppendNewBlock("lint", nil).Body()
-		if r := ld.Review; !r.IsNull() {
-			l.SetAttributeValue("review", cty.StringVal(r.ValueString()))
-		}
+		l.SetAttributeValue("review", cty.StringVal(ld.Review.ValueString()))
 	}
 	return blk
 }

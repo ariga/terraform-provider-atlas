@@ -919,7 +919,7 @@ func TestApprovalFlow(t *testing.T) {
 	cloud.AddSchema("test", `schema "test" {}`)
 	server := cloud.Start(t, "test token")
 	defer server.Close()
-	config := func(hcl string, review string) string {
+	config := func(hcl string, review string, timeout string) string {
 		return fmt.Sprintf(`
 			resource "atlas_schema" "example" {
 				hcl = <<-EOT
@@ -945,9 +945,12 @@ func TestApprovalFlow(t *testing.T) {
 						}
 					}
 				HCL
+				lint {
+					review_timeout = %q
+				}
 				url = %q
 				dev_url = %q
-			}`, hcl, server.URL, review, url, "sqlite://file.db?mode=memory")
+			}`, hcl, server.URL, review, timeout, url, "sqlite://file.db?mode=memory")
 	}
 	cli, err := sqlclient.Open(context.Background(), url)
 	if err != nil {
@@ -968,7 +971,7 @@ func TestApprovalFlow(t *testing.T) {
 				column "c1" {
 					type = int
 				}
-			}`, "ALWAYS"),
+			}`, "ALWAYS", "0s"),
 				Destroy: false,
 				// ignore non-normalized schema
 				ExpectNonEmptyPlan: true,
@@ -993,7 +996,7 @@ func TestApprovalFlow(t *testing.T) {
 				column "c1" {
 					type = int
 				}
-			}`, "ALWAYS"),
+			}`, "ALWAYS", "0s"),
 				Destroy: false,
 				// ignore non-normalized schema
 				ExpectNonEmptyPlan: true,
@@ -1013,7 +1016,7 @@ func TestApprovalFlow(t *testing.T) {
 				},
 			},
 			{
-				Config:  config(`schema "main" {}`, "ERROR"),
+				Config:  config(`schema "main" {}`, "ERROR", "0s"),
 				Destroy: false,
 				// ignore non-normalized schema
 				ExpectNonEmptyPlan: true,
@@ -1027,10 +1030,24 @@ func TestApprovalFlow(t *testing.T) {
 				ExpectError: regexp.MustCompile("Plan Pending Approval"),
 			},
 			{
+				Config:  config(`schema "main" {}`, "ERROR", "1s"),
+				Destroy: false,
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+				Check: func(s *terraform.State) error {
+					// Expect the plan to be created in the cloud.
+					if len(cloud.plans) != 2 {
+						return fmt.Errorf("expected plan to be created in the cloud, but got none")
+					}
+					return nil
+				},
+				ExpectError: regexp.MustCompile("Plan Approval Timeout"),
+			},
+			{
 				PreConfig: func() {
 					cloud.ApproveAllPlan()
 				},
-				Config:  config(`schema "main" {}`, "ERROR"),
+				Config:  config(`schema "main" {}`, "ERROR", "1s"),
 				Destroy: false,
 				// ignore non-normalized schema
 				ExpectNonEmptyPlan: true,
