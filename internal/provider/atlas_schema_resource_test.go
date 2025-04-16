@@ -2,11 +2,15 @@ package provider_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 
 	"ariga.io/atlas/sql/sqlclient"
@@ -722,10 +726,6 @@ resource "atlas_schema" "example" {
 				// ignore non-normalized schema
 				ExpectNonEmptyPlan: true,
 				Check: func(s *terraform.State) error {
-					cli, err := sqlclient.Open(context.Background(), url)
-					if err != nil {
-						return err
-					}
 					realm, err := cli.InspectRealm(context.Background(), nil)
 					if err != nil {
 						return err
@@ -913,6 +913,163 @@ resource "atlas_schema" "example" {
 	})
 }
 
+func TestApprovalFlow(t *testing.T) {
+	url := tmpDB(t)
+	cloud := tmpCloud(t)
+	cloud.AddSchema("test", `schema "test" {}`)
+	server := cloud.Start(t, "test token")
+	defer server.Close()
+	config := func(hcl string, review string, timeout string) string {
+		return fmt.Sprintf(`
+			resource "atlas_schema" "example" {
+				hcl = <<-EOT
+					%s
+				EOT
+				cloud {
+					repo = "test"
+				}
+				config = <<-HCL
+					atlas {
+						cloud {
+							token = "test token"
+							url = %q
+						}
+					}
+					env {
+						name = atlas.env
+						lint {
+							review = %q
+							destructive {
+								error = true
+							}
+						}
+					}
+				HCL
+				lint {
+					review_timeout = %q
+				}
+				url = %q
+				dev_url = %q
+			}`, hcl, server.URL, review, timeout, url, "sqlite://file.db?mode=memory")
+	}
+	cli, err := sqlclient.Open(context.Background(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// First run should create the plan in the cloud.
+			{
+				Config: config(`
+			schema "main" {}
+			table "t1" {
+				schema = schema.main
+				column "c1" {
+					type = int
+				}
+			}`, "ALWAYS", "0s"),
+				Destroy: false,
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+				Check: func(s *terraform.State) error {
+					// Expect the plan to be created in the cloud.
+					if len(cloud.plans) != 1 {
+						return fmt.Errorf("expected plan to be created in the cloud, but got none")
+					}
+					return nil
+				},
+				ExpectError: regexp.MustCompile("Plan Pending Approval"),
+			},
+			// Second run with approved plan should apply the changes.
+			{
+				PreConfig: func() {
+					cloud.ApproveAllPlan()
+				},
+				Config: config(`
+			schema "main" {}
+			table "t1" {
+				schema = schema.main
+				column "c1" {
+					type = int
+				}
+			}`, "ALWAYS", "0s"),
+				Destroy: false,
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+				Check: func(s *terraform.State) error {
+					realm, err := cli.InspectRealm(context.Background(), nil)
+					if err != nil {
+						return err
+					}
+					schema, ok := realm.Schema("main")
+					if !ok {
+						return fmt.Errorf("schema 'main' does not exist.")
+					}
+					if _, ok := schema.Table("t1"); !ok {
+						return fmt.Errorf("table 't1' does not exist.")
+					}
+					return nil
+				},
+			},
+			{
+				Config:  config(`schema "main" {}`, "ERROR", "0s"),
+				Destroy: false,
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+				Check: func(s *terraform.State) error {
+					// Expect the plan to be created in the cloud.
+					if len(cloud.plans) != 2 {
+						return fmt.Errorf("expected plan to be created in the cloud, but got none")
+					}
+					return nil
+				},
+				ExpectError: regexp.MustCompile("Plan Pending Approval"),
+			},
+			{
+				Config:  config(`schema "main" {}`, "ERROR", "1s"),
+				Destroy: false,
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+				Check: func(s *terraform.State) error {
+					// Expect the plan to be created in the cloud.
+					if len(cloud.plans) != 2 {
+						return fmt.Errorf("expected plan to be created in the cloud, but got none")
+					}
+					return nil
+				},
+				ExpectError: regexp.MustCompile("Plan Approval Timeout"),
+			},
+			{
+				PreConfig: func() {
+					cloud.ApproveAllPlan()
+				},
+				Config:  config(`schema "main" {}`, "ERROR", "1s"),
+				Destroy: false,
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+				Check: func(s *terraform.State) error {
+					realm, err := cli.InspectRealm(context.Background(), nil)
+					if err != nil {
+						return err
+					}
+					schema, ok := realm.Schema("main")
+					if !ok {
+						return fmt.Errorf("schema 'main' does not exist.")
+					}
+					if _, ok := schema.Table("t1"); ok {
+						return fmt.Errorf("table 't1' should not exist.")
+					}
+					return nil
+				},
+			},
+		},
+	})
+}
+
 // New temporary sqlite database for testing.
 // Returns uri to the database.
 func tmpDB(t *testing.T) string {
@@ -926,6 +1083,11 @@ func tmpDB(t *testing.T) string {
 		}
 	})
 	return "sqlite://" + filepath.Join(td, "test.db")
+}
+
+// New temporary Atlas cloud server for testing.
+func tmpCloud(t *testing.T) mockAtlasCloud {
+	return *NewMockAtlasCloud()
 }
 
 func tempSchemas(t *testing.T, url string, schemas ...string) *sqlclient.Client {
@@ -968,4 +1130,196 @@ func drop(t *testing.T, c *sqlclient.Client, schemas ...string) {
 			t.Errorf("failed closing client: %s", err)
 		}
 	})
+}
+
+type (
+	mockAtlasCloud struct {
+		schemas        map[string]Schema
+		plans          map[string]Plan
+		planFromHashes map[string][]Plan
+		planCount      int
+		schemaCount    int
+
+		mu sync.Mutex
+	}
+	Schema struct {
+		ID  int
+		HCL string
+	}
+	Plan struct {
+		ID         int    `json:"id"`
+		Name       string `json:"name"`
+		SchemaSlug string `json:"schemaSlug"`
+		Status     string `json:"status"`
+		FromHash   string `json:"fromHash"`
+		ToHash     string `json:"toHash"`
+		Link       string `json:"link"`
+		URL        string `json:"url"`
+		Migration  string `json:"migration"`
+	}
+)
+
+func NewMockAtlasCloud() *mockAtlasCloud {
+	return &mockAtlasCloud{
+		schemas:        make(map[string]Schema),
+		plans:          make(map[string]Plan),
+		planFromHashes: make(map[string][]Plan),
+	}
+}
+
+func (m *mockAtlasCloud) AddSchema(name, schema string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.schemaCount++
+	m.schemas[name] = Schema{
+		ID:  m.schemaCount,
+		HCL: schema,
+	}
+}
+
+func (m *mockAtlasCloud) AddPlan(name, schemaSlug, status, fromHash, toHash string, migration string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.planCount++
+	link := fmt.Sprintf("https://a8m.atlasgo.cloud/schemas/%d/plans/%d", m.schemaCount, m.planCount)
+	url := fmt.Sprintf("atlas://repo/schema/%s/plans/%s", schemaSlug, name)
+	plan := Plan{
+		ID:         m.planCount,
+		Name:       name,
+		SchemaSlug: schemaSlug,
+		Status:     status,
+		FromHash:   fromHash,
+		ToHash:     toHash,
+		Migration:  migration,
+		Link:       link,
+		URL:        url,
+	}
+	m.plans[name] = plan
+	hash := fmt.Sprintf("%s-%s", fromHash, toHash)
+	m.planFromHashes[hash] = append(m.planFromHashes[hash], plan)
+}
+
+func (m *mockAtlasCloud) ApproveAllPlan() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for name, plan := range m.plans {
+		plan.Status = "APPROVED"
+		m.plans[name] = plan
+	}
+	for hash, plans := range m.planFromHashes {
+		for i, p := range plans {
+			p.Status = "APPROVED"
+			m.planFromHashes[hash][i] = p
+		}
+	}
+}
+
+func (m *mockAtlasCloud) Start(t *testing.T, token string) *httptest.Server {
+	type (
+		SchemaStateInput struct {
+			Slug string `json:"slug"`
+		}
+		DeclarativePlanByHashesInput struct {
+			SchemaSlug string `json:"schemaSlug"`
+			FromHash   string `json:"fromHash"`
+			ToHash     string `json:"toHash"`
+		}
+		DeclarativePlanByNameInput struct {
+			SchemaSlug string `json:"schemaSlug"`
+			Name       string `json:"name"`
+		}
+		CreateDeclarativePlanInput struct {
+			Name       string `json:"name"`
+			SchemaSlug string `json:"schemaSlug"`
+			Status     string `json:"status"`
+			FromHash   string `json:"fromHash"`
+			ToHash     string `json:"toHash"`
+			Migration  string `json:"migration"`
+		}
+		graphQLQuery struct {
+			Query                string          `json:"query"`
+			Variables            json.RawMessage `json:"variables"`
+			SchemaStateVariables struct {
+				SchemaStateInput SchemaStateInput `json:"input"`
+			}
+			DeclarativePlanByHashesVariables struct {
+				DeclarativePlanByHashesInput DeclarativePlanByHashesInput `json:"input"`
+			}
+			DeclarativePlanByNameVariables struct {
+				DeclarativePlanByNameInput DeclarativePlanByNameInput `json:"input"`
+			}
+			CreateDeclarativePlanVariables struct {
+				CreateDeclarativePlanInput CreateDeclarativePlanInput `json:"input"`
+			}
+		}
+	)
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		require.Equal(t, "Bearer "+token, r.Header.Get("Authorization"))
+		var query graphQLQuery
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&query))
+		switch {
+		case strings.Contains(query.Query, "schemaState"):
+			require.NoError(t, json.Unmarshal(query.Variables, &query.SchemaStateVariables))
+			schema, ok := m.schemas[query.SchemaStateVariables.SchemaStateInput.Slug]
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			fmt.Fprintf(w, `{"data":{"schemaState": {"hcl": %q }}}`, schema.HCL)
+		case strings.Contains(query.Query, "CreateDeclarativePlan"):
+			require.NoError(t, json.Unmarshal(query.Variables, &query.CreateDeclarativePlanVariables))
+			input := query.CreateDeclarativePlanVariables.CreateDeclarativePlanInput
+			schema, ok := m.schemas[input.SchemaSlug]
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			m.planCount++
+			link := fmt.Sprintf("https://a8m.atlasgo.cloud/schemas/%d/plans/%d", schema.ID, m.planCount)
+			url := fmt.Sprintf("atlas://%s/plans/%s", input.SchemaSlug, input.Name)
+			plan := Plan{
+				ID:         m.planCount,
+				Name:       input.Name,
+				SchemaSlug: input.SchemaSlug,
+				Status:     input.Status,
+				FromHash:   input.FromHash,
+				ToHash:     input.ToHash,
+				Migration:  input.Migration,
+				Link:       link,
+				URL:        url,
+			}
+			m.plans[input.Name] = plan
+			hash := fmt.Sprintf("%s-%s", input.FromHash, input.ToHash)
+			m.planFromHashes[hash] = append(m.planFromHashes[hash], plan)
+			fmt.Fprintf(w, `{"data":{"CreateDeclarativePlan": {"link": %q, "url": %q}}}`, link, url)
+		case strings.Contains(query.Query, "DeclarativePlanByHashes"):
+			require.NoError(t, json.Unmarshal(query.Variables, &query.DeclarativePlanByHashesVariables))
+			input := query.DeclarativePlanByHashesVariables.DeclarativePlanByHashesInput
+			hash := fmt.Sprintf("%s-%s", input.FromHash, input.ToHash)
+			plan, ok := m.planFromHashes[hash]
+			if !ok {
+				fmt.Fprintf(w, `{"data":{"DeclarativePlanByHashes": []}}`)
+				return
+			}
+			fmt.Fprintf(w, `{"data":{"DeclarativePlanByHashes": %s}}`, must(json.Marshal(plan)))
+		case strings.Contains(query.Query, "DeclarativePlanByName"):
+			require.NoError(t, json.Unmarshal(query.Variables, &query.DeclarativePlanByNameVariables))
+			input := query.DeclarativePlanByNameVariables.DeclarativePlanByNameInput
+			plan, ok := m.plans[input.Name]
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			fmt.Fprintf(w, `{"data":{"DeclarativePlanByName": %s}}`, must(json.Marshal(plan)))
+		}
+	}))
+}
+
+func must(b []byte, err error) []byte {
+	if err != nil {
+		panic(err)
+	}
+	return b
 }

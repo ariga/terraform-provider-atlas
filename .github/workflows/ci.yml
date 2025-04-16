@@ -186,6 +186,19 @@ jobs:
           ! cat stdout.txt | grep --silent "Warning: version is unset"
         env:
           TF_VAR_atlas_token: ${{ secrets.ATLAS_TOKEN }}
+      - name: Terraform (review)
+        working-directory: integration-tests/review
+        run: |
+          ../../scripts/local.sh ../../dist 0.0.0-pre.0
+          terraform init > /dev/null
+          echo "Apply terraform plan"
+          terraform apply -no-color --auto-approve > stdout.txt
+          cat stdout.txt | grep --silent "Apply complete! Resources: 1 added, 0 changed, 0 destroyed."
+          echo "Ensure that there is no diff"
+          terraform plan -no-color > stdout.txt
+          cat stdout.txt | grep --silent "No changes. Your infrastructure matches the configuration."
+        env:
+          TF_VAR_atlas_token: ${{ secrets.ATLAS_TOKEN }}
   integration-mysql:
     name: Integration MySQL (Terraform ${{ matrix.terraform-version }})
     runs-on: ubuntu-latest
