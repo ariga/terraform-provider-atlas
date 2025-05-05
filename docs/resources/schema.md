@@ -105,4 +105,3 @@ Optional:
 Optional:
 
 - `review` (String) The review policy
-- `review_timeout` (String) The review timeout

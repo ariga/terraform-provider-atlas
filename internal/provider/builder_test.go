@@ -194,9 +194,9 @@ func Test_SchemaTemplate(t *testing.T) {
 				},
 			},
 			expected: `env "tf" {
+  src = "file://schema.hcl"
   url = "mysql://user:pass@localhost:3306/tf-db"
   schema {
-    src = "file://schema.hcl"
     repo {
       name = "test"
     }
