@@ -101,85 +101,10 @@ func (c *projectConfig) LintReview() (*string, error) {
 	}
 	if reviewAttr := lintBlk.Body().GetAttribute("review"); reviewAttr != nil {
 		review := string(reviewAttr.Expr().BuildTokens(nil).Bytes())
-		trimmed := strings.Trim(strings.TrimSpace(review), `"`)
+		trimmed := strings.Trim(review, `"`)
 		return &trimmed, nil
 	}
 	return nil, nil
-}
-
-// TargetURL returns the target URL for the environment.
-func (c *projectConfig) TargetURL() (string, error) {
-	file, err := c.AsFile()
-	if err != nil {
-		return "", err
-	}
-	envBlk, err := searchBlock(file.Body(), "env", c.EnvName)
-	if err != nil || envBlk == nil {
-		return "", err
-	}
-	if envBlk.Body().GetAttribute("src") != nil {
-		return "env://src", nil
-	}
-	schemaBlk, err := searchBlock(envBlk.Body(), "schema", "")
-	if err != nil || schemaBlk == nil {
-		return "", err
-	}
-	if schemaBlk.Body().GetAttribute("src") != nil {
-		return "env://schema.src", nil
-	}
-	return "", nil
-}
-
-// RepoURL returns the repository URL for the environment.
-func (c *projectConfig) RepoURL() (*url.URL, error) {
-	switch {
-	// The user has provided the repository name in migration block.
-	case c.Env.Migration != nil && c.Env.Migration.Repo != "":
-		return &url.URL{
-			Scheme: SchemaTypeAtlas,
-			Host:   c.Env.Migration.Repo,
-		}, nil
-	// The user has provided the repository name in schema block.
-	case c.Env.Schema != nil && c.Env.Schema.Repo != "":
-		return &url.URL{
-			Scheme: SchemaTypeAtlas,
-			Host:   c.Env.Schema.Repo,
-		}, nil
-	// Fallback to desired URL if it's Cloud URL.
-	case c.Env.URL != "":
-		u, err := url.Parse(c.Env.URL)
-		if err != nil {
-			return nil, err
-		}
-		if u.Scheme != SchemaTypeAtlas {
-			return nil, nil
-		}
-		c := *u
-		c.RawQuery = ""
-		return &c, nil
-	// Search Repo URL in the project config.
-	default:
-		file, err := c.AsFile()
-		if err != nil {
-			return nil, err
-		}
-		envBlk, err := searchBlock(file.Body(), "env", c.EnvName)
-		if err != nil || envBlk == nil {
-			return nil, err
-		}
-		schemaBlk, err := searchBlock(envBlk.Body(), "schema", "")
-		if err != nil || schemaBlk == nil {
-			return nil, err
-		}
-		if schemaBlk.Body().GetAttribute("repo") != nil {
-			// Build Repo URL from env.
-			return &url.URL{
-				Scheme: "env",
-				Host:   "schema.repo",
-			}, nil
-		}
-		return nil, nil
-	}
 }
 
 // AsBlock returns the HCL block for the environment configuration.
@@ -193,15 +118,7 @@ func (env *envConfig) AsBlock() *hclwrite.Block {
 		e.SetAttributeValue("dev", cty.StringVal(env.DevURL))
 	}
 	if env.Source != "" {
-		// src, schema attributes/blocks are mutually exclusive
-		if sc := env.Schema; sc != nil && sc.Repo != "" {
-			schema := e.AppendNewBlock("schema", nil).Body()
-			schema.SetAttributeValue("src", cty.StringVal(env.Source))
-			repo := schema.AppendNewBlock("repo", nil).Body()
-			repo.SetAttributeValue("name", cty.StringVal(sc.Repo))
-		} else {
-			e.SetAttributeValue("src", cty.StringVal(env.Source))
-		}
+		e.SetAttributeValue("src", cty.StringVal(env.Source))
 	}
 	if l := deleteZero(env.Schemas); len(l) > 0 {
 		e.SetAttributeValue("schemas", listStringVal(l))
@@ -230,6 +147,13 @@ func (env *envConfig) AsBlock() *hclwrite.Block {
 			repo.SetAttributeValue("name", cty.StringVal(md.Repo))
 		}
 	}
+	if sc := env.Schema; sc != nil {
+		if sc.Repo != "" {
+			schema := e.AppendNewBlock("schema", nil).Body()
+			repo := schema.AppendNewBlock("repo", nil).Body()
+			repo.SetAttributeValue("name", cty.StringVal(sc.Repo))
+		}
+	}
 	if dd := env.Diff; dd != nil {
 		d := e.AppendNewBlock("diff", nil).Body()
 		if v := dd.ConcurrentIndex; v != nil {
@@ -256,9 +180,11 @@ func (env *envConfig) AsBlock() *hclwrite.Block {
 			attrBoolPtr(b, v.ModifyForeignKey, "modify_foreign_key")
 		}
 	}
-	if ld := env.Lint; ld != nil && !ld.Review.IsNull() {
+	if ld := env.Lint; ld != nil {
 		l := e.AppendNewBlock("lint", nil).Body()
-		l.SetAttributeValue("review", cty.StringVal(ld.Review.ValueString()))
+		if r := ld.Review; !r.IsNull() {
+			l.SetAttributeValue("review", cty.StringVal(r.ValueString()))
+		}
 	}
 	return blk
 }

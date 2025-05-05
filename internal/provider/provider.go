@@ -53,9 +53,6 @@ type (
 		SchemaInspect(context.Context, *atlas.SchemaInspectParams) (string, error)
 		SchemaApply(context.Context, *atlas.SchemaApplyParams) (*atlas.SchemaApply, error)
 		SchemaClean(context.Context, *atlas.SchemaCleanParams) (*atlas.SchemaClean, error)
-		SchemaPlan(context.Context, *atlas.SchemaPlanParams) (*atlas.SchemaPlan, error)
-		SchemaPlanList(context.Context, *atlas.SchemaPlanListParams) ([]atlas.SchemaPlanFile, error)
-		SchemaPush(context.Context, *atlas.SchemaPushParams) (*atlas.SchemaPush, error)
 		WhoAmI(context.Context, *atlas.WhoAmIParams) (*atlas.WhoAmI, error)
 
 		Version(context.Context) (*atlas.Version, error)
@@ -315,32 +312,31 @@ the atlas.hcl content:
 
 // Valid returns true if the cloud block is valid.
 func (c *AtlasCloudBlock) Valid() bool {
-	return c != nil && (c.Token.ValueString() != "" || c.Repo.ValueString() != "")
+	return c != nil && c.Token.ValueString() != ""
 }
 
 func cloudConfig(c ...*AtlasCloudBlock) *CloudConfig {
-	var cloud CloudConfig
 	for _, b := range c {
-		if b.Valid() && cloud.Token == "" {
-			cloud.Token = b.Token.ValueString()
+		if b.Valid() {
+			return &CloudConfig{
+				Token: b.Token.ValueString(),
+			}
 		}
 	}
-	return &cloud
+	return nil
 }
 
 func repoConfig(c ...*AtlasCloudBlock) string {
-	repo := ""
 	for _, b := range c {
-		if b.Valid() && repo == "" {
+		if b.Valid() {
 			// Backward compatibility with the project attribute.
 			if b.Repo.ValueString() == "" {
-				repo = b.Project.ValueString()
-				continue
+				return b.Project.ValueString()
 			}
-			repo = b.Repo.ValueString()
+			return b.Repo.ValueString()
 		}
 	}
-	return repo
+	return ""
 }
 
 // checkForUpdate checks for version updates and security advisories for Atlas.
