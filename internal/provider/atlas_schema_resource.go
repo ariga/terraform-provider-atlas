@@ -520,13 +520,13 @@ func (r *AtlasSchemaResource) applySchema(ctx context.Context, data *AtlasSchema
 			} else if len(plans) == 1 && plans[0].Status == "PENDING" {
 				if timeout == 0 {
 					diags.AddError("Plan Pending Approval",
-						fmt.Sprintf("The schema plan is awaiting approval. Please review and approve it before proceeding:\n\n%s", plans[0].Link),
+						fmt.Sprintf("The schema plan is awaiting approval. Please review and approve it and run again:\n\n%s", plans[0].Link),
 					)
 					return
 				}
 				if time.Since(now) > timeout {
 					diags.AddError("Plan Approval Timeout",
-						fmt.Sprintf("The schema plan is pending approval for too long. Please approve it before proceeding:\n\n%s", plans[0].Link),
+						fmt.Sprintf("The schema plan is pending approval for too long. Please approve it and run again:\n\n%s", plans[0].Link),
 					)
 					return
 				}
@@ -642,25 +642,40 @@ func (r *AtlasSchemaResource) reviewSchema(ctx context.Context, data *AtlasSchem
 	// Review policies "WARNING" or "ERROR": Try direct apply first, but if rejected by policy,
 	// create a plan for manual approval instead
 	case len(plans) == 0 && (*review == "WARNING" || *review == "ERROR"):
-		_, err = w.Exec.SchemaApply(ctx, &atlas.SchemaApplyParams{
+		tmpPlan, err := w.Exec.SchemaPlan(ctx, &atlas.SchemaPlanParams{
 			Env:    w.Project.EnvName,
 			Vars:   w.Project.Vars,
-			TxMode: data.TxMode.ValueString(),
+			Repo:   repoURL.String(),
+			From:   []string{"env://url"},
+			To:     []string{targetURL},
+			DryRun: true,
 		})
 		if err != nil {
-			if !strings.HasPrefix(err.Error(), "Rejected by review policy") {
-				diags.AddError("Failed to apply schema changes",
-					fmt.Sprintf("Encountered an error applying schema changes: %s", err),
-				)
-				return
-			}
-			plan, err = createApprovalPlan()
-			if err != nil {
-				diags.AddError("Failed to create approval plan",
-					fmt.Sprintf("Couldn't create a schema plan for approval after review policy rejection: %s", err),
-				)
-				return
-			}
+			diags.AddError("Failed to plan schema changes",
+				fmt.Sprintf("Failed to plan schema changes: %s", err),
+			)
+			return
+		}
+		if tmpPlan.Lint == nil {
+			return
+		}
+		needApproval := false
+		switch *review {
+		case "WARNING":
+			needApproval = tmpPlan.Lint.DiagnosticsCount() > 0
+		case "ERROR":
+			needApproval = len(tmpPlan.Lint.Errors()) > 0
+		}
+		if !needApproval {
+			return
+		}
+		// Create a new plan for approval
+		plan, err = createApprovalPlan()
+		if err != nil {
+			diags.AddError("Failed to create approval plan",
+				fmt.Sprintf("Couldn't create a schema plan for approval after review policy rejection: %s", err),
+			)
+			return
 		}
 	case len(plans) == 1:
 		plan = &plans[0]

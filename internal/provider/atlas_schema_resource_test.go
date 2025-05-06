@@ -913,6 +913,70 @@ resource "atlas_schema" "example" {
 	})
 }
 
+func TestAccPlanDoesNotModifyDatabase(t *testing.T) {
+	cloud := tmpCloud(t)
+	cloud.AddSchema("test", `schema "test" {}`)
+	server := cloud.Start(t, "test token")
+	url := tmpDB(t)
+	cli, err := sqlclient.Open(context.Background(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "atlas_schema" "example" {
+	hcl = <<-EOT
+		schema "main" {}
+		table "t1" {
+			schema = schema.main
+			column "c1" {
+				type = int
+			}
+		}
+	EOT
+	cloud {
+		repo = "test"
+	}
+	config = <<-HCL
+		atlas {
+			cloud {
+				token = "test token"
+				url = %q
+			}
+		}
+		env {
+			name = atlas.env
+			lint {
+				review = "WARNING"
+			}
+		}
+	HCL
+	url = "%s"
+	dev_url = "%s"
+}`, server.URL, url, "sqlite://file.db?mode=memory"),
+				Destroy: false,
+				// ignore non-normalized schema
+				ExpectNonEmptyPlan: true,
+				PlanOnly:           true,
+			},
+		},
+	})
+	// Inspect target database to ensure no changes were made.
+	realm, err := cli.InspectRealm(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(realm.Schemas[0].Tables) != 0 {
+		t.Fatalf("expected no tables in the target database, but got %d", len(realm.Schemas[0].Tables))
+	}
+}
+
 func TestApprovalFlow(t *testing.T) {
 	url := tmpDB(t)
 	cloud := tmpCloud(t)
