@@ -104,5 +104,5 @@ Optional:
 
 Optional:
 
-- `review` (String) The review policy
-- `review_timeout` (String) The review timeout
+- `review` (String) The review policy. One of `ALWAYS`, `WARNING` and `ERROR`.
+- `review_timeout` (String) The review timeout. The time to wait for the review to be approved. Valid time unit are 's' (seconds), 'm' (minutes), 'h' (hours).
