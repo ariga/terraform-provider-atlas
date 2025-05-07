@@ -127,15 +127,16 @@ var (
 		Description: "The lint policy",
 		Attributes: map[string]schema.Attribute{
 			"review": schema.StringAttribute{
-				Description: "The review policy",
+				Description: "The review policy. One of `ALWAYS`, `WARNING` and `ERROR`.",
 				Optional:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOf("ALWAYS", "WARNING", "ERROR"),
 				},
 			},
 			"review_timeout": schema.StringAttribute{
-				Description: "The review timeout",
-				Optional:    true,
+				Description: "The review timeout. The time to wait for the review to be approved. " +
+					"Valid time unit are 's' (seconds), 'm' (minutes), 'h' (hours).",
+				Optional: true,
 				Validators: []validator.String{
 					stringvalidator.RegexMatches(regexp.MustCompile(`^\d+[smhd]$`), "Must be a valid duration (e.g. 1m, 2h)"),
 				},
