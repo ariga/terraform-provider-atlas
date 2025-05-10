@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
+	"ariga.io/atlas-go-sdk/atlasexec"
 	atlas "ariga.io/atlas-go-sdk/atlasexec"
 )
 
@@ -602,6 +604,30 @@ func (r *AtlasSchemaResource) reviewSchema(ctx context.Context, data *AtlasSchem
 		return
 	}
 	createApprovalPlan := func() (*atlas.SchemaPlanFile, error) {
+		// If the desired state is a file, we need to push the schema to the Atlas Cloud.
+		// This is to ensure that the schema is in sync with the Atlas Cloud.
+		// And the schema is available for the Atlas CLI (on local machine)
+		// to modify or approve the changes.
+		tag, err := w.Exec.SchemaInspect(ctx, &atlasexec.SchemaInspectParams{
+			Env:    w.Project.EnvName,
+			Vars:   w.Project.Vars,
+			URL:    targetURL,
+			Format: `{{ .Hash | base64url }}`,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("unable to inspect schema, got error: %w", err)
+		}
+		state, err := w.Exec.SchemaPush(ctx, &atlasexec.SchemaPushParams{
+			Env:  w.Project.EnvName,
+			Vars: w.Project.Vars,
+			Name: path.Join(repoURL.Host, repoURL.Path),
+			Tag:  fmt.Sprintf("terraform-plan-%.8s", strings.ToLower(tag)),
+			URL:  []string{targetURL},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("unable to push schema, got error: %w", err)
+		}
+		targetURL = state.URL
 		plan, err := w.Exec.SchemaPlan(ctx, &atlas.SchemaPlanParams{
 			Env:     w.Project.EnvName,
 			Vars:    w.Project.Vars,

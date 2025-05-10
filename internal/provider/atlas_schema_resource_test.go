@@ -980,7 +980,7 @@ resource "atlas_schema" "example" {
 func TestApprovalFlow(t *testing.T) {
 	url := tmpDB(t)
 	cloud := tmpCloud(t)
-	cloud.AddSchema("test", `schema "test" {}`)
+	cloud.AddSchema("test", `schema "main" {}`)
 	server := cloud.Start(t, "test token")
 	defer server.Close()
 	config := func(hcl string, review string, timeout string) string {
@@ -1282,6 +1282,9 @@ func (m *mockAtlasCloud) Start(t *testing.T, token string) *httptest.Server {
 	type (
 		SchemaStateInput struct {
 			Slug string `json:"slug"`
+			HCL  string `json:"hcl"`
+			Hash string `json:"hash"`
+			Tag  string `json:"tag"`
 		}
 		DeclarativePlanByHashesInput struct {
 			SchemaSlug string `json:"schemaSlug"`
@@ -1315,6 +1318,9 @@ func (m *mockAtlasCloud) Start(t *testing.T, token string) *httptest.Server {
 			CreateDeclarativePlanVariables struct {
 				CreateDeclarativePlanInput CreateDeclarativePlanInput `json:"input"`
 			}
+			PushSchemaVariables struct {
+				SchemaStateInput SchemaStateInput `json:"input"`
+			}
 		}
 	)
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1326,7 +1332,7 @@ func (m *mockAtlasCloud) Start(t *testing.T, token string) *httptest.Server {
 		switch {
 		case strings.Contains(query.Query, "schemaState"):
 			require.NoError(t, json.Unmarshal(query.Variables, &query.SchemaStateVariables))
-			schema, ok := m.schemas[query.SchemaStateVariables.SchemaStateInput.Slug]
+			schema, ok := m.schemas[query.SchemaStateVariables.SchemaStateInput.Tag]
 			if !ok {
 				w.WriteHeader(http.StatusNotFound)
 				return
@@ -1377,6 +1383,14 @@ func (m *mockAtlasCloud) Start(t *testing.T, token string) *httptest.Server {
 				return
 			}
 			fmt.Fprintf(w, `{"data":{"DeclarativePlanByName": %s}}`, must(json.Marshal(plan)))
+		case strings.Contains(query.Query, "pushSchema"):
+			require.NoError(t, json.Unmarshal(query.Variables, &query.PushSchemaVariables))
+			m.schemaCount++
+			m.schemas[query.PushSchemaVariables.SchemaStateInput.Tag] = Schema{
+				ID:  m.schemaCount,
+				HCL: query.PushSchemaVariables.SchemaStateInput.HCL,
+			}
+			fmt.Fprintf(w, `{"data":{"pushSchema": %s}}`, must(json.Marshal(query.PushSchemaVariables.SchemaStateInput)))
 		}
 	}))
 }
