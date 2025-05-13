@@ -26,6 +26,7 @@ data "atlas_migration" "hello" {
 
 - `cloud` (Block, Optional) (see [below for nested schema](#nestedblock--cloud))
 - `config` (String) The configuration file for the migration
+- `dev_url` (String, Sensitive) The URL of the dev-db. See https://atlasgo.io/cli/url
 - `dir` (String) Select migration directory using URL format
 - `env_name` (String) The name of the environment used for reporting runs to Atlas Cloud. Default: tf
 - `remote_dir` (Block, Optional, Deprecated) (see [below for nested schema](#nestedblock--remote_dir))
