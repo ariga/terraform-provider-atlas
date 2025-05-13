@@ -25,6 +25,7 @@ type (
 		Config          types.String `tfsdk:"config"`
 		Vars            types.String `tfsdk:"variables"`
 		URL             types.String `tfsdk:"url"`
+		DevURL          types.String `tfsdk:"dev_url"`
 		RevisionsSchema types.String `tfsdk:"revisions_schema"`
 
 		DirURL    types.String     `tfsdk:"dir"`
@@ -120,6 +121,11 @@ func (d *MigrationDataSource) Schema(_ context.Context, _ datasource.SchemaReque
 			},
 			"url": schema.StringAttribute{
 				Description: "[driver://username:password@address/dbname?param=value] select a resource using the URL format",
+				Optional:    true,
+				Sensitive:   true,
+			},
+			"dev_url": schema.StringAttribute{
+				Description: "The URL of the dev-db. See https://atlasgo.io/cli/url",
 				Optional:    true,
 				Sensitive:   true,
 			},
@@ -236,7 +242,7 @@ func (d *MigrationDataSourceModel) Workspace(ctx context.Context, p *ProviderDat
 		EnvName: defaultString(d.EnvName, "tf"),
 		Env: &envConfig{
 			URL:    dbURL,
-			DevURL: p.DevURL,
+			DevURL: defaultString(d.DevURL, p.DevURL),
 			Migration: &migrationConfig{
 				RevisionsSchema: d.RevisionsSchema.ValueString(),
 				Repo:            repoConfig(d.Cloud, p.Cloud),
