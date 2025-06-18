@@ -228,6 +228,10 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 	} else {
 		data.Latest = types.StringValue(v)
 	}
+	if data.Latest.IsNull() {
+		resp.Diagnostics.AddWarning("The migration directory is empty",
+			"Please add migration files to the directory to start using migrations.")
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -243,20 +247,27 @@ func (d *MigrationDataSourceModel) Workspace(ctx context.Context, p *ProviderDat
 		Env: &envConfig{
 			URL:    dbURL,
 			DevURL: defaultString(d.DevURL, p.DevURL),
-			Migration: &migrationConfig{
-				RevisionsSchema: d.RevisionsSchema.ValueString(),
-				Repo:            repoConfig(d.Cloud, p.Cloud),
-			},
 		},
 	}
-	if rd := d.RemoteDir; rd != nil {
-		cfg.Env.Migration.DirURL, err = rd.AtlasURL()
-	} else {
-		cfg.Env.Migration.DirURL, err = absoluteFileURL(
+	m := migrationConfig{
+		RevisionsSchema: d.RevisionsSchema.ValueString(),
+		Repo:            repoConfig(d.Cloud, p.Cloud),
+	}
+	switch rd := d.RemoteDir; {
+	case rd != nil:
+		m.DirURL, err = rd.AtlasURL()
+	case d.Config.ValueString() == "":
+		// If no config is provided, use the default migrations directory.
+		m.DirURL, err = absoluteFileURL(
 			defaultString(d.DirURL, "migrations"))
+	case d.DirURL.ValueString() != "":
+		m.DirURL, err = absoluteFileURL(d.DirURL.ValueString())
 	}
 	if err != nil {
 		return nil, nil, err
+	}
+	if m != (migrationConfig{}) {
+		cfg.Env.Migration = &m
 	}
 	if vars := d.Vars.ValueString(); vars != "" {
 		if err = json.Unmarshal([]byte(vars), &cfg.Vars); err != nil {

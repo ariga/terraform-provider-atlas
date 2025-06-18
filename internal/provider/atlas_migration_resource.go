@@ -344,6 +344,19 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 			}
 		}
 	}
+	if data.Version.IsNull() {
+		resp.Diagnostics.AddAttributeWarning(
+			tfpath.Root("version"),
+			"version is unset",
+			"We recommend that you use 'version' to specify a version of the migration to run.\n"+
+				"If you don't specify a version, the latest version will be used when the resource being created.\n"+
+				"For keeping the database schema up to date, you should use set the version to using the value from "+
+				"`atlas_migration.next` or `atlas_migration.latest`\n",
+		)
+	}
+	if !data.Config.IsNull() {
+		return
+	}
 	// Validate the remote_dir block
 	switch {
 	case data.RemoteDir != nil:
@@ -375,17 +388,6 @@ func (r MigrationResource) ValidateConfig(ctx context.Context, req resource.Vali
 		)
 		return
 	}
-	if data.Version.IsNull() {
-		resp.Diagnostics.AddAttributeWarning(
-			tfpath.Root("version"),
-			"version is unset",
-			"We recommend that you use 'version' to specify a version of the migration to run.\n"+
-				"If you don't specify a version, the latest version will be used when the resource being created.\n"+
-				"For keeping the database schema up to date, you should use set the version to using the value from "+
-				"`atlas_migration.next` or `atlas_migration.latest`\n",
-		)
-	}
-
 }
 
 // ModifyPlan implements resource.ResourceWithModifyPlan.
@@ -771,26 +773,30 @@ func (d *MigrationResourceModel) Workspace(ctx context.Context, p *ProviderData)
 		Env: &envConfig{
 			URL:    dbURL,
 			DevURL: defaultString(d.DevURL, p.DevURL),
-			Migration: &migrationConfig{
-				Baseline:        d.Baseline.ValueString(),
-				RevisionsSchema: d.RevisionsSchema.ValueString(),
-				ExecOrder:       d.ExecOrder.ValueString(),
-				Repo:            repoConfig(d.Cloud, p.Cloud),
-			},
 		},
 	}
-	if rd := d.RemoteDir; rd != nil {
-		cfg.Env.Migration.DirURL, err = rd.AtlasURL()
-	} else {
-		cfg.Env.Migration.DirURL, err = absoluteFileURL(
+	m := migrationConfig{
+		Baseline:        d.Baseline.ValueString(),
+		RevisionsSchema: d.RevisionsSchema.ValueString(),
+		ExecOrder:       d.ExecOrder.ValueString(),
+		Repo:            repoConfig(d.Cloud, p.Cloud),
+	}
+	switch rd := d.RemoteDir; {
+	case rd != nil:
+		m.DirURL, err = rd.AtlasURL()
+	case d.Config.ValueString() == "":
+		// If no config is provided, use the default migrations directory.
+		m.DirURL, err = absoluteFileURL(
 			defaultString(d.DirURL, "migrations"))
+	case d.DirURL.ValueString() != "":
+		m.DirURL, err = absoluteFileURL(d.DirURL.ValueString())
 	}
 	if err != nil {
 		return nil, nil, err
 	}
 	if f := d.ProtectedFlows; f != nil {
 		if d := f.MigrateDown; d != nil && d.Allow.ValueBool() {
-			if strings.HasPrefix(cfg.Env.Migration.DirURL, "atlas://") {
+			if strings.HasPrefix(m.DirURL, "atlas://") {
 				if d.AutoApprove.ValueBool() {
 					return nil, nil, fmt.Errorf("auto_approve is not allowed for a remote directory")
 				}
@@ -801,6 +807,9 @@ func (d *MigrationResourceModel) Workspace(ctx context.Context, p *ProviderData)
 			}
 			cfg.MigrateDown = true
 		}
+	}
+	if m != (migrationConfig{}) {
+		cfg.Env.Migration = &m
 	}
 	if vars := d.Vars.ValueString(); vars != "" {
 		if err = json.Unmarshal([]byte(vars), &cfg.Vars); err != nil {

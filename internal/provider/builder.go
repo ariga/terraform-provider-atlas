@@ -2,7 +2,6 @@ package provider
 
 import (
 	"cmp"
-	"errors"
 	"fmt"
 	"io"
 	"iter"
@@ -266,7 +265,7 @@ func (env *envConfig) AsBlock() *hclwrite.Block {
 // DirURL returns the URL to the migration directory.
 func (c *envConfig) DirURL(wd *atlas.WorkingDir, ver string) (string, error) {
 	if c.Migration == nil {
-		return "", errors.New("missing migration directory in the config")
+		return "", nil
 	}
 	dirURL := c.Migration.DirURL
 	switch u, err := url.Parse(dirURL); {
@@ -303,7 +302,7 @@ func (c *envConfig) DirURL(wd *atlas.WorkingDir, ver string) (string, error) {
 // For local directories, it will return the same URL.
 func (c *envConfig) DirURLLatest() (string, error) {
 	if c.Migration == nil {
-		return "", errors.New("missing migration directory in the config")
+		return "", nil
 	}
 	dirURL := c.Migration.DirURL
 	switch u, err := url.Parse(dirURL); {
