@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path"
 
+	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -173,6 +174,14 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	id, err := uuid.GenerateUUID()
+	if err != nil {
+		resp.Diagnostics.AddError("UUID Error",
+			fmt.Sprintf("Unable to generate UUID, got error: %s", err),
+		)
+		return
+	}
+	data.ID = types.StringValue(id)
 	w, cleanup, err := data.Workspace(ctx, &d.ProviderData)
 	if err != nil {
 		resp.Diagnostics.AddError("Generate config failure",
@@ -188,6 +197,20 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 		resp.Diagnostics.AddError("Failed to read migration status", err.Error())
 		return
 	}
+	data.DirURL = types.StringValue(r.Env.Dir)
+	switch u, err := url.Parse(r.Env.Dir); {
+	case err != nil:
+		resp.Diagnostics.AddError("Failed to parse migration directory URL", err.Error())
+		return
+	case u.Scheme == SchemaTypeAtlas:
+		data.RemoteDir = &RemoteDirBlock{
+			Name: types.StringValue(path.Join(u.Host, u.Path)),
+			Tag:  types.StringNull(),
+		}
+		if t := u.Query().Get("tag"); t != "" {
+			data.RemoteDir.Tag = types.StringValue(t)
+		}
+	}
 	data.Status = types.StringValue(r.Status)
 	if r.Status == "PENDING" && r.Current == noMigration {
 		data.Current = types.StringValue("")
@@ -200,33 +223,14 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 		data.Next = types.StringValue(r.Next)
 	}
 	v := r.LatestVersion()
-	if data.RemoteDir != nil {
-		u, err := data.RemoteDir.AtlasURL()
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to create remote directory URL", err.Error())
-			return
-		}
-		data.DirURL = types.StringValue(u)
-	} else {
-		switch u, err := url.Parse(data.DirURL.ValueString()); {
-		case err != nil:
-			resp.Diagnostics.AddError("Failed to parse migration directory URL", err.Error())
-			return
-		case u.Scheme == SchemaTypeAtlas:
-			data.RemoteDir = &RemoteDirBlock{
-				Name: types.StringValue(path.Join(u.Host, u.Path)),
-				Tag:  types.StringNull(),
-			}
-			if t := u.Query().Get("tag"); t != "" {
-				data.RemoteDir.Tag = types.StringValue(t)
-			}
-		}
-	}
-	data.ID = dirToID(data.DirURL)
 	if v == "" {
 		data.Latest = types.StringNull()
 	} else {
 		data.Latest = types.StringValue(v)
+	}
+	if data.Latest.IsNull() {
+		resp.Diagnostics.AddWarning("The migration directory is empty",
+			"Please add migration files to the directory to start using migrations.")
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -243,20 +247,27 @@ func (d *MigrationDataSourceModel) Workspace(ctx context.Context, p *ProviderDat
 		Env: &envConfig{
 			URL:    dbURL,
 			DevURL: defaultString(d.DevURL, p.DevURL),
-			Migration: &migrationConfig{
-				RevisionsSchema: d.RevisionsSchema.ValueString(),
-				Repo:            repoConfig(d.Cloud, p.Cloud),
-			},
 		},
 	}
-	if rd := d.RemoteDir; rd != nil {
-		cfg.Env.Migration.DirURL, err = rd.AtlasURL()
-	} else {
-		cfg.Env.Migration.DirURL, err = absoluteFileURL(
+	m := migrationConfig{
+		RevisionsSchema: d.RevisionsSchema.ValueString(),
+		Repo:            repoConfig(d.Cloud, p.Cloud),
+	}
+	switch rd := d.RemoteDir; {
+	case rd != nil:
+		m.DirURL, err = rd.AtlasURL()
+	case d.Config.ValueString() == "":
+		// If no config is provided, use the default migrations directory.
+		m.DirURL, err = absoluteFileURL(
 			defaultString(d.DirURL, "migrations"))
+	case d.DirURL.ValueString() != "":
+		m.DirURL, err = absoluteFileURL(d.DirURL.ValueString())
 	}
 	if err != nil {
 		return nil, nil, err
+	}
+	if m != (migrationConfig{}) {
+		cfg.Env.Migration = &m
 	}
 	if vars := d.Vars.ValueString(); vars != "" {
 		if err = json.Unmarshal([]byte(vars), &cfg.Vars); err != nil {
