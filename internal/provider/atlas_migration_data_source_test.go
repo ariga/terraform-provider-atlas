@@ -7,6 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -66,8 +69,6 @@ func TestAccMigrationDataSource(t *testing.T) {
 			{
 				Config: `
 data "atlas_migration" "hello" {
-	# The dir attribute is required to be set, and
-	# can't be supplied from the atlas.hcl
 	dir      = "file://migrations?format=atlas"
 	env_name = "tf"
 	config   = <<-HCL
@@ -90,6 +91,55 @@ HCL
 	})
 }`,
 				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "PENDING"),
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "current", ""),
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "next", "20221101163823"),
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "latest", "20221101165415"),
+				),
+			},
+		},
+	})
+
+	// Custom atlas.hcl with directory in the config
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	dirURL := (&url.URL{
+		Scheme:   "file",
+		Path:     path.Join(wd, "migrations"),
+		RawQuery: "format=atlas",
+	}).String()
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+data "atlas_migration" "hello" {
+  env_name = "tf"
+  config   = <<-HCL
+variable "schema_name" {
+  type = string
+}
+locals {
+  db_url = getenv("DB_URL")
+}
+env {
+  name = atlas.env
+  url  = urlsetpath(local.db_url, var.schema_name)
+  migration {
+    # The URL here must be absolute, relative URLs are not supported.
+    # Because the config will be used to generate the atlas.hcl file
+    # in a temporary directory.
+    dir = %q
+  }
+}
+HCL
+  variables = jsonencode({
+    schema_name = "test"
+  })
+}`, dirURL),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "dir", dirURL),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "PENDING"),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "current", ""),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "next", "20221101163823"),

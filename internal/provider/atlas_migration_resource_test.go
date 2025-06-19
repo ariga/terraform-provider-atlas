@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -268,22 +271,99 @@ HCL
 		})
 	}
 	data "atlas_migration" "hello" {
-		# The dir attribute is required to be set, and
-		# can't be supplied from the atlas.hcl
 		dir       = "file://migrations"
 		config    = local.config
 		env_name  = "tf"
 		variables = local.vars
 	}
 	resource "atlas_migration" "testdb" {
-		# The dir attribute is required to be set, and
-		# can't be supplied from the atlas.hcl
 		dir       = "file://migrations"
 		version   = data.atlas_migration.hello.next
 		env_name  = "tf"
 		config    = local.config
 		variables = local.vars
 	}`, mysqlURL)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:             config,
+				ExpectNonEmptyPlan: true,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "20221101163823"),
+					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.next", "20221101163841"),
+				),
+			},
+			{
+				Config:             config,
+				ExpectNonEmptyPlan: true,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.current", "20221101163841"),
+					resource.TestCheckResourceAttr("atlas_migration.testdb", "status.next", "20221101164227"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccMigrationResource_AtlasHCL_NoDir(t *testing.T) {
+	var (
+		schema1 = "test_atlashcl"
+	)
+	tempSchemas(t, mysqlURL, schema1)
+	tempSchemas(t, mysqlDevURL, schema1)
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	dirURL := (&url.URL{
+		Scheme:   "file",
+		Path:     path.Join(wd, "migrations"),
+		RawQuery: "format=atlas",
+	}).String()
+
+	t.Setenv("ATLAS_SCHEMA", schema1)
+	// Jump to one-by-one using the data source
+	config := fmt.Sprintf(`
+	locals {
+		config = <<-HCL
+variable "url" {
+  type = string
+}
+variable "schemas" {
+  type = list(string)
+}
+env {
+  name     = atlas.env
+  for_each = toset(var.schemas)
+  url      = urlsetpath(var.url, each.value)
+  migration {
+    # The URL here must be absolute, relative URLs are not supported.
+    # Because the config will be used to generate the atlas.hcl file
+    # in a temporary directory.
+    dir = %q
+  }
+}
+HCL
+		vars = jsonencode({
+			url = %q,
+			# The multiple-tenant deployment isn't support at the moment
+			# Because the TF provider depends on the migration status commands
+			# which doesn't support the multiple-tenant deployment
+			schemas = ["test_atlashcl"]
+		})
+	}
+	data "atlas_migration" "hello" {
+		config    = local.config
+		env_name  = "tf"
+		variables = local.vars
+	}
+	resource "atlas_migration" "testdb" {
+		version   = data.atlas_migration.hello.next
+		env_name  = "tf"
+		config    = local.config
+		variables = local.vars
+	}`, dirURL, mysqlURL)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
