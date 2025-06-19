@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -214,6 +215,15 @@ func (r *MigrationResource) Create(ctx context.Context, req resource.CreateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	// Only set ID when creating a new resource
+	id, err := uuid.GenerateUUID()
+	if err != nil {
+		resp.Diagnostics.AddError("UUID Error",
+			fmt.Sprintf("Unable to generate UUID, got error: %s", err),
+		)
+		return
+	}
+	data.ID = types.StringValue(id)
 	createTimeout, diags := data.Timeouts.Create(ctx, 20*time.Minute)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -225,16 +235,6 @@ func (r *MigrationResource) Create(ctx context.Context, req resource.CreateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if data.RemoteDir != nil {
-		u, err := data.RemoteDir.AtlasURL()
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to create remote directory URL", err.Error())
-			return
-		}
-		data.DirURL = types.StringValue(u)
-	}
-	// Only set ID when creating a new resource
-	data.ID = dirToID(data.DirURL)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -612,25 +612,6 @@ func (r *MigrationResource) buildStatus(ctx context.Context, data *MigrationReso
 		"next":    next,
 		"latest":  latest,
 	})
-}
-
-// dirToID returns the ID of the resource.
-func dirToID(dir types.String) types.String {
-	u, err := url.Parse(dir.ValueString())
-	if err != nil {
-		return types.StringNull()
-	}
-	switch u.Scheme {
-	case SchemaTypeAtlas:
-		// Compatible with the remote_dir block
-		u.Scheme, u.RawQuery = "remote_dir", ""
-		return types.StringValue(u.String())
-	case "":
-		u.Scheme = SchemaTypeFile
-		fallthrough
-	default: // file:// or unknown scheme
-		return types.StringValue(u.String())
-	}
 }
 
 func defaultString(s types.String, def string) string {

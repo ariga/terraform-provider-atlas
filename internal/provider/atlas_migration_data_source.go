@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path"
 
+	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -173,6 +174,14 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	id, err := uuid.GenerateUUID()
+	if err != nil {
+		resp.Diagnostics.AddError("UUID Error",
+			fmt.Sprintf("Unable to generate UUID, got error: %s", err),
+		)
+		return
+	}
+	data.ID = types.StringValue(id)
 	w, cleanup, err := data.Workspace(ctx, &d.ProviderData)
 	if err != nil {
 		resp.Diagnostics.AddError("Generate config failure",
@@ -188,6 +197,20 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 		resp.Diagnostics.AddError("Failed to read migration status", err.Error())
 		return
 	}
+	data.DirURL = types.StringValue(r.Env.Dir)
+	switch u, err := url.Parse(r.Env.Dir); {
+	case err != nil:
+		resp.Diagnostics.AddError("Failed to parse migration directory URL", err.Error())
+		return
+	case u.Scheme == SchemaTypeAtlas:
+		data.RemoteDir = &RemoteDirBlock{
+			Name: types.StringValue(path.Join(u.Host, u.Path)),
+			Tag:  types.StringNull(),
+		}
+		if t := u.Query().Get("tag"); t != "" {
+			data.RemoteDir.Tag = types.StringValue(t)
+		}
+	}
 	data.Status = types.StringValue(r.Status)
 	if r.Status == "PENDING" && r.Current == noMigration {
 		data.Current = types.StringValue("")
@@ -200,29 +223,6 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 		data.Next = types.StringValue(r.Next)
 	}
 	v := r.LatestVersion()
-	if data.RemoteDir != nil {
-		u, err := data.RemoteDir.AtlasURL()
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to create remote directory URL", err.Error())
-			return
-		}
-		data.DirURL = types.StringValue(u)
-	} else {
-		switch u, err := url.Parse(data.DirURL.ValueString()); {
-		case err != nil:
-			resp.Diagnostics.AddError("Failed to parse migration directory URL", err.Error())
-			return
-		case u.Scheme == SchemaTypeAtlas:
-			data.RemoteDir = &RemoteDirBlock{
-				Name: types.StringValue(path.Join(u.Host, u.Path)),
-				Tag:  types.StringNull(),
-			}
-			if t := u.Query().Get("tag"); t != "" {
-				data.RemoteDir.Tag = types.StringValue(t)
-			}
-		}
-	}
-	data.ID = dirToID(data.DirURL)
 	if v == "" {
 		data.Latest = types.StringNull()
 	} else {

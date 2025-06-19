@@ -32,7 +32,6 @@ func TestAccMigrationDataSource(t *testing.T) {
 				}
 				`, mysqlURL, schema),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.atlas_migration.hello", "id", "file://migrations?format=atlas"),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "PENDING"),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "current", ""),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "next", "20221101163823"),
@@ -91,7 +90,6 @@ HCL
 	})
 }`,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.atlas_migration.hello", "id", "file://migrations?format=atlas"),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "PENDING"),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "current", ""),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "next", "20221101163823"),
@@ -161,8 +159,7 @@ HCL
 	}
 }`, dbURL, srv.URL),
 					Check: resource.ComposeAggregateTestCheckFunc(
-						resource.TestCheckResourceAttr("data.atlas_migration.hello", "id", "remote_dir://test"),
-						resource.TestCheckResourceAttr("data.atlas_migration.hello", "dir", "atlas://test"),
+						resource.TestCheckResourceAttr("data.atlas_migration.hello", "dir", "atlas://test?format=atlas"),
 						resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "OK"),
 						resource.TestCheckResourceAttr("data.atlas_migration.hello", "current", "No migration applied yet"),
 						resource.TestCheckResourceAttr("data.atlas_migration.hello", "next", ""),
@@ -181,8 +178,7 @@ HCL
 				{
 					Config: config,
 					Check: resource.ComposeAggregateTestCheckFunc(
-						resource.TestCheckResourceAttr("data.atlas_migration.hello", "id", "remote_dir://test"),
-						resource.TestCheckResourceAttr("data.atlas_migration.hello", "dir", "atlas://test"),
+						resource.TestCheckResourceAttr("data.atlas_migration.hello", "dir", "atlas://test?format=atlas"),
 						resource.TestCheckResourceAttr("data.atlas_migration.hello", "remote_dir.name", "test"),
 						resource.TestCheckNoResourceAttr("data.atlas_migration.hello", "remote_dir.tag"),
 						resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "OK"),
@@ -205,7 +201,6 @@ HCL
 				{
 					Config: config,
 					Check: resource.ComposeAggregateTestCheckFunc(
-						resource.TestCheckResourceAttr("data.atlas_migration.hello", "id", "remote_dir://test"),
 						resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "PENDING"),
 						resource.TestCheckResourceAttr("data.atlas_migration.hello", "current", ""),
 						resource.TestCheckResourceAttr("data.atlas_migration.hello", "next", "1"),
