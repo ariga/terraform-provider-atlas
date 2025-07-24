@@ -13,12 +13,12 @@ Atlas is a language-agnostic tool for managing and migrating database schemas us
 It offers two workflows:
 
 - **Declarative**: Similar to Terraform, Atlas compares the current state of the database to the desired state, as
-defined in an [HCL], [SQL], or [ORM] schema. Based on this comparison, it generates and executes a migration plan to 
-transition the database to its desired state.
+  defined in an [HCL], [SQL], or [ORM] schema. Based on this comparison, it generates and executes a migration plan to
+  transition the database to its desired state.
 
 - **Versioned**: Unlike other tools, Atlas automatically plans schema migrations for you. Users can describe their desired
-database schema in [HCL], [SQL], or their chosen [ORM], and by utilizing Atlas, they can plan, lint, and apply the
-necessary migrations to the database.
+  database schema in [HCL], [SQL], or their chosen [ORM], and by utilizing Atlas, they can plan, lint, and apply the
+  necessary migrations to the database.
 
 ## Installation
 
@@ -27,7 +27,7 @@ terraform {
   required_providers {
     atlas = {
       source  = "ariga/atlas"
-      version = "~> 0.6.1"
+      version = "~> 0.9.8"
     }
   }
 }
@@ -42,6 +42,7 @@ provider "atlas" {
 1\. To create a schema for your database, [first install `atlas`](https://atlasgo.io/getting-started#installation)
 
 2\. Then, inspect the schema of the database:
+
 ```shell
 atlas schema inspect -u "mysql://root:pass@localhost:3306/example" > schema.hcl
 ```
@@ -64,10 +65,11 @@ resource "atlas_schema" "example_db" {
 For more advanced examples, check out the examples folder.
 
 ### Docs
-* [Provider Docs](https://registry.terraform.io/providers/ariga/atlas/latest/docs)
-* [Atlas Docs](https://atlasgo.io)
 
-### Supported databases: 
+- [Provider Docs](https://registry.terraform.io/providers/ariga/atlas/latest/docs)
+- [Atlas Docs](https://atlasgo.io)
+
+### Supported databases:
 
 MySQL, MariaDB, PostgresSQL, SQLite, TiDB, CockroachDB, SQL Server, ClickHouse, Redshift.
 
