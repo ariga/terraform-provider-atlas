@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"strings"
 
 	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -196,6 +197,9 @@ func (d *MigrationDataSource) Read(ctx context.Context, req datasource.ReadReque
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read migration status", err.Error())
 		return
+	}
+	if !strings.HasPrefix(r.Env.Dir, "file://") {
+		data.DirURL = types.StringValue(r.Env.Dir)
 	}
 	switch u, err := url.Parse(r.Env.Dir); {
 	case err != nil:
