@@ -357,7 +357,7 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 			resp.RequiresReplace = append(resp.RequiresReplace, tfpath.Root("url"))
 			return
 		}
-		// New terraform resource will be create,
+		// New terraform resource will be created,
 		// do the first run check to ensure the user doesn't
 		// drops schema resources by accident
 		resp.Diagnostics.Append(r.firstRunCheck(ctx, plan)...)
