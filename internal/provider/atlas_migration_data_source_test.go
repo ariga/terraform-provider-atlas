@@ -35,6 +35,7 @@ func TestAccMigrationDataSource(t *testing.T) {
 				}
 				`, mysqlURL, schema),
 				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "dir", "migrations?format=atlas"),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "PENDING"),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "current", ""),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "next", "20221101163823"),
@@ -139,7 +140,6 @@ HCL
   })
 }`, dirURL),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.atlas_migration.hello", "dir", dirURL),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "PENDING"),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "current", ""),
 					resource.TestCheckResourceAttr("data.atlas_migration.hello", "next", "20221101163823"),
