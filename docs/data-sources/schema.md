@@ -44,8 +44,10 @@ resource "atlas_schema" "hello" {
 ### Optional
 
 - `cloud` (Block, Optional) (see [below for nested schema](#nestedblock--cloud))
+- `config` (String) Custom Atlas configuration.
 - `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
-- `variables` (Map of String) The map of variables used in the HCL.
+- `env_name` (String) The name of the environment to be picked from the Atlas configuration. Default: tf
+- `variables` (Map of String) The map of variables used in the Atlas configuration
 
 ### Read-Only
 
