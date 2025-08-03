@@ -23,13 +23,17 @@ type (
 	}
 	// AtlasSchemaDataSourceModel describes the data source data model.
 	AtlasSchemaDataSourceModel struct {
-		DevURL    types.String `tfsdk:"dev_url"`
-		Src       types.String `tfsdk:"src"`
-		HCL       types.String `tfsdk:"hcl"`
-		ID        types.String `tfsdk:"id"`
-		Variables types.Map    `tfsdk:"variables"`
+		DevURL types.String `tfsdk:"dev_url"`
+		Src    types.String `tfsdk:"src"`
+		HCL    types.String `tfsdk:"hcl"`
+		ID     types.String `tfsdk:"id"`
 		// Cloud config
 		Cloud *AtlasCloudBlock `tfsdk:"cloud"`
+
+		// Custom Atlas config
+		Config  types.String `tfsdk:"config"`
+		Vars    types.Map    `tfsdk:"variables"`
+		EnvName types.String `tfsdk:"env_name"`
 	}
 )
 
@@ -78,8 +82,17 @@ func (d *AtlasSchemaDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 				Description: "The ID of this resource",
 				Computed:    true,
 			},
+			"config": schema.StringAttribute{
+				Description: "Custom Atlas configuration.",
+				Optional:    true,
+				Sensitive:   false,
+			},
+			"env_name": schema.StringAttribute{
+				Description: "The name of the environment to be picked from the Atlas configuration. Default: tf",
+				Optional:    true,
+			},
 			"variables": schema.MapAttribute{
-				Description: "The map of variables used in the HCL.",
+				Description: "The map of variables used in the Atlas configuration",
 				Optional:    true,
 				ElementType: types.StringType,
 			},
@@ -119,9 +132,9 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 	var vars atlas.Vars2
-	if !data.Variables.IsNull() {
+	if !data.Vars.IsNull() {
 		varsRaw := make(map[string]string)
-		resp.Diagnostics.Append(data.Variables.ElementsAs(ctx, &varsRaw, false)...)
+		resp.Diagnostics.Append(data.Vars.ElementsAs(ctx, &varsRaw, false)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -154,8 +167,9 @@ func (d *AtlasSchemaDataSource) Read(ctx context.Context, req datasource.ReadReq
 
 func (d *AtlasSchemaDataSourceModel) Workspace(ctx context.Context, p *ProviderData) (*Workspace, func(), error) {
 	cfg := &projectConfig{
+		Config:  defaultString(d.Config, ""),
+		EnvName: defaultString(d.EnvName, "tf"),
 		Cloud:   cloudConfig(d.Cloud, p.Cloud),
-		EnvName: "tf",
 		Env: &envConfig{
 			URL:    "file://schema.hcl",
 			DevURL: defaultString(d.DevURL, p.DevURL),

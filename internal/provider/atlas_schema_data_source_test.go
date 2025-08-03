@@ -126,4 +126,36 @@ func TestAccSchemaDataSource(t *testing.T) {
 			},
 		},
 	})
+
+	// Use a custom atlas configuration.
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				provider "atlas" {}
+
+				data "atlas_schema" "test" {
+					config = <<HCL
+						env "test" {
+							dev = "mysql://root:pass@localhost:3307/test"
+						}
+					HCL
+					env_name = "test"
+					src = "file://./sql-files/schema.sql"
+				}
+
+				resource "atlas_schema" "test" {
+					hcl = data.atlas_schema.test.hcl
+					dev_url = data.atlas_schema.test.dev_url
+					url = %q
+				}
+				`, mysqlURL),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.atlas_schema.test", "hcl", normalHCL),
+					resource.TestCheckResourceAttr("data.atlas_schema.test", "id", "/WWD4tjYzwMDMHxlNwuhrg"),
+				),
+			},
+		},
+	})
 }
