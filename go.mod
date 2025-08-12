@@ -5,7 +5,7 @@ go 1.24
 toolchain go1.24.1
 
 require (
-	ariga.io/atlas v0.36.0
+	ariga.io/atlas v0.36.1
 	ariga.io/atlas-go-sdk v0.7.3-0.20250618182532-4b38140fdd00
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/hashicorp/go-uuid v1.0.3
