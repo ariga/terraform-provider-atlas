@@ -1,11 +1,9 @@
 module ariga.io/ariga/terraform-provider-atlas
 
-go 1.24
-
-toolchain go1.24.1
+go 1.24.6
 
 require (
-	ariga.io/atlas v0.36.0
+	ariga.io/atlas v0.37.0
 	ariga.io/atlas-go-sdk v0.7.3-0.20250618182532-4b38140fdd00
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/hashicorp/go-uuid v1.0.3
@@ -17,7 +15,7 @@ require (
 	github.com/hashicorp/terraform-plugin-go v0.19.0
 	github.com/hashicorp/terraform-plugin-log v0.9.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.29.0
-	github.com/mattn/go-sqlite3 v1.14.24
+	github.com/mattn/go-sqlite3 v1.14.28
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/stretchr/testify v1.8.4
 	github.com/zclconf/go-cty v1.14.4
