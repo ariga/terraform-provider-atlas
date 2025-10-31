@@ -83,9 +83,10 @@ func (d *AtlasSchemaDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 				Computed:    true,
 			},
 			"config": schema.StringAttribute{
-				Description: "Custom Atlas configuration.",
-				Optional:    true,
-				Sensitive:   false,
+				Description: "Atlas HCL configuration content. Use abspath(path.module) when referencing" +
+					" local files or directories, for example: `file://${abspath(path.module)}/migrations`. See https://atlasgo.io/hcl/config",
+				Optional:  true,
+				Sensitive: false,
 			},
 			"env_name": schema.StringAttribute{
 				Description: "The name of the environment to be picked from the Atlas configuration. Default: tf",

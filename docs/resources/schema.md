@@ -34,7 +34,7 @@ resource "atlas_schema" "market" {
 ### Optional
 
 - `cloud` (Block, Optional) (see [below for nested schema](#nestedblock--cloud))
-- `config` (String) The content of atlas.hcl config
+- `config` (String) Atlas HCL configuration content. Use abspath(path.module) when referencing local files or directories, for example: `file://${abspath(path.module)}/migrations`. See https://atlasgo.io/hcl/config
 - `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `diff` (Block, Optional) (see [below for nested schema](#nestedblock--diff))
 - `env_name` (String) The name of the environment used for reporting runs to Atlas Cloud. Default: tf

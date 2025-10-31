@@ -113,9 +113,10 @@ func (d *MigrationDataSource) Schema(_ context.Context, _ datasource.SchemaReque
 		},
 		Attributes: map[string]schema.Attribute{
 			"config": schema.StringAttribute{
-				Description: "The configuration file for the migration",
-				Optional:    true,
-				Sensitive:   false,
+				Description: "Atlas HCL configuration content. Use abspath(path.module) when referencing" +
+					" local files or directories, for example: `file://${abspath(path.module)}/migrations`. See https://atlasgo.io/hcl/config",
+				Optional:  true,
+				Sensitive: false,
 			},
 			"variables": schema.StringAttribute{
 				Description: "Stringify JSON object containing variables to be used inside the Atlas configuration file.",
