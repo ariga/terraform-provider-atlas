@@ -25,7 +25,7 @@ data "atlas_migration" "hello" {
 ### Optional
 
 - `cloud` (Block, Optional) (see [below for nested schema](#nestedblock--cloud))
-- `config` (String) The configuration file for the migration
+- `config` (String) Atlas HCL configuration content. Use abspath(path.module) when referencing local files or directories, for example: `file://${abspath(path.module)}/migrations`. See https://atlasgo.io/hcl/config
 - `dev_url` (String, Sensitive) The URL of the dev-db. See https://atlasgo.io/cli/url
 - `dir` (String) Select migration directory using URL format
 - `env_name` (String) The name of the environment used for reporting runs to Atlas Cloud. Default: tf
