@@ -197,12 +197,12 @@ func (r *AtlasSchemaResource) Schema(ctx context.Context, _ resource.SchemaReque
 				Sensitive:   true,
 			},
 			"exclude": schema.ListAttribute{
-				Description: "Include only resources that match the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude",
+				Description: "Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude",
 				ElementType: types.StringType,
 				Optional:    true,
 			},
 			"include": schema.ListAttribute{
-				Description: "Filter in resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#include",
+				Description: "Include only resources that match the given glob pattern. See https://atlasgo.io/declarative/inspect#include",
 				ElementType: types.StringType,
 				Optional:    true,
 			},
