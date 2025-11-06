@@ -558,6 +558,7 @@ func TestPrintPlanSQL(t *testing.T) {
 					URL:     types.StringValue(mysqlURL),
 					DevURL:  types.StringValue(mysqlDevURL),
 					Exclude: types.ListNull(types.StringType),
+					Include: types.ListNull(types.StringType),
 					HCL: types.StringValue(`schema "test" {
   charset = "utf8mb4"
   collate = "utf8mb4_0900_ai_ci"
