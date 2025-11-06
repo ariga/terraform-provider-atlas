@@ -251,6 +251,50 @@ EOT
 			},
 		},
 	})
+	hcl = fmt.Sprintf(`
+	resource "atlas_schema" "new_schema" {
+		hcl = <<-EOT
+schema "test1" {
+  charset = "utf8mb4"
+  collate = "utf8mb4_0900_ai_ci"
+}
+EOT
+	exclude = ["test2","test3"]
+	url = "%s"
+	}`, mysqlURL)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: hcl,
+			},
+		},
+	})
+}
+
+func TestIncludeSchema(t *testing.T) {
+	tempSchemas(t, mysqlURL, "test1", "test2")
+	hcl := fmt.Sprintf(`
+	resource "atlas_schema" "new_schema" {
+		hcl = <<-EOT
+schema "test1" {
+  charset = "utf8mb4"
+  collate = "utf8mb4_0900_ai_ci"
+}
+EOT
+	include = ["test1"]
+	url = "%s"
+	}`, mysqlURL)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: hcl,
+			},
+		},
+	})
 }
 
 func TestAccRemoveColumns(t *testing.T) {
