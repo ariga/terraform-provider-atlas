@@ -39,6 +39,7 @@ type (
 		URL     types.String `tfsdk:"url"`
 		DevURL  types.String `tfsdk:"dev_url"`
 		Exclude types.List   `tfsdk:"exclude"`
+		Include types.List   `tfsdk:"include"`
 		TxMode  types.String `tfsdk:"tx_mode"`
 		// Policies
 		Diff *Diff `tfsdk:"diff"`
@@ -196,7 +197,12 @@ func (r *AtlasSchemaResource) Schema(ctx context.Context, _ resource.SchemaReque
 				Sensitive:   true,
 			},
 			"exclude": schema.ListAttribute{
-				Description: "Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude-schemas",
+				Description: "Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude",
+				ElementType: types.StringType,
+				Optional:    true,
+			},
+			"include": schema.ListAttribute{
+				Description: "Include only resources that match the given glob pattern. See https://atlasgo.io/declarative/inspect#include",
 				ElementType: types.StringType,
 				Optional:    true,
 			},
@@ -793,6 +799,10 @@ func (d *AtlasSchemaResourceModel) Workspace(ctx context.Context, p *ProviderDat
 		},
 	}
 	diags := d.Exclude.ElementsAs(ctx, &cfg.Env.Exclude, false)
+	if diags.HasError() {
+		return nil, nil, errors.New(diags.Errors()[0].Summary())
+	}
+	diags = d.Include.ElementsAs(ctx, &cfg.Env.Include, false)
 	if diags.HasError() {
 		return nil, nil, errors.New(diags.Errors()[0].Summary())
 	}

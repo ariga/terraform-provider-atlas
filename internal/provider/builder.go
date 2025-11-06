@@ -39,6 +39,7 @@ type (
 		Source    string
 		Schemas   []string
 		Exclude   []string
+		Include   []string
 		Diff      *Diff
 		Lint      *Lint
 		Migration *migrationConfig
@@ -207,6 +208,9 @@ func (env *envConfig) AsBlock() *hclwrite.Block {
 	}
 	if l := deleteZero(env.Exclude); len(l) > 0 {
 		e.SetAttributeValue("exclude", listStringVal(l))
+	}
+	if l := deleteZero(env.Include); len(l) > 0 {
+		e.SetAttributeValue("include", listStringVal(l))
 	}
 	if md := env.Migration; md != nil {
 		m := e.AppendNewBlock("migration", nil).Body()

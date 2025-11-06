@@ -38,7 +38,8 @@ resource "atlas_schema" "market" {
 - `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `diff` (Block, Optional) (see [below for nested schema](#nestedblock--diff))
 - `env_name` (String) The name of the environment used for reporting runs to Atlas Cloud. Default: tf
-- `exclude` (List of String) Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude-schemas
+- `exclude` (List of String) Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude
+- `include` (List of String) Include only resources that match the given glob pattern. See https://atlasgo.io/declarative/inspect#include
 - `lint` (Block, Optional) The lint policy (see [below for nested schema](#nestedblock--lint))
 - `tx_mode` (String) The transaction mode to use when applying the schema. See https://atlasgo.io/versioned/apply#transaction-configuration
 - `url` (String, Sensitive) The url of the database see https://atlasgo.io/cli/url
