@@ -70,8 +70,9 @@ func (d *AtlasSchemaDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 				Sensitive:   true,
 			},
 			"src": schema.StringAttribute{
-				Description: "The schema definition of the database. This attribute can be HCL schema or an URL to HCL/SQL file.",
-				Required:    true,
+				Description: "The schema definition of the database. This attribute can be HCL schema, " +
+					"a URL to HCL/SQL file (file://path), or a cloud schema URL (atlas://repo-name).",
+				Required: true,
 			},
 			// the HCL in a predicted, and ordered format see https://atlasgo.io/cli/dev-database
 			"hcl": schema.StringAttribute{
@@ -192,6 +193,11 @@ func (d *AtlasSchemaDataSourceModel) Workspace(ctx context.Context, p *ProviderD
 			Path:     absPath,
 			RawQuery: u.RawQuery,
 		}).String()
+	} else if err == nil && u.Scheme == SchemaTypeAtlas {
+		// Cloud URL (atlas://<repo-name>) - pass it directly to Atlas CLI
+		// Clear Schema.Repo so RepoURL() extracts the repo name from the URL
+		cfg.Env.URL = d.Src.ValueString()
+		cfg.Env.Schema = nil
 	} else {
 		opts = append(opts, func(wd *atlas.WorkingDir) error {
 			_, err := wd.WriteFile("schema.hcl", []byte(d.Src.ValueString()))
