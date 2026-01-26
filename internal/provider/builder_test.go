@@ -115,6 +115,22 @@ func Test_SchemaTemplate(t *testing.T) {
 `,
 		},
 		{
+			name: "atlas-cloud-url",
+			data: &projectConfig{
+				Config:  "",
+				EnvName: "tf",
+				Env: &envConfig{
+					URL:    "atlas://my-schema",
+					DevURL: "docker://postgres/16/dev?search_path=public",
+				},
+			},
+			expected: `env "tf" {
+  dev = "docker://postgres/16/dev?search_path=public"
+  url = "atlas://my-schema"
+}
+`,
+		},
+		{
 			name: "default",
 			data: &projectConfig{
 				Config:  "",

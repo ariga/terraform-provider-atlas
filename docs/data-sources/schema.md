@@ -39,7 +39,7 @@ resource "atlas_schema" "hello" {
 
 ### Required
 
-- `src` (String) The schema definition of the database. This attribute can be HCL schema or an URL to HCL/SQL file.
+- `src` (String) The schema definition of the database. This attribute can be HCL schema, a URL to HCL/SQL file (file://path), or a cloud schema URL (atlas://repo-name).
 
 ### Optional
 
