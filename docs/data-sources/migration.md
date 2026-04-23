@@ -29,6 +29,8 @@ data "atlas_migration" "hello" {
 - `dev_url` (String, Sensitive) The URL of the dev-db. See https://atlasgo.io/cli/url
 - `dir` (String) Select migration directory using URL format
 - `env_name` (String) The name of the environment used for reporting runs to Atlas Cloud. Default: tf
+- `exclude` (List of String) Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude
+- `include` (List of String) Include only resources that match the given glob pattern. See https://atlasgo.io/declarative/inspect#include
 - `remote_dir` (Block, Optional, Deprecated) (see [below for nested schema](#nestedblock--remote_dir))
 - `revisions_schema` (String) The name of the schema the revisions table resides in
 - `url` (String, Sensitive) [driver://username:password@address/dbname?param=value] select a resource using the URL format

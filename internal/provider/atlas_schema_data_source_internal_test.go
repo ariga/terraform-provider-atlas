@@ -15,6 +15,8 @@ func TestAtlasSchemaDataSource_WorkspaceConfig(t *testing.T) {
 		name        string
 		src         string
 		devURL      string
+		exclude     []string
+		include     []string
 		expected    string
 		expectedURL string // Expected RepoURL result
 	}{
@@ -51,6 +53,47 @@ func TestAtlasSchemaDataSource_WorkspaceConfig(t *testing.T) {
 `,
 			expectedURL: "", // No cloud URL for inline HCL
 		},
+		{
+			name:    "inline HCL with exclude",
+			src:     `schema "test" {}`,
+			devURL:  "docker://postgres/16/dev",
+			exclude: []string{"*.users"},
+			expected: `env "tf" {
+  dev     = "docker://postgres/16/dev"
+  exclude = ["*.users"]
+  url     = "file://schema.hcl"
+}
+`,
+			expectedURL: "",
+		},
+		{
+			name:    "inline HCL with include",
+			src:     `schema "test" {}`,
+			devURL:  "docker://postgres/16/dev",
+			include: []string{"public.*"},
+			expected: `env "tf" {
+  dev     = "docker://postgres/16/dev"
+  include = ["public.*"]
+  url     = "file://schema.hcl"
+}
+`,
+			expectedURL: "",
+		},
+		{
+			name:    "inline HCL with include and exclude",
+			src:     `schema "test" {}`,
+			devURL:  "docker://postgres/16/dev",
+			exclude: []string{"*.users"},
+			include: []string{"public.*"},
+			expected: `env "tf" {
+  dev     = "docker://postgres/16/dev"
+  exclude = ["*.users"]
+  include = ["public.*"]
+  url     = "file://schema.hcl"
+}
+`,
+			expectedURL: "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -58,6 +101,16 @@ func TestAtlasSchemaDataSource_WorkspaceConfig(t *testing.T) {
 			data := &AtlasSchemaDataSourceModel{
 				Src:    types.StringValue(tt.src),
 				DevURL: types.StringValue(tt.devURL),
+			}
+			if tt.exclude != nil {
+				v, diags := types.ListValueFrom(context.Background(), types.StringType, tt.exclude)
+				require.False(t, diags.HasError())
+				data.Exclude = v
+			}
+			if tt.include != nil {
+				v, diags := types.ListValueFrom(context.Background(), types.StringType, tt.include)
+				require.False(t, diags.HasError())
+				data.Include = v
 			}
 			providerData := &ProviderData{}
 

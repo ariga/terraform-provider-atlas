@@ -163,6 +163,20 @@ jobs:
           echo "Ensure that there is no diff"
           terraform plan -no-color > stdout.txt
           cat stdout.txt | grep --silent "No changes. Your infrastructure matches the configuration."
+      - name: Terraform (exclude)
+        working-directory: integration-tests/exclude
+        run: |
+          ../../scripts/local.sh ../../dist 0.0.0-pre.0
+          terraform init
+          echo "Apply terraform plan"
+          terraform apply -no-color --auto-approve > stdout.txt
+          cat stdout.txt | grep --silent "Apply complete! Resources: 1 added, 0 changed, 0 destroyed."
+          echo "Ensure that t2 is excluded from the HCL"
+          terraform show -no-color | grep --silent 'table "t1"'
+          ! terraform show -no-color | grep --silent 'table "t2"'
+          echo "Ensure that there is no diff"
+          terraform plan -no-color > stdout.txt
+          cat stdout.txt | grep --silent "No changes. Your infrastructure matches the configuration."
       - name: Terraform (no-dev-url)
         working-directory: integration-tests/no-dev-url
         run: |
