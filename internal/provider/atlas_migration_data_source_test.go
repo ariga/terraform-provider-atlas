@@ -262,6 +262,58 @@ HCL
 	})
 }
 
+func TestAccMigrationDataSource_Exclude(t *testing.T) {
+	schema := "test"
+	tempSchemas(t, mysqlURL, schema)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				data "atlas_migration" "hello" {
+					dir     = "migrations?format=atlas"
+					url     = "%s/%s"
+					exclude = ["*.bar"]
+				}
+				`, mysqlURL, schema),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "PENDING"),
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "current", ""),
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "next", "20221101163823"),
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "latest", "20221101165415"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccMigrationDataSource_Include(t *testing.T) {
+	schema := "test"
+	tempSchemas(t, mysqlURL, schema)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+				data "atlas_migration" "hello" {
+					dir     = "migrations?format=atlas"
+					url     = "%s/%s"
+					include = ["*.foo"]
+				}
+				`, mysqlURL, schema),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "status", "PENDING"),
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "current", ""),
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "next", "20221101163823"),
+					resource.TestCheckResourceAttr("data.atlas_migration.hello", "latest", "20221101165415"),
+				),
+			},
+		},
+	})
+}
+
 func writeDir(t *testing.T, dir migrate.Dir, w io.Writer) {
 	// Checksum before archiving.
 	hf, err := dir.Checksum()

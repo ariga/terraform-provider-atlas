@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"path"
@@ -29,6 +30,8 @@ type (
 		URL             types.String `tfsdk:"url"`
 		DevURL          types.String `tfsdk:"dev_url"`
 		RevisionsSchema types.String `tfsdk:"revisions_schema"`
+		Exclude         types.List   `tfsdk:"exclude"`
+		Include         types.List   `tfsdk:"include"`
 
 		DirURL    types.String     `tfsdk:"dir"`
 		Cloud     *AtlasCloudBlock `tfsdk:"cloud"`
@@ -134,6 +137,16 @@ func (d *MigrationDataSource) Schema(_ context.Context, _ datasource.SchemaReque
 			},
 			"dir": schema.StringAttribute{
 				Description: "Select migration directory using URL format",
+				Optional:    true,
+			},
+			"exclude": schema.ListAttribute{
+				Description: "Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude",
+				ElementType: types.StringType,
+				Optional:    true,
+			},
+			"include": schema.ListAttribute{
+				Description: "Include only resources that match the given glob pattern. See https://atlasgo.io/declarative/inspect#include",
+				ElementType: types.StringType,
 				Optional:    true,
 			},
 			"env_name": schema.StringAttribute{
@@ -252,6 +265,18 @@ func (d *MigrationDataSourceModel) Workspace(ctx context.Context, p *ProviderDat
 			URL:    dbURL,
 			DevURL: defaultString(d.DevURL, p.DevURL),
 		},
+	}
+	if !d.Exclude.IsNull() && !d.Exclude.IsUnknown() {
+		diags := d.Exclude.ElementsAs(ctx, &cfg.Env.Exclude, false)
+		if diags.HasError() {
+			return nil, nil, errors.New(diags.Errors()[0].Summary())
+		}
+	}
+	if !d.Include.IsNull() && !d.Include.IsUnknown() {
+		diags := d.Include.ElementsAs(ctx, &cfg.Env.Include, false)
+		if diags.HasError() {
+			return nil, nil, errors.New(diags.Errors()[0].Summary())
+		}
 	}
 	m := migrationConfig{
 		RevisionsSchema: d.RevisionsSchema.ValueString(),

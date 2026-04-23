@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"net/url"
@@ -23,10 +24,12 @@ type (
 	}
 	// AtlasSchemaDataSourceModel describes the data source data model.
 	AtlasSchemaDataSourceModel struct {
-		DevURL types.String `tfsdk:"dev_url"`
-		Src    types.String `tfsdk:"src"`
-		HCL    types.String `tfsdk:"hcl"`
-		ID     types.String `tfsdk:"id"`
+		DevURL  types.String `tfsdk:"dev_url"`
+		Src     types.String `tfsdk:"src"`
+		HCL     types.String `tfsdk:"hcl"`
+		ID      types.String `tfsdk:"id"`
+		Exclude types.List   `tfsdk:"exclude"`
+		Include types.List   `tfsdk:"include"`
 		// Cloud config
 		Cloud *AtlasCloudBlock `tfsdk:"cloud"`
 
@@ -73,6 +76,16 @@ func (d *AtlasSchemaDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 				Description: "The schema definition of the database. This attribute can be HCL schema, " +
 					"a URL to HCL/SQL file (file://path), or a cloud schema URL (atlas://repo-name).",
 				Required: true,
+			},
+			"exclude": schema.ListAttribute{
+				Description: "Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude",
+				ElementType: types.StringType,
+				Optional:    true,
+			},
+			"include": schema.ListAttribute{
+				Description: "Include only resources that match the given glob pattern. See https://atlasgo.io/declarative/inspect#include",
+				ElementType: types.StringType,
+				Optional:    true,
 			},
 			// the HCL in a predicted, and ordered format see https://atlasgo.io/cli/dev-database
 			"hcl": schema.StringAttribute{
@@ -179,6 +192,18 @@ func (d *AtlasSchemaDataSourceModel) Workspace(ctx context.Context, p *ProviderD
 				Repo: repoConfig(d.Cloud, p.Cloud),
 			},
 		},
+	}
+	if !d.Exclude.IsNull() && !d.Exclude.IsUnknown() {
+		diags := d.Exclude.ElementsAs(ctx, &cfg.Env.Exclude, false)
+		if diags.HasError() {
+			return nil, nil, errors.New(diags.Errors()[0].Summary())
+		}
+	}
+	if !d.Include.IsNull() && !d.Include.IsUnknown() {
+		diags := d.Include.ElementsAs(ctx, &cfg.Env.Include, false)
+		if diags.HasError() {
+			return nil, nil, errors.New(diags.Errors()[0].Summary())
+		}
 	}
 	opts := []atlas.Option{atlas.WithAtlasHCL(cfg.Render)}
 	u, err := url.Parse(filepath.ToSlash(d.Src.ValueString()))

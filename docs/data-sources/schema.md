@@ -47,6 +47,8 @@ resource "atlas_schema" "hello" {
 - `config` (String) Atlas HCL configuration content. Use abspath(path.module) when referencing local files or directories, for example: `file://${abspath(path.module)}/migrations`. See https://atlasgo.io/hcl/config
 - `dev_url` (String, Sensitive) The url of the dev-db see https://atlasgo.io/cli/url
 - `env_name` (String) The name of the environment to be picked from the Atlas configuration. Default: tf
+- `exclude` (List of String) Filter out resources matching the given glob pattern. See https://atlasgo.io/declarative/inspect#exclude
+- `include` (List of String) Include only resources that match the given glob pattern. See https://atlasgo.io/declarative/inspect#include
 - `variables` (Map of String) The map of variables used in the Atlas configuration
 
 ### Read-Only
