@@ -155,8 +155,10 @@ func Test_SchemaTemplate(t *testing.T) {
 			},
 			expected: `env "tf" {
   dev = "mysql://user:pass@localhost:3307/tf-db"
-  src = "file://schema.hcl"
   url = "mysql://user:pass@localhost:3306/tf-db"
+  schema {
+    src = "file://schema.hcl"
+  }
   diff {
     concurrent_index {
       create = true
@@ -186,8 +188,10 @@ func Test_SchemaTemplate(t *testing.T) {
 				},
 			},
 			expected: `env "tf" {
-  src = "file://schema.hcl"
   url = "mysql://user:pass@localhost:3306/tf-db"
+  schema {
+    src = "file://schema.hcl"
+  }
   migration {
     repo {
       name = "test"
@@ -217,6 +221,77 @@ func Test_SchemaTemplate(t *testing.T) {
       name = "test"
     }
   }
+}
+`,
+		},
+		{
+			name: "user-schema-mode-no-repo",
+			data: &projectConfig{
+				Config: `env "tf" {
+  schema {
+    mode {
+      roles       = true
+      permissions = true
+    }
+  }
+}
+`,
+				EnvName: "tf",
+				Env: &envConfig{
+					Source: "file://schema.hcl",
+					URL:    "postgres://localhost:5432/db",
+					DevURL: "docker://postgres/15/dev?search_path=public",
+					Schema: &schemaConfig{},
+				},
+			},
+			expected: `env "tf" {
+  schema {
+    mode {
+      roles       = true
+      permissions = true
+    }
+    src = "file://schema.hcl"
+  }
+  dev = "docker://postgres/15/dev?search_path=public"
+  url = "postgres://localhost:5432/db"
+}
+`,
+		},
+		{
+			name: "user-schema-mode-with-repo",
+			data: &projectConfig{
+				Config: `env "tf" {
+  schema {
+    mode {
+      roles       = true
+      permissions = true
+    }
+  }
+}
+`,
+				EnvName: "tf",
+				Env: &envConfig{
+					Source: "file://schema.hcl",
+					URL:    "postgres://localhost:5432/db",
+					DevURL: "docker://postgres/15/dev?search_path=public",
+					Schema: &schemaConfig{
+						Repo: "roles-repo",
+					},
+				},
+			},
+			expected: `env "tf" {
+  schema {
+    mode {
+      roles       = true
+      permissions = true
+    }
+    src = "file://schema.hcl"
+    repo {
+      name = "roles-repo"
+    }
+  }
+  dev = "docker://postgres/15/dev?search_path=public"
+  url = "postgres://localhost:5432/db"
 }
 `,
 		},
@@ -327,6 +402,77 @@ env {
   migration {
     dir = "file://migrations"
   }
+}
+`, string(dst.Bytes()))
+
+	// Merge schema block preserving user's mode block.
+	schemaEnvBlock := (&envConfig{
+		URL:    "postgres://localhost:5432/db",
+		DevURL: "docker://postgres/15/dev?search_path=public",
+		Source: "file://schema.hcl",
+		Schema: &schemaConfig{},
+	}).AsBlock()
+
+	dst, err = parseConfig(`
+env "roles" {
+  schema {
+    mode {
+      roles       = true
+      permissions = true
+    }
+  }
+}
+`)
+	require.NoError(t, err)
+	require.NoError(t, mergeEnvBlock(dst.Body(), schemaEnvBlock, "roles"))
+	require.Equal(t, `
+env "roles" {
+  schema {
+    mode {
+      roles       = true
+      permissions = true
+    }
+    src = "file://schema.hcl"
+  }
+  dev = "docker://postgres/15/dev?search_path=public"
+  url = "postgres://localhost:5432/db"
+}
+`, string(dst.Bytes()))
+
+	// Merge schema block with repo, preserving user's mode block.
+	schemaRepoEnvBlock := (&envConfig{
+		URL:    "postgres://localhost:5432/db",
+		DevURL: "docker://postgres/15/dev?search_path=public",
+		Source: "file://schema.hcl",
+		Schema: &schemaConfig{Repo: "roles-repo"},
+	}).AsBlock()
+
+	dst, err = parseConfig(`
+env "roles" {
+  schema {
+    mode {
+      roles       = true
+      permissions = true
+    }
+  }
+}
+`)
+	require.NoError(t, err)
+	require.NoError(t, mergeEnvBlock(dst.Body(), schemaRepoEnvBlock, "roles"))
+	require.Equal(t, `
+env "roles" {
+  schema {
+    mode {
+      roles       = true
+      permissions = true
+    }
+    src = "file://schema.hcl"
+    repo {
+      name = "roles-repo"
+    }
+  }
+  dev = "docker://postgres/15/dev?search_path=public"
+  url = "postgres://localhost:5432/db"
 }
 `, string(dst.Bytes()))
 }
