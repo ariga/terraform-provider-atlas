@@ -117,9 +117,6 @@ func (c *projectConfig) TargetURL() (string, error) {
 	if err != nil || envBlk == nil {
 		return "", err
 	}
-	if envBlk.Body().GetAttribute("src") != nil {
-		return "env://src", nil
-	}
 	schemaBlk, err := searchBlock(envBlk.Body(), "schema", "")
 	if err != nil || schemaBlk == nil {
 		return "", err
@@ -193,14 +190,11 @@ func (env *envConfig) AsBlock() *hclwrite.Block {
 		e.SetAttributeValue("dev", cty.StringVal(env.DevURL))
 	}
 	if env.Source != "" {
-		// src, schema attributes/blocks are mutually exclusive
+		schema := e.AppendNewBlock("schema", nil).Body()
+		schema.SetAttributeValue("src", cty.StringVal(env.Source))
 		if sc := env.Schema; sc != nil && sc.Repo != "" {
-			schema := e.AppendNewBlock("schema", nil).Body()
-			schema.SetAttributeValue("src", cty.StringVal(env.Source))
 			repo := schema.AppendNewBlock("repo", nil).Body()
 			repo.SetAttributeValue("name", cty.StringVal(sc.Repo))
-		} else {
-			e.SetAttributeValue("src", cty.StringVal(env.Source))
 		}
 	}
 	if l := deleteZero(env.Schemas); len(l) > 0 {
@@ -401,18 +395,25 @@ func mergeBlock(dst, src *hclwrite.Block) {
 		dstBody.SetAttributeRaw(name, attr.Expr().BuildTokens(nil))
 	}
 	srcBlocks := srcBody.Blocks()
-	srcBlockTypes := make(map[string]struct{})
+	// Index source blocks by type for matching.
+	srcByType := make(map[string]*hclwrite.Block)
 	for _, blk := range srcBlocks {
-		srcBlockTypes[blk.Type()] = struct{}{}
+		srcByType[blk.Type()] = blk
 	}
+	// Recursively merge blocks that exist in both dst and src.
 	for _, blk := range dstBody.Blocks() {
-		if _, conflict := srcBlockTypes[blk.Type()]; conflict {
-			// Remove the block from the destination if it already exists.
-			dstBody.RemoveBlock(blk)
+		if srcBlk, ok := srcByType[blk.Type()]; ok {
+			// Merge recursively instead of replacing. This allows users to provide a base config
+			// with some blocks and let the provider fill in the rest of the block.
+			mergeBlock(blk, srcBlk)
+			delete(srcByType, blk.Type())
 		}
 	}
+	// Append source blocks that had no match in dst.
 	for _, blk := range srcBlocks {
-		appendBlock(dstBody, blk)
+		if _, ok := srcByType[blk.Type()]; ok {
+			appendBlock(dstBody, blk)
+		}
 	}
 }
 
