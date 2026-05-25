@@ -151,9 +151,8 @@ func TestAccInvalidSchemaReturnsError(t *testing.T) {
 		IsUnitTest:               true,
 		Steps: []resource.TestStep{
 			{
-				Config:             testAccValidSchema,
-				ExpectNonEmptyPlan: true,
-				Destroy:            false,
+				Config:  testAccValidSchema,
+				Destroy: false,
 			},
 			{
 				Config:             testAccInvalidSchema,
@@ -423,8 +422,6 @@ func TestAccDestroySchemas(t *testing.T) {
 				// When the following destroys, it doesn't delete any schemas.
 				// It only deletes the tables in the schemas.
 				Config: fmt.Sprintf(schema, mysqlURL+"/test4"),
-				// ignore non-normalized schema
-				ExpectNonEmptyPlan: true,
 			},
 		},
 		CheckDestroy: func(s *terraform.State) error {
@@ -456,8 +453,6 @@ func TestAccDestroySchemas(t *testing.T) {
 			{
 				// When the following destroys, it deletes all schemas.
 				Config: fmt.Sprintf(schema, mysqlURL),
-				// ignore non-normalized schema
-				ExpectNonEmptyPlan: true,
 			},
 		},
 		CheckDestroy: func(s *terraform.State) error {
@@ -1145,8 +1140,6 @@ func TestApprovalFlow(t *testing.T) {
 				},
 				Config:  config(`schema "main" {}`, "ERROR", "1s"),
 				Destroy: false,
-				// ignore non-normalized schema
-				ExpectNonEmptyPlan: true,
 				Check: func(s *terraform.State) error {
 					realm, err := cli.InspectRealm(context.Background(), nil)
 					if err != nil {

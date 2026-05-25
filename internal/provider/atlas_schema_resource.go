@@ -387,7 +387,7 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 	}
 	// If Atlas reports no actual changes (e.g., inspected HCL differs only
 	// due to masked sensitive values like passwords), suppress the diff.
-	if !hasChanges && state != nil {
+	if !hasChanges && state != nil && !isDelete {
 		plan.HCL = state.HCL
 		resp.Diagnostics.Append(resp.Plan.Set(ctx, plan)...)
 		return
