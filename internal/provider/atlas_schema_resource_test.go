@@ -418,8 +418,6 @@ func TestAccDestroySchemas(t *testing.T) {
 			{
 				Config:  preExistingSchema,
 				Destroy: false,
-				// ignore non-normalized schema
-				ExpectNonEmptyPlan: true,
 			},
 			{
 				// When the following destroys, it doesn't delete any schemas.
@@ -454,8 +452,6 @@ func TestAccDestroySchemas(t *testing.T) {
 			{
 				Config:  preExistingSchema,
 				Destroy: false,
-				// ignore non-normalized schema
-				ExpectNonEmptyPlan: true,
 			},
 			{
 				// When the following destroys, it deletes all schemas.
@@ -503,8 +499,6 @@ func TestAccMultipleSchemas(t *testing.T) {
 			{
 				Config:  mulSchema,
 				Destroy: false,
-				// ignore non-normalized schema
-				ExpectNonEmptyPlan: true,
 				Check: func(s *terraform.State) error {
 					cli, err := sqlclient.Open(context.Background(), mysqlURL)
 					if err != nil {
@@ -653,8 +647,7 @@ resource "atlas_schema" "example" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config:             config,
-				ExpectNonEmptyPlan: true,
+				Config: config,
 				Check: resource.ComposeTestCheckFunc(
 					func(s *terraform.State) error {
 						cli, err := sqlclient.Open(context.Background(), url)
@@ -770,8 +763,6 @@ resource "atlas_schema" "example" {
 	dev_url = "%s"
 }`, url, "sqlite://file.db?mode=memory"),
 				Destroy: false,
-				// ignore non-normalized schema
-				ExpectNonEmptyPlan: true,
 				Check: func(s *terraform.State) error {
 					realm, err := cli.InspectRealm(context.Background(), nil)
 					if err != nil {
@@ -799,8 +790,7 @@ resource "atlas_schema" "example" {
 	url = "%s"
 	dev_url = "%s"
 }`, url, "sqlite://file.db?mode=memory"),
-				Destroy: false,
-				// ignore non-normalized schema
+				Destroy:            false,
 				ExpectNonEmptyPlan: true,
 				ExpectError:        regexp.MustCompile("Rejected by review policy"),
 			},
@@ -913,8 +903,6 @@ resource "atlas_schema" "example" {
 	dev_url = "%s"
 }`, url, "sqlite://file.db?mode=memory"),
 				Destroy: false,
-				// ignore non-normalized schema
-				ExpectNonEmptyPlan: true,
 				Check: func(s *terraform.State) error {
 					cli, err := sqlclient.Open(context.Background(), url)
 					if err != nil {
@@ -951,8 +939,7 @@ resource "atlas_schema" "example" {
 	url = "%s"
 	dev_url = "%s"
 }`, url, "sqlite://file.db?mode=memory"),
-				Destroy: false,
-				// ignore non-normalized schema
+				Destroy:            false,
 				ExpectNonEmptyPlan: true,
 				ExpectError:        regexp.MustCompile("Rejected by review policy"),
 			},
@@ -1109,8 +1096,6 @@ func TestApprovalFlow(t *testing.T) {
 				}
 			}`, "ALWAYS", "0s"),
 				Destroy: false,
-				// ignore non-normalized schema
-				ExpectNonEmptyPlan: true,
 				Check: func(s *terraform.State) error {
 					realm, err := cli.InspectRealm(context.Background(), nil)
 					if err != nil {
