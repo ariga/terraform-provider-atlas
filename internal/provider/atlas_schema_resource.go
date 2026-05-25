@@ -380,11 +380,22 @@ func (r *AtlasSchemaResource) ModifyPlan(ctx context.Context, req resource.Modif
 		plan = state.Clone()
 		isDelete = true
 	}
-	resp.Diagnostics.Append(PrintPlanSQL(ctx, &r.ProviderData, plan, isDelete)...)
+	hasChanges, planDiags := PrintPlanSQL(ctx, &r.ProviderData, plan, isDelete)
+	resp.Diagnostics.Append(planDiags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	// If Atlas reports no actual changes (e.g., inspected HCL differs only
+	// due to masked sensitive values like passwords), suppress the diff.
+	if !hasChanges && state != nil {
+		plan.HCL = state.HCL
+		resp.Diagnostics.Append(resp.Plan.Set(ctx, plan)...)
+		return
+	}
 	resp.Diagnostics.Append(r.reviewSchema(ctx, plan)...)
 }
 
-func PrintPlanSQL(ctx context.Context, p *ProviderData, data *AtlasSchemaResourceModel, delete bool) (diags diag.Diagnostics) {
+func PrintPlanSQL(ctx context.Context, p *ProviderData, data *AtlasSchemaResourceModel, delete bool) (hasChanges bool, diags diag.Diagnostics) {
 	w, cleanup, err := data.Workspace(ctx, p)
 	if err != nil {
 		diags.AddError("Generate config failure",
@@ -420,18 +431,18 @@ func PrintPlanSQL(ctx context.Context, p *ProviderData, data *AtlasSchemaResourc
 			return
 		}
 		appliedFile = result.Applied
-
 	}
-	if appliedFile != nil && len(appliedFile.Applied) > 0 {
-		buf := &strings.Builder{}
-		for _, stmt := range appliedFile.Applied {
-			fmt.Fprintln(buf, stmt)
-		}
-		diags.AddWarning("Atlas Plan",
-			fmt.Sprintf("The following SQL statements will be executed:\n\n\n%s", buf.String()),
-		)
+	if appliedFile == nil || len(appliedFile.Applied) == 0 {
+		return false, diags
 	}
-	return diags
+	buf := &strings.Builder{}
+	for _, stmt := range appliedFile.Applied {
+		fmt.Fprintln(buf, stmt)
+	}
+	diags.AddWarning("Atlas Plan",
+		fmt.Sprintf("The following SQL statements will be executed:\n\n\n%s", buf.String()),
+	)
+	return true, diags
 }
 
 func (r *AtlasSchemaResource) readSchema(ctx context.Context, data *AtlasSchemaResourceModel) (diags diag.Diagnostics) {

@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"ariga.io/atlas/sql/sqlclient"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -595,7 +597,7 @@ table "orders" {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotDiags := provider.PrintPlanSQL(tt.args.ctx, &provider.ProviderData{
+			_, gotDiags := provider.PrintPlanSQL(tt.args.ctx, &provider.ProviderData{
 				Client: func(wd string, _ *provider.CloudConfig) (provider.AtlasExec, error) {
 					return atlas.NewClient(wd, "atlas")
 				},
@@ -1177,6 +1179,122 @@ func TestApprovalFlow(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestAccNoPerpetualDiff_UserPassword(t *testing.T) {
+	if token, ok := os.LookupEnv("ATLAS_TOKEN"); ok {
+		if err := os.Unsetenv("ATLAS_TOKEN"); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if err := os.Setenv("ATLAS_TOKEN", token); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	pgdb := atlasDocker(t, "docker://postgres/18", fmt.Sprintf("usr-password-%d", time.Now().UnixNano()))
+	tests := []struct {
+		name     string
+		password string
+	}{
+		{
+			name:     "variable",
+			password: "var.password",
+		},
+		{
+			name:     "local",
+			password: "local.password",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			role := "tf_test_role_" + tt.name
+			usr := "tf_test_user_" + tt.name
+			hcl := fmt.Sprintf(`
+variable "password" {
+  type      = string
+  sensitive = true
+  default   = "tf-test-pass"
+}
+
+locals {
+  password = var.password
+  config = <<-HCL
+	variable "password" {
+		type = string
+	}
+	env "test" {
+		schema {
+			mode {
+				roles = true
+			}
+		}
+	}
+  HCL
+}
+
+resource "atlas_schema" "db" {
+  hcl = <<-EOT
+	variable "password" {
+		type = string
+	}
+	locals {
+		password = var.password
+	}
+	schema "public" {
+		comment = "standard public schema"
+	}
+	role "%[1]s" {
+	}
+	user "%[2]s" {
+		password = %[3]s
+		member_of = [role.%[1]s]
+	}
+  EOT
+  config = local.config
+  variables = jsonencode({
+	password = var.password
+  })
+  env_name = "test"
+  url      = "%[4]s"
+}
+`, role, usr, tt.password, pgdb)
+			resource.Test(t, resource.TestCase{
+				PreCheck:                 func() { testAccPreCheck(t) },
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Steps: []resource.TestStep{
+					{
+						Config: hcl,
+					},
+					{
+						Config:   hcl,
+						PlanOnly: true,
+					},
+				},
+			})
+		})
+	}
+}
+
+// atlasDocker uses `atlas tool docker` to start a temporary database for testing.
+func atlasDocker(t *testing.T, dockerURL, name string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "atlas", "tool", "docker", "--url", dockerURL, "--name", name)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to start Atlas Docker database: %v\n%s", err, out)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "atlas", "tool", "docker", "kill", "--name", name)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("failed to kill Atlas Docker database %q: %v\n%s", name, err, out)
+		}
+	})
+	return strings.TrimSpace(string(out))
 }
 
 // New temporary sqlite database for testing.
